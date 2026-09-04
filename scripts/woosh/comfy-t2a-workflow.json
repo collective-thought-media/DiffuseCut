@@ -1,0 +1,30 @@
+{
+  "1": {
+    "class_type": "WooshLoadFlow",
+    "inputs": {
+      "model_name": "Woosh-DFlow",
+      "model_type": "DFlow"
+    }
+  },
+  "3": {
+    "class_type": "WooshSample",
+    "inputs": {
+      "gen_model": ["1", 0],
+      "prompt": "PROMPT_PLACEHOLDER",
+      "steps": 4,
+      "cfg": 3.5,
+      "seed": 0,
+      "latent_frames": 301,
+      "subprocess": true,
+      "force_offload": false
+    }
+  },
+  "4": {
+    "class_type": "SaveAudioMP3",
+    "inputs": {
+      "audio": ["3", 1],
+      "filename_prefix": "diffusecut/woosh_sfx",
+      "quality": "320k"
+    }
+  }
+}

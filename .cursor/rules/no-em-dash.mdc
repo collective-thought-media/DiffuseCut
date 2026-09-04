@@ -1,0 +1,37 @@
+---
+description: No em dashes in DiffuseCut UI copy or user-facing strings
+globs: src/**/*.{tsx,ts}
+alwaysApply: true
+---
+
+# No em dashes in UI copy
+
+Do **not** use the em dash (`—`) or en dash (`–`) anywhere in user-facing text for DiffuseCut.
+
+This includes JSX text, labels, placeholders, tooltips, badges, error messages, empty states, preset descriptions, and any string shown in the browser.
+
+## Use instead
+
+- Comma: `Live-action look, casting-style references`
+- Colon: `Your own look: add a style phrase`
+- Period: two short sentences
+- Parentheses: `API key (OpenAI) (saved)`
+
+## Examples
+
+```tsx
+// BAD
+description: "Live-action look — casting-style references"
+{saved ? " — saved" : ""}
+
+// GOOD
+description: "Live-action look, casting-style references"
+{saved ? " (saved)" : ""}
+```
+
+## Scope
+
+- **Enforce** in `src/app/`, `src/components/`, and UI strings in `src/lib/` (e.g. preset labels).
+- Code comments and internal logs are lower priority, but prefer avoiding dashes there too when touching the file.
+
+Before finishing UI work, search changed files for `—` and `–` and remove them.

@@ -1,0 +1,125 @@
+{
+  "100": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "placeholder.png"
+    }
+  },
+  "101": {
+    "class_type": "UNETLoader",
+    "inputs": {
+      "unet_name": "your_minimax_unet.safetensors",
+      "weight_dtype": "default"
+    }
+  },
+  "102": {
+    "class_type": "MiniMaxH3SigmaShift",
+    "inputs": {
+      "model": ["101", 0],
+      "shift_video": 12.0,
+      "shift_audio": 3.0
+    }
+  },
+  "103": {
+    "class_type": "CLIPLoader",
+    "inputs": {
+      "clip_name": "your_minimax_text_encoder.safetensors",
+      "type": "minimax",
+      "device": "default"
+    }
+  },
+  "104": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "your_minimax_video_vae.safetensors"
+    }
+  },
+  "105": {
+    "class_type": "VAELoader",
+    "inputs": {
+      "vae_name": "your_minimax_audio_vae.safetensors"
+    }
+  },
+  "106": {
+    "class_type": "MiniMaxH3ImageToVideo",
+    "inputs": {
+      "clip": ["103", 0],
+      "vae": ["104", 0],
+      "prompt": "",
+      "width": 1344,
+      "height": 768,
+      "length": 124,
+      "first_frame": ["100", 0]
+    }
+  },
+  "107": {
+    "class_type": "BasicGuider",
+    "inputs": {
+      "model": ["102", 0],
+      "conditioning": ["106", 0]
+    }
+  },
+  "108": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": ["102", 0],
+      "scheduler": "simple",
+      "steps": 20,
+      "denoise": 1.0
+    }
+  },
+  "109": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "res_multistep"
+    }
+  },
+  "110": {
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 0
+    }
+  },
+  "111": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": ["110", 0],
+      "guider": ["107", 0],
+      "sampler": ["109", 0],
+      "sigmas": ["108", 0],
+      "latent_image": ["106", 1]
+    }
+  },
+  "112": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["111", 0],
+      "vae": ["104", 0]
+    }
+  },
+  "113": {
+    "class_type": "VAEDecodeAudio",
+    "inputs": {
+      "samples": ["111", 0],
+      "vae": ["105", 0]
+    }
+  },
+  "114": {
+    "class_type": "CreateVideo",
+    "inputs": {
+      "images": ["112", 0],
+      "fps": 24.0,
+      "bit_depth": 8,
+      "audio": ["113", 0]
+    }
+  },
+  "9002": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "video": ["114", 0],
+      "filename_prefix": "minimax_h3_i2v/diffusecut",
+      "format": "auto",
+      "codec": "auto"
+    }
+  }
+}

@@ -1,0 +1,82 @@
+{
+  "promptNodeId": "106",
+  "promptInputKey": "prompt",
+  "frameCountNodeId": "106",
+  "frameCountInputKey": "length",
+  "frameCountTransform": "minimax_17k5",
+  "latentVideoNodeId": "106",
+  "latentVideoWidthInputKey": "width",
+  "latentVideoHeightInputKey": "height",
+  "referenceImageNodeId": "100",
+  "referenceImageInputKey": "image",
+  "seedNodeId": "110",
+  "seedInputKey": "noise_seed",
+  "createVideoNodeId": "114",
+  "createVideoFpsInputKey": "fps",
+  "outputFilenameNodeId": "9002",
+  "outputFilenameInputKey": "filename_prefix",
+  "outputNodeIds": ["9002"],
+  "controls": [
+    {
+      "id": "video_unet",
+      "label": "MiniMax H3 diffusion model (FL2VA)",
+      "type": "unet",
+      "nodeId": "101",
+      "nameInputKey": "unet_name"
+    },
+    {
+      "id": "video_text_encoder",
+      "label": "MiniMax H3 text encoder (Qwen3-VL)",
+      "type": "text_encoder",
+      "nodeId": "103",
+      "nameInputKey": "clip_name"
+    },
+    {
+      "id": "video_vae",
+      "label": "MiniMax H3 video VAE",
+      "type": "vae",
+      "nodeId": "104",
+      "nameInputKey": "vae_name"
+    },
+    {
+      "id": "video_audio_vae",
+      "label": "MiniMax H3 audio VAE",
+      "type": "audio_vae",
+      "nodeId": "105",
+      "nameInputKey": "vae_name"
+    },
+    {
+      "id": "video_width",
+      "label": "Width",
+      "type": "video_width",
+      "nodeId": "106",
+      "inputKey": "width"
+    },
+    {
+      "id": "video_height",
+      "label": "Height",
+      "type": "video_height",
+      "nodeId": "106",
+      "inputKey": "height"
+    },
+    {
+      "id": "sampler",
+      "label": "Video scheduler",
+      "type": "sampler",
+      "nodeId": "108",
+      "inputs": {
+        "steps": "steps",
+        "scheduler": "scheduler"
+      }
+    },
+    {
+      "id": "sampler_select",
+      "label": "Sampler algorithm",
+      "type": "sampler",
+      "nodeId": "109",
+      "inputs": {
+        "sampler_name": "sampler_name"
+      }
+    }
+  ]
+}

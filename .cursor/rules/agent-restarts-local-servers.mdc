@@ -1,0 +1,15 @@
+---
+description: Agents restart local dev servers themselves; never ask the user to do it
+alwaysApply: true
+---
+
+# Restart local servers yourself
+
+When code changes require restarting a local dev server, worker, or stack for this project:
+
+- **You** stop and start it (check terminals, kill the old process, run the start script).
+- **Never** tell the user to restart the server, refresh after a restart they must do, or "run npm run dev" unless they explicitly asked for the command for their own use.
+
+Use `LOCAL-DEV-PROJECTS.md` / `LOCAL-DEV-PROJECTS.json` for ports and start commands. DiffuseCut dev: `npm run dev` (port 3004).
+
+After restarting, verify the port responds before saying the app is ready.

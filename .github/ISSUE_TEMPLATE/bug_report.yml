@@ -1,0 +1,16 @@
+name: Bug report
+description: Report a bug in DiffuseCut
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: npm run doctor output
+      description: Paste the output of npm run doctor
+    validations:
+      required: true
