@@ -449,7 +449,7 @@ export default function SettingsPage() {
                   id="ace-step-remote-url"
                   value={aceStepRemoteUrl}
                   onChange={(e) => setAceStepRemoteUrl(e.target.value)}
-                  placeholder="http://192.168.1.7:8188"
+                  placeholder="http://127.0.0.1:8188"
                 />
                 <p className="text-xs text-muted-foreground">
                   Use your LAN ComfyUI URL (port 8188) when ACE-Step runs there.

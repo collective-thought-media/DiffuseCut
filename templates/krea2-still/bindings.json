@@ -1,0 +1,44 @@
+{
+  "promptNodeId": "6",
+  "promptInputKey": "text",
+  "negativePromptNodeId": "7",
+  "negativePromptInputKey": "text",
+  "seedNodeId": "3",
+  "seedInputKey": "seed",
+  "outputNodeIds": ["9"],
+  "controls": [
+    {
+      "id": "image_unet",
+      "label": "Krea 2 diffusion model (UNET)",
+      "type": "image_unet",
+      "nodeId": "10",
+      "nameInputKey": "unet_name"
+    },
+    {
+      "id": "image_text_encoder",
+      "label": "Krea 2 text encoder (Qwen3-VL)",
+      "type": "image_text_encoder",
+      "nodeId": "11",
+      "nameInputKey": "clip_name"
+    },
+    {
+      "id": "image_vae",
+      "label": "Krea 2 VAE",
+      "type": "image_vae",
+      "nodeId": "12",
+      "nameInputKey": "vae_name"
+    },
+    {
+      "id": "sampler",
+      "label": "Sampler",
+      "type": "sampler",
+      "nodeId": "3",
+      "inputs": {
+        "steps": "steps",
+        "cfg": "cfg",
+        "sampler_name": "sampler_name",
+        "scheduler": "scheduler"
+      }
+    }
+  ]
+}

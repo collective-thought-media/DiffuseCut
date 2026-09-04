@@ -446,8 +446,15 @@ export const SHOT_STILL_LAYOUT_PREFIX =
 export const SHOT_STILL_LAYOUT_SUFFIX =
   "single hero frame, cinematic framing, clean readable composition, storyboard reference quality, not a character turnaround sheet, not a model sheet layout";
 
+export const SHOT_CHARACTER_SHEET_BACKGROUND_NEGATIVE =
+  "plain gray background, neutral gray backdrop, studio backdrop, white seamless background, isolated on gray, character sheet background, blank background";
+
 export const DEFAULT_SHOT_STILL_NEGATIVE =
-  "blurry, watermark, text, logo, collage, split screen, multiple panels, turnaround sheet, model sheet, four views, reference sheet layout, low quality, deformed, duplicate, plain gray background, neutral gray backdrop, studio backdrop, white seamless background, isolated on gray, character sheet background, blank background, figurine, action figure, collectible statuette, product photography, toy packaging, front and back views in one image, multiple angles in one image, character design sheet, head cropped, head cut off, forehead out of frame, missing top of head, chin cropped, neck only framing";
+  "blurry, watermark, text, logo, collage, split screen, multiple panels, turnaround sheet, model sheet, four views, reference sheet layout, low quality, deformed, duplicate, figurine, action figure, collectible statuette, product photography, toy packaging, front and back views in one image, multiple angles in one image, character design sheet, head cropped, head cut off, forehead out of frame, missing top of head, chin cropped, neck only framing";
+
+
+export const SHOT_DUAL_IPADAPTER_LAYOUT_SUFFIX =
+  "one person clearly visible in the environment, character present in frame, not an empty room, not a vacant set";
 
 export const SHOT_MACRO_LAYOUT_SUFFIX =
   "macro detail within a cinematic widescreen storyboard frame, on-location environment visible, subject fills much of the frame, shallow depth of field, not a character reference sheet";
@@ -630,7 +637,7 @@ export function buildShotPlaceholderPromptTemplate(
 export function buildShotPlaceholderNegativePrompt(
   style: VisualStyle = DEFAULT_VISUAL_STYLE,
   shotPrompt?: string,
-  options?: { lockWardrobe?: boolean }
+  options?: { lockWardrobe?: boolean; hasLocationReference?: boolean }
 ): string {
   const rearExtra =
     shotPrompt && detectRearViewShot(shotPrompt)
@@ -647,6 +654,9 @@ export function buildShotPlaceholderNegativePrompt(
 
   return mergeNegativePrompts(
     DEFAULT_SHOT_STILL_NEGATIVE,
+    !options?.hasLocationReference
+      ? SHOT_CHARACTER_SHEET_BACKGROUND_NEGATIVE
+      : undefined,
     options?.lockWardrobe ? SHOT_WARDROBE_NEGATIVE : undefined,
     rearExtra,
     macroExtra,
@@ -661,14 +671,14 @@ export async function buildShotPlaceholderPrompts(
   style: VisualStyle = DEFAULT_VISUAL_STYLE,
   options?: {
     context?: string;
-    referenceFocus?: "character" | "location";
     wardrobeLock?: string | null;
+    hasLocationReference?: boolean;
   }
 ): Promise<CharacterSheetPrompts> {
-  const lockWardrobe =
-    options?.referenceFocus === "character" && Boolean(options?.wardrobeLock);
+  const lockWardrobe = Boolean(options?.wardrobeLock);
   const negativePrompt = buildShotPlaceholderNegativePrompt(style, shotPrompt, {
     lockWardrobe,
+    hasLocationReference: options?.hasLocationReference,
   });
   const templatePrompt = buildShotPlaceholderPromptTemplate(
     title,

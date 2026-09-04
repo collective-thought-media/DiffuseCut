@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Label, Select } from "@/components/ui/button";
+import { Button, Label, Select, Textarea } from "@/components/ui/button";
 
 interface SheetGenerationControlsProps {
   sampleCount: number;
@@ -13,7 +13,12 @@ interface SheetGenerationControlsProps {
   onTogglePreview: () => void;
   promptPreview: string | null;
   negativePreview: string | null;
+  previewLoading?: boolean;
+  previewError?: string | null;
+  stillNegativePrompt?: string;
+  onStillNegativePromptChange?: (value: string) => void;
   onGenerate: () => void;
+  previewDisabled?: boolean;
 }
 
 export function SheetGenerationControls({
@@ -27,7 +32,12 @@ export function SheetGenerationControls({
   onTogglePreview,
   promptPreview,
   negativePreview,
+  previewLoading = false,
+  previewError = null,
+  stillNegativePrompt,
+  onStillNegativePromptChange,
   onGenerate,
+  previewDisabled = false,
 }: SheetGenerationControlsProps) {
   return (
     <div className="space-y-3">
@@ -60,31 +70,62 @@ export function SheetGenerationControls({
         <p className="text-xs text-muted-foreground">{readyHint}</p>
       ) : null}
 
+      {onStillNegativePromptChange ? (
+        <div className="space-y-1.5">
+          <Label htmlFor="still-negative-prompt">
+            Extra negative prompt (this shot)
+          </Label>
+          <Textarea
+            id="still-negative-prompt"
+            value={stillNegativePrompt ?? ""}
+            onChange={(e) => onStillNegativePromptChange(e.target.value)}
+            placeholder="Optional. Appended to this shot's still generation negatives only."
+            rows={2}
+            className="text-sm"
+            disabled={disabled}
+          />
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
         <button
           type="button"
           onClick={onTogglePreview}
-          className="text-sm text-primary hover:underline"
-          disabled={disabled}
+          className="text-sm text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={previewDisabled}
         >
           {showPreview ? "Hide prompt preview" : "Show prompt preview"}
         </button>
       </div>
 
-      {showPreview && promptPreview && (
+      {showPreview ? (
         <div className="space-y-2 rounded-lg bg-neutral-950 p-3 text-xs">
-          <div>
-            <p className="font-medium text-muted-foreground">Positive</p>
-            <p className="mt-1 whitespace-pre-wrap">{promptPreview}</p>
-          </div>
-          {negativePreview && (
-            <div>
-              <p className="font-medium text-muted-foreground">Negative</p>
-              <p className="mt-1 whitespace-pre-wrap">{negativePreview}</p>
-            </div>
+          {previewLoading ? (
+            <p className="text-muted-foreground">Loading prompt preview…</p>
+          ) : previewError ? (
+            <p className="text-red-400" role="alert">
+              {previewError}
+            </p>
+          ) : promptPreview ? (
+            <>
+              <div>
+                <p className="font-medium text-muted-foreground">Positive</p>
+                <p className="mt-1 whitespace-pre-wrap">{promptPreview}</p>
+              </div>
+              {negativePreview ? (
+                <div>
+                  <p className="font-medium text-muted-foreground">Negative</p>
+                  <p className="mt-1 whitespace-pre-wrap">{negativePreview}</p>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-muted-foreground">
+              No preview text returned. Check the shot prompt and try again.
+            </p>
           )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

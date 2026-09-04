@@ -12,6 +12,7 @@ import {
 import { nowMs } from "@/lib/utils";
 import { normalizeRenderSettings } from "@/lib/services/image-sampler";
 import {
+  resolveTemplateImageHints,
   resolveTemplateVideoHints,
 } from "@/lib/db/builtin-template-ids";
 import type { RenderSettings, WorkflowBindings } from "@/types";
@@ -25,6 +26,14 @@ const VIDEO_STACK_KEYS = [
   "videoWidth",
   "videoHeight",
   "sampler",
+] as const satisfies ReadonlyArray<keyof RenderSettings>;
+
+const IMAGE_STACK_KEYS = [
+  "imageUnet",
+  "imageVae",
+  "imageTextEncoder",
+  "imageEngine",
+  "imageSampler",
 ] as const satisfies ReadonlyArray<keyof RenderSettings>;
 
 const PLACEHOLDER_MODEL_RE =
@@ -113,6 +122,16 @@ export function extractTemplateRenderDefaults(template: {
       case "text_encoder":
         defaults.videoTextEncoder = raw;
         break;
+      case "image_unet":
+        defaults.imageUnet = raw;
+        defaults.imageEngine = "krea2";
+        break;
+      case "image_vae":
+        defaults.imageVae = raw;
+        break;
+      case "image_text_encoder":
+        defaults.imageTextEncoder = raw;
+        break;
       default:
         break;
     }
@@ -160,6 +179,24 @@ export function stripVideoStackSettings(
     delete next[key];
   }
   return next;
+}
+
+/** Drop Krea / still-image UNET stack fields before template hydration. */
+export function stripImageStackSettings(
+  settings: RenderSettings
+): RenderSettings {
+  const next = { ...settings };
+  for (const key of IMAGE_STACK_KEYS) {
+    delete next[key];
+  }
+  return next;
+}
+
+function isKrea2ImageStack(settings: RenderSettings): boolean {
+  return (
+    settings.imageEngine === "krea2" ||
+    settings.imageUnet?.toLowerCase().includes("krea") === true
+  );
 }
 
 function isLtxVideoStack(settings: RenderSettings): boolean {
@@ -286,13 +323,86 @@ async function loadVideoModelFolders(baseUrl: string) {
 export async function resolveRenderSettingsFromComfyUI(
   baseUrl: string,
   renderSettings: RenderSettings,
-  options?: { videoHints?: string[]; requireHintMatch?: boolean }
+  options?: {
+    videoHints?: string[];
+    imageHints?: string[];
+    requireHintMatch?: boolean;
+  }
 ): Promise<RenderSettings> {
-  const hints = options?.videoHints ?? ["ltx", "minimax"];
+  const videoHints = options?.videoHints;
+  const imageHints = options?.imageHints;
   const requireHintMatch = options?.requireHintMatch ?? false;
   const pickOptions = { requireHintMatch };
   const folders = await loadVideoModelFolders(baseUrl);
   const resolved = { ...renderSettings };
+
+  if (imageHints && imageHints.length > 0) {
+    const unetHints = ["krea2", "krea", "turbo"];
+    if (isEmpty(resolved.imageUnet) && folders.unet.length > 0) {
+      resolved.imageUnet = pickModelName(
+        folders.unet,
+        resolved.imageUnet,
+        unetHints,
+        pickOptions
+      );
+    } else if (!isEmpty(resolved.imageUnet)) {
+      resolved.imageUnet = pickModelName(
+        folders.unet,
+        resolved.imageUnet,
+        unetHints,
+        pickOptions
+      );
+    }
+
+    const vaeHints = ["qwen_image_vae", "qwen"];
+    if (isEmpty(resolved.imageVae) && folders.vae.length > 0) {
+      resolved.imageVae = pickModelName(
+        folders.vae,
+        resolved.imageVae,
+        vaeHints,
+        pickOptions
+      );
+    } else if (!isEmpty(resolved.imageVae)) {
+      resolved.imageVae = pickModelName(
+        folders.vae,
+        resolved.imageVae,
+        vaeHints,
+        pickOptions
+      );
+    }
+
+    const textEncoderHints = ["qwen3vl", "krea"];
+    if (isEmpty(resolved.imageTextEncoder) && folders.textEncoders.length > 0) {
+      resolved.imageTextEncoder = pickModelName(
+        folders.textEncoders,
+        resolved.imageTextEncoder,
+        textEncoderHints,
+        pickOptions
+      );
+    } else if (!isEmpty(resolved.imageTextEncoder)) {
+      resolved.imageTextEncoder = pickModelName(
+        folders.textEncoders,
+        resolved.imageTextEncoder,
+        textEncoderHints,
+        pickOptions
+      );
+    }
+
+    if (isKrea2ImageStack(resolved)) {
+      resolved.imageEngine = "krea2";
+      resolved.imageSampler = {
+        ...resolved.imageSampler,
+        steps: resolved.imageSampler?.steps ?? 8,
+        cfg: resolved.imageSampler?.cfg ?? 1,
+        scheduler: resolved.imageSampler?.scheduler ?? "simple",
+        sampler_name: resolved.imageSampler?.sampler_name ?? "euler",
+      };
+    }
+
+    return resolved;
+  }
+
+  const hints = videoHints ?? ["ltx", "minimax"];
   const minimaxHints = hintsTargetMinimax(hints);
   const ltxHints = hintsTargetLtx(hints);
   const ltxOnly = ltxHints && !minimaxHints;
@@ -482,14 +592,26 @@ export async function hydrateProjectRenderSettings(
     ? extractTemplateRenderDefaults(options.template)
     : {};
   const templateScoped = Boolean(options?.template?.id);
-  const videoHints = options?.template?.id
-    ? resolveTemplateVideoHints(options.template.id)
-    : undefined;
+  const videoHints =
+    options?.template?.purpose === "shot_video" && options?.template?.id
+      ? resolveTemplateVideoHints(options.template.id)
+      : undefined;
+  const imageHints =
+    options?.template?.id
+      ? resolveTemplateImageHints(options.template.id)
+      : undefined;
+  const hasImageHints = Boolean(imageHints && imageHints.length > 0);
+  const hasVideoHints = Boolean(videoHints && videoHints.length > 0);
 
   let merged = mergeRenderSettings(appDefaults, projectSettings);
 
-  if (templateScoped) {
+  if (templateScoped && hasVideoHints) {
     merged = stripVideoStackSettings(merged);
+    merged = mergeRenderSettings(templateDefaults, merged);
+  } else if (templateScoped && hasImageHints) {
+    merged = stripImageStackSettings(merged);
+    merged = mergeRenderSettings(templateDefaults, merged);
+  } else if (templateScoped) {
     merged = mergeRenderSettings(templateDefaults, merged);
   } else {
     merged = mergeRenderSettings(knownGoodVideo, templateDefaults, merged);
@@ -509,8 +631,9 @@ export async function hydrateProjectRenderSettings(
   if (endpointUrl) {
     try {
       merged = await resolveRenderSettingsFromComfyUI(endpointUrl, merged, {
-        videoHints,
-        requireHintMatch: templateScoped,
+        videoHints: hasVideoHints ? videoHints : undefined,
+        imageHints: hasImageHints ? imageHints : undefined,
+        requireHintMatch: templateScoped && (hasVideoHints || hasImageHints),
       });
     } catch {
       /* ComfyUI unreachable: keep merged defaults without model auto-pick */

@@ -9,8 +9,8 @@
   "referenceImageInputKey": "image",
   "secondaryReferenceImageNodeId": "11",
   "secondaryReferenceImageInputKey": "image",
-  "characterIpAdapterNodeId": "13",
-  "locationIpAdapterNodeId": "14",
+  "characterIpAdapterNodeId": "14",
+  "locationIpAdapterNodeId": "13",
   "referenceImageUsage": "ipadapter",
   "outputNodeIds": ["9"],
   "controls": [

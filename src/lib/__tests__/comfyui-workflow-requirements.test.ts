@@ -4,13 +4,16 @@ import {
   LTX_I2V_NODE_CLASSES,
   hasAceStepModels,
   hasModelMatching,
+  hasSdxlPlusIpAdapterModel,
+  hasSdxlPlusIpAdapterPresetFilename,
   missingNodeClasses,
 } from "@/lib/services/comfyui-workflow-requirements";
 
 describe("comfyui-workflow-requirements", () => {
   it("lists missing IP-Adapter nodes", () => {
-    const objectInfo = { IPAdapterUnifiedLoader: {} };
+    const objectInfo = { IPAdapterModelLoader: {} };
     expect(missingNodeClasses(objectInfo, IP_ADAPTER_NODE_CLASSES)).toEqual([
+      "CLIPVisionLoader",
       "IPAdapterAdvanced",
     ]);
   });
@@ -33,6 +36,20 @@ describe("comfyui-workflow-requirements", () => {
         "ip-adapter-plus"
       )
     ).toBe(true);
+  });
+
+  it("accepts legacy and preset PLUS SDXL filenames", () => {
+    expect(
+      hasSdxlPlusIpAdapterModel(["ip-adapter-plus_sdxl_vit-h.safetensors"])
+    ).toBe(true);
+    expect(
+      hasSdxlPlusIpAdapterPresetFilename(["plus.sdxl.vit.h.safetensors"])
+    ).toBe(true);
+    expect(
+      hasSdxlPlusIpAdapterPresetFilename([
+        "ip-adapter-plus_sdxl_vit-h.safetensors",
+      ])
+    ).toBe(false);
   });
 
   it("detects ACE-Step aio checkpoint", () => {

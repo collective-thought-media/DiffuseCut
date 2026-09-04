@@ -379,4 +379,16 @@ describe("buildShotPlaceholderNegativePrompt", () => {
     );
     expect(negative.toLowerCase()).toContain("standing upright");
   });
+
+  it("skips character-sheet background negatives when a location reference is used", async () => {
+    const { buildShotPlaceholderNegativePrompt } = await import(
+      "@/lib/services/prompt-preprocess"
+    );
+    const negative = buildShotPlaceholderNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      "Medium shot on neutral gray seamless backdrop",
+      { hasLocationReference: true }
+    );
+    expect(negative.toLowerCase()).not.toContain("neutral gray backdrop");
+  });
 });

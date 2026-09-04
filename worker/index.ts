@@ -14,6 +14,10 @@ import {
   formatDependencySummary,
 } from "@/lib/services/dependency-checker";
 import {
+  CLIP_VISION_SDXL_FILENAME,
+  resolveSdxlPlusIpAdapterFilename,
+} from "@/lib/services/comfyui-workflow-requirements";
+import {
   downloadOutput,
   extractOutputFiles,
   findPromptQueueState,
@@ -21,8 +25,11 @@ import {
   getQueue,
   queuePrompt,
   uploadAnchorReferenceImage,
+  uploadCharacterReferenceImage,
+  uploadLocationReferenceImage,
   uploadMedia,
   assertComfyuiNodeClasses,
+  getModels,
 } from "@/lib/services/comfyui-client";
 import { resolveShotReferencePathForBatch, resolveShotDualReferencePathsForBatch } from "@/lib/services/shot-reference";
 import {
@@ -55,7 +62,6 @@ import {
 } from "@/lib/anchor-reframe";
 import { resolveShotReframeIntensity } from "@/lib/services/prompt-preprocess";
 import type { LocationReferenceGenerationOptions } from "@/types";
-import { shotReferenceFocus } from "@/lib/services/shot-placeholder-options";
 import {
   resolveLocationAnchorReferencePathForBatch,
 } from "@/lib/services/location-asset-generation";
@@ -66,7 +72,15 @@ import {
 } from "@/lib/db/seed-builtin-templates";
 import { runExport, type ExportSettings } from "@/lib/services/ffmpeg-export";
 import { formatComfyuiError } from "@/lib/services/comfyui-errors";
-import { ensureProjectRenderCheckpoint } from "@/lib/services/generation-stack";
+import {
+  ensureProjectStillImageSettings,
+  withResolvedCheckpoint,
+} from "@/lib/services/generation-stack";
+import {
+  filterImageGenerationCheckpoints,
+  resolveCheckpointForIpAdapter,
+  shortCheckpointLabel,
+} from "@/lib/services/image-checkpoints";
 import { hydrateProjectRenderSettings } from "@/lib/services/render-settings-resolver";
 import { buildShotCharacterLookSuffix, resolveCharacterStateForCast } from "@/lib/services/character-states";
 import { parseVisualStyle } from "@/lib/services/visual-style";
@@ -129,7 +143,7 @@ async function resolveBatchAnchorReferenceImages(
       if (characterPath) {
         const characterAbs = resolveMediaPath(projectRoot, characterPath);
         if (fs.existsSync(characterAbs)) {
-          uploads.primary = await uploadAnchorReferenceImage(
+          uploads.primary = await uploadCharacterReferenceImage(
             batch.comfyuiEndpointUrl,
             characterAbs
           );
@@ -138,7 +152,7 @@ async function resolveBatchAnchorReferenceImages(
       if (locationPath) {
         const locationAbs = resolveMediaPath(projectRoot, locationPath);
         if (fs.existsSync(locationAbs)) {
-          uploads.secondary = await uploadAnchorReferenceImage(
+          uploads.secondary = await uploadLocationReferenceImage(
             batch.comfyuiEndpointUrl,
             locationAbs
           );
@@ -771,11 +785,31 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       throw new Error("Missing batch, template, or project for asset option");
     }
 
-    const renderSettings = JSON.parse(
-      project.renderSettingsJson || "{}"
-    ) as RenderSettings;
-    const { renderSettings: resolvedSettings } =
-      await ensureProjectRenderCheckpoint(batch.projectId, batch.comfyuiEndpointUrl);
+    const { renderSettings: baseRenderSettings } =
+      await ensureProjectStillImageSettings(
+        batch.projectId,
+        batch.comfyuiEndpointUrl,
+        { template }
+      );
+
+    let resolvedSettings = baseRenderSettings;
+    if (LOCATION_ANCHOR_TEMPLATE_IDS.has(batch.workflowTemplateId)) {
+      const checkpoints = await getModels(batch.comfyuiEndpointUrl, "checkpoints");
+      const ipCheckpoint = resolveCheckpointForIpAdapter(
+        baseRenderSettings.checkpoint,
+        checkpoints
+      );
+      if (ipCheckpoint.swapped) {
+        resolvedSettings = withResolvedCheckpoint(
+          baseRenderSettings,
+          ipCheckpoint.checkpoint
+        );
+        updateAssetOption(option.id, {
+          statusMessage: `IP-Adapter: using ${shortCheckpointLabel(ipCheckpoint.checkpoint)} instead of ${shortCheckpointLabel(ipCheckpoint.from ?? baseRenderSettings.checkpoint ?? "selected model")} (Illustrious-style checkpoints break reference-guided shots)`,
+          lastHeartbeatAt: now(),
+        });
+      }
+    }
 
     const projectRoot = resolveProjectRoot(project);
     let referenceImage: string | undefined;
@@ -844,7 +878,8 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID
     ) {
       await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
-        "IPAdapterUnifiedLoader",
+        "IPAdapterModelLoader",
+        "CLIPVisionLoader",
         "IPAdapterAdvanced",
       ]);
     }
@@ -859,20 +894,20 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
           extractAnchoredViewDescription(batch.rawPrompt ?? ""))
         : "";
 
-    const shotForReference =
-      batch.entityType === "shot"
-        ? getDb()
-            .select({
-              visualReferenceFocus: schema.shots.visualReferenceFocus,
-            })
-            .from(schema.shots)
-            .where(eq(schema.shots.id, batch.entityId))
-            .get()
-        : null;
-
     const generationOptions = parseBatchGenerationOptions(
       batch.generationOptionsJson
     );
+
+    const shotDualPaths =
+      batch.entityType === "shot"
+        ? resolveShotDualReferencePathsForBatch(batch)
+        : { characterPath: null as string | null, locationPath: null as string | null };
+    const singleShotReferenceFocus =
+      generationOptions.referenceFocus ??
+      (shotDualPaths.characterPath && !shotDualPaths.locationPath
+        ? ("character" as const)
+        : ("location" as const));
+
     const ipAdapterOverrides =
       generationOptions.ipAdapterWeight != null &&
       generationOptions.ipAdapterEndAt != null
@@ -882,40 +917,34 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
           }
         : undefined;
 
-    const dualIpAdapterReframe =
+    const useDualIpAdapterProfiles =
       !ipAdapterOverrides &&
       batch.entityType === "shot" &&
       batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID &&
       referenceImage &&
-      secondaryReferenceImage
-        ? {
-            character: resolveShotReframeIntensity(shotPromptForComposition, {
-              referenceFocus: "character",
-            }),
-            location: resolveShotReframeIntensity(shotPromptForComposition, {
-              referenceFocus: "location",
-            }),
-          }
-        : undefined;
+      secondaryReferenceImage;
+
+    const useDualIpAdapterBackdropProfiles =
+      useDualIpAdapterProfiles && generationOptions.virtualBackdrop === true;
 
     const ipAdapterReframe =
       !ipAdapterOverrides &&
-      !dualIpAdapterReframe &&
+      !useDualIpAdapterProfiles &&
+      !useDualIpAdapterBackdropProfiles &&
       batch.entityType === "location_angle" &&
       batch.workflowTemplateId ===
         BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
       referenceImage
         ? resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
         : !ipAdapterOverrides &&
-            !dualIpAdapterReframe &&
+            !useDualIpAdapterProfiles &&
+            !useDualIpAdapterBackdropProfiles &&
             batch.entityType === "shot" &&
             batch.workflowTemplateId ===
               BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
             referenceImage
           ? resolveShotReframeIntensity(shotPromptForComposition, {
-              referenceFocus: shotForReference
-                ? shotReferenceFocus(shotForReference)
-                : "location",
+              referenceFocus: singleShotReferenceFocus,
             })
           : undefined;
 
@@ -934,6 +963,32 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
           )
         : undefined;
 
+    let ipAdapterFilenames:
+      | { ipadapter?: string; clipVision?: string }
+      | undefined;
+    if (
+      batch.workflowTemplateId ===
+        BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID ||
+      batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID
+    ) {
+      const [ipadapterModels, clipVisionModels] = await Promise.all([
+        getModels(batch.comfyuiEndpointUrl, "ipadapter").catch(
+          () => [] as string[]
+        ),
+        getModels(batch.comfyuiEndpointUrl, "clip_vision").catch(
+          () => [] as string[]
+        ),
+      ]);
+      const ipadapter = resolveSdxlPlusIpAdapterFilename(ipadapterModels);
+      const clipVision =
+        clipVisionModels.find((name) =>
+          name.toLowerCase().includes("vit.h.14")
+        ) ?? CLIP_VISION_SDXL_FILENAME;
+      if (ipadapter) {
+        ipAdapterFilenames = { ipadapter, clipVision };
+      }
+    }
+
     const { workflow, clientId } = buildPortraitPayload(
       template,
       JSON.parse(template.bindingsJson || "{}"),
@@ -948,12 +1003,15 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       {
         checkpoint: resolvedSettings.checkpoint,
         ipAdapterReframe,
-        dualIpAdapterReframe,
+        useDualIpAdapterProfiles:
+          useDualIpAdapterProfiles && !useDualIpAdapterBackdropProfiles,
+        useDualIpAdapterBackdropProfiles,
         ipAdapterOverrides,
         detailMacro,
         detailMacroWidth: SHOT_MACRO_LATENT_WIDTH,
         detailMacroHeight: SHOT_MACRO_LATENT_HEIGHT,
         referenceDimensions,
+        ipAdapterFilenames,
       }
     );
 

@@ -64,6 +64,10 @@ export async function listEndpoints(endpoints: string[]): Promise<string | null>
 }
 
 export const COMFYUI_ANCHOR_REFERENCE_FILENAME = "DiffuseCutAnchorReference.png";
+export const COMFYUI_CHARACTER_REFERENCE_FILENAME =
+  "DiffuseCutCharacterReference.png";
+export const COMFYUI_LOCATION_REFERENCE_FILENAME =
+  "DiffuseCutLocationReference.png";
 
 export async function uploadMedia(
   baseUrl: string,
@@ -138,14 +142,16 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export async function uploadAnchorReferenceImage(
+async function uploadReferenceImageWithFilename(
   baseUrl: string,
-  filePath: string
+  filePath: string,
+  uploadFileName: string,
+  label: string
 ): Promise<string> {
   const uploaded = await uploadMedia(baseUrl, filePath, {
     kind: "image",
     overwrite: true,
-    uploadFileName: COMFYUI_ANCHOR_REFERENCE_FILENAME,
+    uploadFileName,
   });
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -158,7 +164,43 @@ export async function uploadAnchorReferenceImage(
   }
 
   throw new Error(
-    `ComfyUI did not finish storing the anchor reference image (${uploaded.name}). Try again in a moment.`
+    `ComfyUI did not finish storing the ${label} reference image (${uploaded.name}). Try again in a moment.`
+  );
+}
+
+export async function uploadAnchorReferenceImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_ANCHOR_REFERENCE_FILENAME,
+    "anchor"
+  );
+}
+
+export async function uploadCharacterReferenceImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_CHARACTER_REFERENCE_FILENAME,
+    "character"
+  );
+}
+
+export async function uploadLocationReferenceImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_LOCATION_REFERENCE_FILENAME,
+    "location"
   );
 }
 
@@ -290,7 +332,8 @@ export async function isIpAdapterAvailable(baseUrl: string): Promise<boolean> {
   try {
     const objectInfo = await getObjectInfo(normalized);
     const hasNodes =
-      "IPAdapterUnifiedLoader" in objectInfo &&
+      "IPAdapterModelLoader" in objectInfo &&
+      "CLIPVisionLoader" in objectInfo &&
       "IPAdapterAdvanced" in objectInfo;
     if (!hasNodes) {
       ipAdapterAvailabilityCache.set(normalized, {

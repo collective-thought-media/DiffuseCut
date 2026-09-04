@@ -2,16 +2,29 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import {
   BUILTIN_CHARACTER_SHEET_TEMPLATE_ID,
+  BUILTIN_KREA2_STILL_TEMPLATE_ID,
   resolveDefaultCharacterSheetTemplateId,
 } from "@/lib/db/seed-builtin-templates";
+import { isKrea2StillTemplate } from "@/lib/db/builtin-template-ids";
+import type { WorkflowTemplate } from "@/lib/db/schema";
 import { getModels, healthCheck, isIpAdapterAvailable, listEndpoints } from "@/lib/services/comfyui-client";
 import {
   getDefaultCharacterSheetTemplateId,
   getDefaultComfyuiEndpoints,
   resolveComfyuiEndpoints,
 } from "@/lib/services/settings";
+import { hydrateProjectRenderSettings } from "@/lib/services/render-settings-resolver";
 import { resolveImageSampler } from "@/lib/services/image-sampler";
 import type { GenerationStack, RenderSettings } from "@/types";
+import {
+  detectKrea2Unet,
+  filterImageGenerationCheckpoints,
+  isKrea2ImageEngine,
+  isKrea2UnetAvailable,
+  pickDefaultImageCheckpoint,
+  sortImageCheckpointsForPicker,
+} from "@/lib/services/image-checkpoints";
+import { nowMs } from "@/lib/utils";
 
 export interface CheckpointResolution {
   checkpoint: string;
@@ -65,7 +78,7 @@ export async function resolveCheckpoint(
   }
 
   return {
-    checkpoint: available[0],
+    checkpoint: pickDefaultImageCheckpoint(available),
     autoSelected: true,
     invalidPreferred: preferred || undefined,
   };
@@ -119,6 +132,38 @@ export async function ensureProjectRenderCheckpoint(
   return { renderSettings, resolution };
 }
 
+export async function ensureProjectStillImageSettings(
+  projectId: string,
+  endpointUrl?: string,
+  options?: { template?: WorkflowTemplate | null; templateId?: string }
+): Promise<{ renderSettings: RenderSettings }> {
+  const db = getDb();
+  let template = options?.template ?? null;
+  if (!template && options?.templateId) {
+    template =
+      db
+        .select()
+        .from(schema.workflowTemplates)
+        .where(eq(schema.workflowTemplates.id, options.templateId))
+        .get() ?? null;
+  }
+
+  if (template && isKrea2StillTemplate(template.id)) {
+    const { renderSettings } = await hydrateProjectRenderSettings(projectId, {
+      template,
+      persist: true,
+      updateAppDefaults: false,
+    });
+    return { renderSettings };
+  }
+
+  const { renderSettings } = await ensureProjectRenderCheckpoint(
+    projectId,
+    endpointUrl
+  );
+  return { renderSettings };
+}
+
 async function resolveCharacterSheetTemplateMeta(projectId: string): Promise<{
   id: string;
   name: string;
@@ -170,24 +215,48 @@ export async function getGenerationStack(
   ) as RenderSettings;
 
   const availableCheckpoints = await getModels(endpointUrl, "checkpoints");
+  const diffusionModels = await getModels(endpointUrl, "diffusion_models").catch(
+    () => [] as string[]
+  );
+  const availableImageCheckpoints = sortImageCheckpointsForPicker(
+    filterImageGenerationCheckpoints(availableCheckpoints)
+  );
+  const krea2Available = isKrea2UnetAvailable(diffusionModels);
   const template = await resolveCharacterSheetTemplateMeta(projectId);
+
+  const imageEngine: GenerationStack["imageEngine"] =
+    isKrea2ImageEngine(renderSettings.imageEngine) ||
+    isKrea2StillTemplate(template.id)
+      ? "krea2"
+      : "sdxl";
 
   let effectiveCheckpoint: string | null = null;
   let needsCheckpointSelection = availableCheckpoints.length === 0;
+  let effectiveImageUnet: string | null = renderSettings.imageUnet?.trim() || null;
 
   const configuredCheckpoint = renderSettings.checkpoint?.trim() || null;
 
-  if (availableCheckpoints.length > 0) {
+  if (imageEngine === "krea2") {
+    needsCheckpointSelection = !krea2Available || !effectiveImageUnet;
+    if (krea2Available && !effectiveImageUnet) {
+      effectiveImageUnet = detectKrea2Unet(diffusionModels) ?? null;
+    }
+  } else if (availableCheckpoints.length > 0) {
     try {
       const resolution = await resolveCheckpoint(
         endpointUrl,
         renderSettings,
-        availableCheckpoints
+        availableImageCheckpoints.length > 0
+          ? availableImageCheckpoints
+          : availableCheckpoints
       );
       effectiveCheckpoint = resolution.checkpoint;
       needsCheckpointSelection =
         !configuredCheckpoint ||
-        !availableCheckpoints.includes(configuredCheckpoint);
+        !(availableImageCheckpoints.length > 0
+          ? availableImageCheckpoints
+          : availableCheckpoints
+        ).includes(configuredCheckpoint);
     } catch {
       needsCheckpointSelection = true;
     }
@@ -203,9 +272,13 @@ export async function getGenerationStack(
     effectiveCheckpoint,
     needsCheckpointSelection,
     availableCheckpoints,
+    availableImageCheckpoints,
+    imageEngine,
+    krea2Available,
+    effectiveImageUnet,
     loras: renderSettings.loras ?? [],
     sampler: resolveImageSampler(renderSettings),
   };
 }
 
-export { BUILTIN_CHARACTER_SHEET_TEMPLATE_ID };
+export { BUILTIN_CHARACTER_SHEET_TEMPLATE_ID, BUILTIN_KREA2_STILL_TEMPLATE_ID };

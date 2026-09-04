@@ -1,4 +1,4 @@
-import { resolveVideoSampler } from "@/lib/services/image-sampler";
+import { resolveImageSampler, resolveVideoSampler } from "@/lib/services/image-sampler";
 import type { RenderSettings, WorkflowBindings, WorkflowControl } from "@/types";
 
 function bindingsNeedVideoCheckpoint(bindings: WorkflowBindings): boolean {
@@ -25,6 +25,12 @@ function resolveControlValue(
       return bindings
         ? resolveCheckpointForBindings(bindings, renderSettings)
         : renderSettings.checkpoint;
+    case "image_unet":
+      return renderSettings.imageUnet;
+    case "image_vae":
+      return renderSettings.imageVae;
+    case "image_text_encoder":
+      return renderSettings.imageTextEncoder;
     case "unet":
       return renderSettings.videoUnet;
     case "vae":
@@ -51,15 +57,21 @@ function isEmptyValue(value: unknown): boolean {
 
 function samplerControlSatisfied(
   control: WorkflowControl,
-  renderSettings: RenderSettings
+  renderSettings: RenderSettings,
+  bindings?: WorkflowBindings
 ): boolean {
   if (!control.inputs || Object.keys(control.inputs).length === 0) {
     return true;
   }
 
-  const videoSampler = resolveVideoSampler(renderSettings);
+  const usesImageSampler = (bindings?.controls ?? []).some((item) =>
+    ["image_unet", "image_vae", "image_text_encoder"].includes(item.type)
+  );
+  const sampler = usesImageSampler
+    ? resolveImageSampler(renderSettings)
+    : resolveVideoSampler(renderSettings);
   return Object.values(control.inputs).every((valueKey) => {
-    const value = videoSampler[valueKey as keyof typeof videoSampler];
+    const value = sampler[valueKey as keyof typeof sampler];
     return !isEmptyValue(value);
   });
 }
@@ -77,7 +89,7 @@ export function getMissingRenderSettingsForBindings(
     }
 
     if (control.type === "sampler") {
-      if (!samplerControlSatisfied(control, renderSettings)) {
+      if (!samplerControlSatisfied(control, renderSettings, bindings)) {
         missing.add(control.label);
       }
       continue;

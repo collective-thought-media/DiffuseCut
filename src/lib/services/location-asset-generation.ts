@@ -27,7 +27,9 @@ import {
 import { buildAnchoredAngleReferenceDescription } from "@/lib/location-preview";
 import { buildLocationReferencePrompts } from "@/lib/services/prompt-preprocess";
 import { parseVisualStyle } from "@/lib/services/visual-style";
-import { ensureProjectRenderCheckpoint, resolveProjectEndpointUrl } from "@/lib/services/generation-stack";
+import { ensureProjectStillImageSettings, resolveProjectEndpointUrl } from "@/lib/services/generation-stack";
+import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
+import type { RenderSettings } from "@/types";
 import { isIpAdapterAvailable } from "@/lib/services/comfyui-client";
 import {
   getDefaultComfyuiEndpoints,
@@ -270,7 +272,7 @@ export async function enqueueLocationReferenceBatch(
     throw new Error("Invalid location reference workflow template");
   }
 
-  await ensureProjectRenderCheckpoint(projectId, endpointUrl);
+  await ensureProjectStillImageSettings(projectId, endpointUrl, { templateId });
 
   const visualStyle = parseVisualStyle(project.visualStyleJson);
   const anchorOptions = {
@@ -283,6 +285,13 @@ export async function enqueueLocationReferenceBatch(
     referenceDescription,
     visualStyle,
     anchorOptions
+  );
+  const renderSettings = JSON.parse(
+    project.renderSettingsJson || "{}"
+  ) as RenderSettings;
+  const finalNegativePrompt = mergeImageNegativePrompt(
+    negativePrompt,
+    renderSettings.imageDefaultNegative
   );
 
   const ts = Date.now();
@@ -298,7 +307,7 @@ export async function enqueueLocationReferenceBatch(
     sampleCount: count,
     rawPrompt: referenceDescription,
     processedPrompt,
-    negativePrompt,
+    negativePrompt: finalNegativePrompt,
     generationOptionsJson: generationOptions
       ? JSON.stringify(generationOptions)
       : null,

@@ -12,7 +12,7 @@ import {
   getMissingRenderSettingsForBindings,
 } from "@/lib/services/render-settings-validation";
 import { deriveShotRenderDisplay, shotHasActiveRenderJob } from "@/lib/render-shot-display";
-import type { RenderSettings, WorkflowBindings } from "@/types";
+import type { RenderSettings, WorkflowBindings, GenerationStack } from "@/types";
 import { RenderJobCenter, pickDefaultShotId } from "@/components/render/RenderJobCenter";
 import { QueuePanel } from "@/components/render/QueuePanel";
 import { RenderSettingsPanel } from "@/components/render/RenderSettingsPanel";
@@ -82,17 +82,22 @@ export default function RenderPage({ params }: PageProps) {
   const [comfyDependency, setComfyDependency] = useState<DependencyStatus | null>(
     null
   );
+  const [availableImageCheckpoints, setAvailableImageCheckpoints] = useState<
+    string[]
+  >([]);
+  const [krea2Available, setKrea2Available] = useState(false);
   const settingsHydratedRef = useRef(false);
   const templateHydratedRef = useRef<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [shotsRes, jobsRes, templatesRes, depsRes] = await Promise.all([
+      const [shotsRes, jobsRes, templatesRes, depsRes, stackRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/shots`),
         fetch(`/api/render-jobs?projectId=${projectId}`),
         fetch("/api/workflow-templates?purpose=shot_video"),
         fetch("/api/system/dependencies"),
+        fetch(`/api/projects/${projectId}/generation-stack`).catch(() => null),
       ]);
       const shotsData = await shotsRes.json();
       const jobsData = await jobsRes.json();
@@ -165,6 +170,17 @@ export default function RenderPage({ params }: PageProps) {
           (dep) => dep.id === "comfyui"
         );
         setComfyDependency(comfy ?? null);
+      }
+
+      if (stackRes?.ok) {
+        const stackData = await stackRes.json();
+        const stack = stackData.stack as GenerationStack | undefined;
+        setAvailableImageCheckpoints(
+          stack?.availableImageCheckpoints?.length
+            ? stack.availableImageCheckpoints
+            : stack?.availableCheckpoints ?? []
+        );
+        setKrea2Available(stack?.krea2Available ?? false);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
@@ -537,6 +553,9 @@ export default function RenderPage({ params }: PageProps) {
             showVideoSettings={isVideoTemplate}
             videoEngine={videoEngine}
             variant="sidebar"
+            projectId={projectId}
+            availableImageCheckpoints={availableImageCheckpoints}
+            krea2Available={krea2Available}
           />
         </aside>
       </div>

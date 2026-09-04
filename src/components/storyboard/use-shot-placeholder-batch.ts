@@ -7,6 +7,11 @@ import type {
 } from "@/lib/db/schema";
 import type { ShotPlaceholderPack } from "@/lib/services/shot-asset-generation";
 import { formatComfyuiError } from "@/lib/services/comfyui-errors";
+import {
+  mergeShotRenderOverrides,
+  parseShotRenderOverrides,
+  serializeShotRenderOverrides,
+} from "@/lib/shot-render-overrides";
 
 export function formatShotBatchFailureMessage(
   batch: AssetGenerationBatch,
@@ -50,6 +55,9 @@ export interface UseShotPlaceholderBatchProps {
   shotTitle: string;
   placeholderDescription: string;
   hasPlaceholder?: boolean;
+  renderOverridesJson?: string | null;
+  hasLocationReference?: boolean;
+  onRenderOverridesChange?: (renderOverridesJson: string | null) => void;
   onPlaceholderSelected: (shot: {
     id: string;
     placeholderPath: string | null;
@@ -64,6 +72,9 @@ export function useShotPlaceholderBatch({
   shotTitle,
   placeholderDescription,
   hasPlaceholder = false,
+  renderOverridesJson,
+  hasLocationReference = false,
+  onRenderOverridesChange,
   onPlaceholderSelected,
 }: UseShotPlaceholderBatchProps) {
   const [batch, setBatch] = useState<AssetGenerationBatch | null>(null);
@@ -76,6 +87,8 @@ export function useShotPlaceholderBatch({
   const [promptPreview, setPromptPreview] = useState<string | null>(null);
   const [negativePreview, setNegativePreview] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [comfyuiOk, setComfyuiOk] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
@@ -169,26 +182,81 @@ export function useShotPlaceholderBatch({
     [apiBase, applyBatchView]
   );
 
+  const stillNegativePrompt = parseShotRenderOverrides(renderOverridesJson)
+    .stillNegativePrompt;
+
   const loadPromptPreview = useCallback(async () => {
-    if (!shotTitle.trim() || !placeholderDescription.trim()) return;
+    if (!shotTitle.trim() || !placeholderDescription.trim()) {
+      setPreviewError(
+        "Add a shot prompt, location, or character cast before previewing."
+      );
+      setPromptPreview(null);
+      setNegativePreview(null);
+      return;
+    }
+    setPreviewLoading(true);
+    setPreviewError(null);
     try {
       const params = new URLSearchParams({
         title: shotTitle,
         description: placeholderDescription,
         projectId,
+        shotId,
       });
+      if (hasLocationReference) {
+        params.set("hasLocationReference", "1");
+      }
       const res = await fetch(
         `/api/prompt-preview/shot-placeholder?${params.toString()}`
       );
-      const data = await res.json();
-      if (res.ok) {
-        setPromptPreview(data.processedPrompt);
-        setNegativePreview(data.negativePrompt);
+      const data = (await res.json()) as {
+        processedPrompt?: string;
+        negativePrompt?: string;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to load prompt preview");
       }
-    } catch {
-      /* ignore preview errors */
+      setPromptPreview(data.processedPrompt ?? null);
+      setNegativePreview(data.negativePrompt ?? null);
+    } catch (err) {
+      setPromptPreview(null);
+      setNegativePreview(null);
+      setPreviewError(
+        err instanceof Error ? err.message : "Failed to load prompt preview"
+      );
+    } finally {
+      setPreviewLoading(false);
     }
-  }, [shotTitle, placeholderDescription, projectId]);
+  }, [
+    shotTitle,
+    placeholderDescription,
+    projectId,
+    shotId,
+    hasLocationReference,
+  ]);
+
+  const togglePromptPreview = useCallback(() => {
+    setShowPreview((open) => {
+      const next = !open;
+      if (next) {
+        void loadPromptPreview();
+      }
+      return next;
+    });
+  }, [loadPromptPreview]);
+
+  const handleStillNegativePromptChange = useCallback(
+    (value: string) => {
+      const next = serializeShotRenderOverrides(
+        mergeShotRenderOverrides(parseShotRenderOverrides(renderOverridesJson), {
+          stillNegativePrompt: value,
+        })
+      );
+      onRenderOverridesChange?.(next);
+    },
+    [renderOverridesJson, onRenderOverridesChange]
+  );
 
   useEffect(() => {
     void loadBatch();
@@ -196,7 +264,7 @@ export function useShotPlaceholderBatch({
 
   useEffect(() => {
     if (showPreview) void loadPromptPreview();
-  }, [showPreview, loadPromptPreview]);
+  }, [showPreview, loadPromptPreview, stillNegativePrompt]);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -416,6 +484,15 @@ export function useShotPlaceholderBatch({
     comfyuiOk === true &&
     stackReady &&
     !isGenerating;
+  const readyHint = descriptionEmpty
+    ? "Add a shot prompt, location, or character cast first."
+    : isGenerating
+      ? "Generation is in progress. Wait for it to finish or remove the current pack."
+      : comfyuiOk === false
+        ? "ComfyUI is not reachable. Check Settings or System Status."
+        : !stackReady
+          ? "Choose a valid image model in the stack below."
+          : null;
   const displayError =
     error ??
     (batchFailed && viewingBatchId === activeBatchId
@@ -449,8 +526,14 @@ export function useShotPlaceholderBatch({
     setSampleCount,
     promptPreview,
     negativePreview,
+    previewLoading,
+    previewError,
+    stillNegativePrompt,
+    onStillNegativePromptChange: onRenderOverridesChange
+      ? handleStillNegativePromptChange
+      : undefined,
     showPreview,
-    setShowPreview,
+    togglePromptPreview,
     comfyuiOk,
     setComfyuiOk,
     stackReady,
@@ -470,6 +553,7 @@ export function useShotPlaceholderBatch({
     canSelectFromPack,
     generateLabel,
     ready,
+    readyHint,
     displayError,
     showOptions,
     canRegenerate,

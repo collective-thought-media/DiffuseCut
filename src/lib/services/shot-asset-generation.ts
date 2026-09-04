@@ -3,10 +3,6 @@ import path from "path";
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb, schema } from "@/lib/db";
-import {
-  BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
-  BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
-} from "@/lib/db/seed-builtin-templates";
 import type {
   AssetGenerationBatch,
   AssetGenerationOption,
@@ -21,15 +17,23 @@ import {
   getShotCharacterCast,
   resolveCharacterStateForCast,
 } from "@/lib/services/character-states";
-import { buildShotPlaceholderDescription, buildShotPlaceholderContext } from "@/lib/services/shot-prompt";
-import { buildShotPlaceholderPrompts } from "@/lib/services/prompt-preprocess";
+import { buildShotPlaceholderDescription, buildShotPlaceholderContext, resolveShotVirtualBackdrop } from "@/lib/services/shot-prompt";
+import {
+  buildShotPlaceholderPrompts,
+  SHOT_DUAL_IPADAPTER_LAYOUT_SUFFIX,
+} from "@/lib/services/prompt-preprocess";
+import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
+import { parseShotRenderOverrides } from "@/lib/shot-render-overrides";
 import {
   buildShotWardrobeLock,
-  shotReferenceFocus,
 } from "@/lib/services/shot-placeholder-options";
 import { parseVisualStyle } from "@/lib/services/visual-style";
-import { ensureProjectRenderCheckpoint } from "@/lib/services/generation-stack";
+import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
 import { isIpAdapterAvailable } from "@/lib/services/comfyui-client";
+import {
+  resolveShotStillReferencePlan,
+  type ShotStillReferenceMode,
+} from "@/lib/services/shot-still-reference-mode";
 import {
   getDefaultComfyuiEndpoints,
   resolveComfyuiEndpoints,
@@ -54,8 +58,6 @@ function randomSeed(): number {
 }
 
 import {
-  resolveShotReferencePath,
-  resolveShotReferencePathForBatch,
   resolveShotReferencePaths,
 } from "@/lib/services/shot-reference";
 
@@ -65,22 +67,45 @@ export async function resolveShotPlaceholderTemplateId(
     referencePath?: string | null;
     characterReferencePath?: string | null;
     locationReferencePath?: string | null;
+    characterName?: string | null;
+    locationStateName?: string | null;
+    locationAngleName?: string | null;
     endpointUrl?: string;
+    stillReferenceMode?: ShotStillReferenceMode;
+    virtualBackdrop?: boolean;
   }
 ): Promise<string> {
-  if (options?.endpointUrl && (await isIpAdapterAvailable(options.endpointUrl))) {
-    if (
-      options.characterReferencePath &&
-      options.locationReferencePath
-    ) {
-      return BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID;
-    }
+  const plan = resolveShotStillReferencePlan(
+    {
+      characterPath: options?.characterReferencePath ?? null,
+      locationPath: options?.locationReferencePath ?? null,
+      characterName: options?.characterName ?? null,
+      locationStateName: options?.locationStateName ?? null,
+      locationAngleName: options?.locationAngleName ?? null,
+    },
+    options?.stillReferenceMode ?? "auto",
+    { virtualBackdrop: options?.virtualBackdrop }
+  );
+
+  if (
+    plan.workflowTemplateId &&
+    options?.endpointUrl &&
+    (await isIpAdapterAvailable(options.endpointUrl))
+  ) {
+    return plan.workflowTemplateId;
+  }
+
+  if (
+    plan.useIpAdapter &&
+    options?.endpointUrl &&
+    !(await isIpAdapterAvailable(options.endpointUrl))
+  ) {
     const primary =
       options.referencePath ??
       options.characterReferencePath ??
       options.locationReferencePath;
     if (primary) {
-      return BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
+      // IP-Adapter unavailable: fall through to txt2img below.
     }
   }
 
@@ -326,11 +351,31 @@ export async function enqueueShotPlaceholderBatch(
   }
 
   const referencePaths = resolveShotReferencePaths(shot);
+  const shotOverrides = parseShotRenderOverrides(shot.renderOverridesJson);
+  const stillReferenceMode = shotOverrides.stillReferenceMode ?? "auto";
+  const virtualBackdrop = resolveShotVirtualBackdrop(shotId);
+  const referencePlan = resolveShotStillReferencePlan(
+    {
+      characterPath: referencePaths.characterPath,
+      locationPath: referencePaths.locationPath,
+      characterName: referencePaths.characterName,
+      locationStateName: referencePaths.locationStateName,
+      locationAngleName: referencePaths.locationAngleName,
+    },
+    stillReferenceMode,
+    { virtualBackdrop }
+  );
+
   const templateId = await resolveShotPlaceholderTemplateId(projectId, {
     referencePath: referencePaths.primaryPath,
     characterReferencePath: referencePaths.characterPath,
     locationReferencePath: referencePaths.locationPath,
+    characterName: referencePaths.characterName,
+    locationStateName: referencePaths.locationStateName,
+    locationAngleName: referencePaths.locationAngleName,
     endpointUrl,
+    stillReferenceMode,
+    virtualBackdrop,
   });
 
   const template = db
@@ -347,7 +392,7 @@ export async function enqueueShotPlaceholderBatch(
     throw new Error("Invalid shot placeholder workflow template");
   }
 
-  await ensureProjectRenderCheckpoint(projectId, endpointUrl);
+  await ensureProjectStillImageSettings(projectId, endpointUrl, { templateId });
 
   const visualStyle = parseVisualStyle(project.visualStyleJson);
   const shotLabel = shot.title.trim() || "Storyboard shot";
@@ -365,17 +410,37 @@ export async function enqueueShotPlaceholderBatch(
     if (!state) return [];
     return [{ character, state }];
   });
-  const referenceFocus = shotReferenceFocus(shot);
-  const wardrobeLock = buildShotWardrobeLock(cast, referenceFocus);
+  const wardrobeLock = referencePlan.characterPath
+    ? buildShotWardrobeLock(cast)
+    : null;
+  const usesDualIpAdapter = referencePlan.useDualIpAdapter;
   const { processedPrompt, negativePrompt } = await buildShotPlaceholderPrompts(
     shotLabel,
     shotPrompt,
     visualStyle,
     {
       context: shotContext || undefined,
-      referenceFocus,
       wardrobeLock,
+      hasLocationReference: referencePlan.hasLocationReferenceForPrompt,
     }
+  );
+  const dualSuffixParts: string[] = [];
+  if (usesDualIpAdapter) {
+    dualSuffixParts.push(SHOT_DUAL_IPADAPTER_LAYOUT_SUFFIX);
+  }
+  let finalProcessedPrompt = processedPrompt;
+  for (const part of dualSuffixParts) {
+    if (!finalProcessedPrompt.includes(part)) {
+      finalProcessedPrompt = `${finalProcessedPrompt}. ${part}`;
+    }
+  }
+  const renderSettingsParsed = JSON.parse(
+    project.renderSettingsJson || "{}"
+  ) as RenderSettings;
+  const finalNegativePrompt = mergeImageNegativePrompt(
+    negativePrompt,
+    renderSettingsParsed.imageDefaultNegative,
+    shotOverrides.stillNegativePrompt
   );
 
   const ts = Date.now();
@@ -390,8 +455,9 @@ export async function enqueueShotPlaceholderBatch(
     status: "queued",
     sampleCount: count,
     rawPrompt: placeholderDescription,
-    processedPrompt,
-    negativePrompt,
+    processedPrompt: finalProcessedPrompt,
+    negativePrompt: finalNegativePrompt,
+    generationOptionsJson: JSON.stringify(referencePlan.generationOptions),
     createdAt: ts,
   };
 

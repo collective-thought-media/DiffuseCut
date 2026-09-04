@@ -23,14 +23,15 @@ import {
 } from "@/lib/services/character-states";
 import { buildCharacterSheetPrompts } from "@/lib/services/prompt-preprocess";
 import { parseVisualStyle } from "@/lib/services/visual-style";
-import { ensureProjectRenderCheckpoint } from "@/lib/services/generation-stack";
+import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
+import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
+import type { RenderSettings } from "@/types";
 import {
   getDefaultCharacterSheetTemplateId,
   getDefaultComfyuiEndpoints,
   resolveComfyuiEndpoints,
 } from "@/lib/services/settings";
 import { listEndpoints } from "@/lib/services/comfyui-client";
-import type { RenderSettings } from "@/types";
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2_147_483_647);
@@ -136,7 +137,7 @@ export async function enqueueCharacterSheetBatch(
     throw new Error("No reachable ComfyUI endpoint configured");
   }
 
-  await ensureProjectRenderCheckpoint(projectId, endpointUrl);
+  await ensureProjectStillImageSettings(projectId, endpointUrl, { templateId });
 
   const visualStyle = parseVisualStyle(project.visualStyleJson);
 
@@ -144,6 +145,13 @@ export async function enqueueCharacterSheetBatch(
     character.name,
     sheetDescription,
     visualStyle
+  );
+  const renderSettings = JSON.parse(
+    project.renderSettingsJson || "{}"
+  ) as RenderSettings;
+  const finalNegativePrompt = mergeImageNegativePrompt(
+    negativePrompt,
+    renderSettings.imageDefaultNegative
   );
 
   const ts = Date.now();
@@ -159,7 +167,7 @@ export async function enqueueCharacterSheetBatch(
     sampleCount: count,
     rawPrompt: sheetDescription,
     processedPrompt,
-    negativePrompt,
+    negativePrompt: finalNegativePrompt,
     createdAt: ts,
   };
 

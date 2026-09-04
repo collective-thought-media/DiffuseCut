@@ -99,6 +99,14 @@ export interface RenderSettings {
   /** Aspect ratio for character sheet and location reference generation. */
   referenceAspectRatio?: ReferenceAspectRatioPreset;
   checkpoint?: string;
+  /** Still-image engine: SDXL checkpoint workflows vs local Krea 2 UNET stack. */
+  imageEngine?: "sdxl" | "krea2";
+  /** Krea 2 / FLUX-style still diffusion model (models/diffusion_models). */
+  imageUnet?: string;
+  /** Still-image VAE (e.g. qwen_image_vae for Krea 2). */
+  imageVae?: string;
+  /** Still-image text encoder (e.g. qwen3vl for Krea 2). */
+  imageTextEncoder?: string;
   /** LTX / video workflow checkpoint (separate from SDXL character sheet checkpoint). */
   videoCheckpoint?: string;
   loras?: { bindingId: string; name: string; strength: number }[];
@@ -127,12 +135,16 @@ export interface RenderSettings {
   videoWidth?: number;
   videoHeight?: number;
   videoDefaultNegative?: string;
+  /** Optional extra negatives merged into all still-image generations (storyboard, sheets). */
+  imageDefaultNegative?: string;
   /** ComfyUI GPU device for model/VAE loaders (e.g. default, gpu:0). Optional. */
   comfyGpuDevice?: string;
 }
 
 export type { VisualStyle, VisualStylePreset } from "@/lib/services/visual-style";
 export type { ReferenceAspectRatioPreset } from "@/lib/services/reference-aspect-ratio";
+
+import type { ShotStillReferenceMode } from "@/lib/services/shot-still-reference-mode";
 
 export interface LocationReferenceGenerationOptions {
   /** When false, generate txt2img from prompt only (ignore saved anchor). */
@@ -141,6 +153,12 @@ export interface LocationReferenceGenerationOptions {
   ipAdapterWeight?: number;
   /** Override IP-Adapter end_at (0.2 to 0.85). */
   ipAdapterEndAt?: number;
+  /** Shot batch: virtual seamless backdrop (dual IP-Adapter backdrop chain). */
+  virtualBackdrop?: boolean;
+  /** Shot batch: user-selected reference routing (stored on enqueue). */
+  stillReferenceMode?: ShotStillReferenceMode;
+  /** Shot batch: which single reference image IP-Adapter uses. */
+  referenceFocus?: "character" | "location";
 }
 
 export interface GenerationStack {
@@ -152,6 +170,14 @@ export interface GenerationStack {
   effectiveCheckpoint: string | null;
   needsCheckpointSelection: boolean;
   availableCheckpoints: string[];
+  /** SDXL still-image checkpoints (excludes LTX, ACE-Step, etc.). */
+  availableImageCheckpoints: string[];
+  /** Active still-image engine from project render settings. */
+  imageEngine: "sdxl" | "krea2";
+  /** Krea 2 turbo UNET available on ComfyUI (diffusion_models). */
+  krea2Available: boolean;
+  /** Hydrated Krea 2 UNET filename when imageEngine is krea2. */
+  effectiveImageUnet: string | null;
   loras: { name: string; strength: number }[];
   sampler: {
     steps?: number;

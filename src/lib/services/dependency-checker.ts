@@ -23,10 +23,13 @@ import { getAceStepComputeStatus } from "@/lib/services/ace-step-compute";
 import {
   CLIP_VISION_MODEL_HINT,
   IP_ADAPTER_MODEL_HINT,
+  IP_ADAPTER_MODEL_LEGACY_HINT,
   IP_ADAPTER_NODE_CLASSES,
   LTX_I2V_NODE_CLASSES,
   MINIMAX_I2V_NODE_CLASSES,
   hasModelMatching,
+  hasSdxlPlusIpAdapterModel,
+  hasSdxlPlusIpAdapterPresetFilename,
   missingNodeClasses,
   type ComfyModelFolders,
 } from "@/lib/services/comfyui-workflow-requirements";
@@ -258,9 +261,10 @@ function checkComfyuiIpAdapter(
   lastCheckedAt: number
 ): DependencyStatus {
   const missingNodes = missingNodeClasses(objectInfo, IP_ADAPTER_NODE_CLASSES);
-  const hasIpModel =
-    models.ipadapter.length > 0 ||
-    hasModelMatching(models.ipadapter, "ip-adapter");
+  const hasIpModel = hasSdxlPlusIpAdapterModel(models.ipadapter);
+  const hasPlusPresetName = hasSdxlPlusIpAdapterPresetFilename(
+    models.ipadapter
+  );
   const hasClipVision =
     models.clipVision.length > 0 ||
     hasModelMatching(models.clipVision, "clip-vit-h");
@@ -272,6 +276,10 @@ function checkComfyuiIpAdapter(
   }
   if (!hasIpModel) {
     issues.push(`IP-Adapter weights not found (${IP_ADAPTER_MODEL_HINT})`);
+  } else if (!hasPlusPresetName) {
+    issues.push(
+      `IP-Adapter PLUS preset needs plus.sdxl.vit.h.safetensors. Copy or rename ${IP_ADAPTER_MODEL_LEGACY_HINT} on the ComfyUI host, then restart ComfyUI.`
+    );
   }
   if (!hasClipVision) {
     issues.push(`CLIP vision weights not found (${CLIP_VISION_MODEL_HINT})`);

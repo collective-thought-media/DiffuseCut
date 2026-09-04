@@ -187,14 +187,21 @@ describe("buildPortraitPayload reference sizing", () => {
           inputs: { image: "placeholder.png" },
         },
         "12": {
-          class_type: "IPAdapterUnifiedLoader",
-          inputs: { model: ["4", 0], preset: "PLUS (high strength)" },
+          class_type: "IPAdapterModelLoader",
+          inputs: { ipadapter_file: "plus.sdxl.vit.h.safetensors" },
+        },
+        "15": {
+          class_type: "CLIPVisionLoader",
+          inputs: {
+            clip_name: "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+          },
         },
         "13": {
           class_type: "IPAdapterAdvanced",
           inputs: {
-            model: ["12", 0],
-            ipadapter: ["12", 1],
+            model: ["4", 0],
+            ipadapter: ["12", 0],
+            clip_vision: ["15", 0],
             image: ["10", 0],
             weight: 0.5,
             end_at: 0.9,
@@ -220,7 +227,9 @@ describe("buildPortraitPayload reference sizing", () => {
     expect(workflow["13"].inputs.weight).toBe(0.32);
     expect(workflow["13"].inputs.end_at).toBe(0.45);
     expect(workflow["13"].inputs.weight_type).toBe("style transfer");
-    expect(workflow["12"].inputs.preset).toBe("PLUS (high strength)");
+    expect(workflow["12"].inputs.ipadapter_file).toBe(
+      "plus.sdxl.vit.h.safetensors"
+    );
     expect(workflow["5"].inputs.width).toBe(1344);
     expect(workflow["5"].inputs.height).toBe(768);
   });
@@ -234,8 +243,8 @@ describe("buildPortraitPayload reference sizing", () => {
         referenceImageInputKey: "image",
         secondaryReferenceImageNodeId: "11",
         secondaryReferenceImageInputKey: "image",
-        characterIpAdapterNodeId: "13",
-        locationIpAdapterNodeId: "14",
+        characterIpAdapterNodeId: "14",
+        locationIpAdapterNodeId: "13",
         referenceImageUsage: "ipadapter",
       }),
       workflowJson: JSON.stringify({
@@ -249,29 +258,37 @@ describe("buildPortraitPayload reference sizing", () => {
           inputs: { image: "location.png" },
         },
         "12": {
-          class_type: "IPAdapterUnifiedLoader",
-          inputs: { model: ["4", 0], preset: "PLUS (high strength)" },
+          class_type: "IPAdapterModelLoader",
+          inputs: { ipadapter_file: "plus.sdxl.vit.h.safetensors" },
+        },
+        "15": {
+          class_type: "CLIPVisionLoader",
+          inputs: {
+            clip_name: "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+          },
         },
         "13": {
           class_type: "IPAdapterAdvanced",
           inputs: {
-            model: ["12", 0],
-            ipadapter: ["12", 1],
-            image: ["10", 0],
-            weight: 0.58,
-            end_at: 0.78,
-            weight_type: "linear",
+            model: ["4", 0],
+            ipadapter: ["12", 0],
+            clip_vision: ["15", 0],
+            image: ["11", 0],
+            weight: 0.28,
+            end_at: 0.38,
+            weight_type: "style transfer",
           },
         },
         "14": {
           class_type: "IPAdapterAdvanced",
           inputs: {
             model: ["13", 0],
-            ipadapter: ["12", 1],
-            image: ["11", 0],
-            weight: 0.38,
-            end_at: 0.52,
-            weight_type: "style transfer",
+            ipadapter: ["12", 0],
+            clip_vision: ["15", 0],
+            image: ["10", 0],
+            weight: 0.62,
+            end_at: 0.82,
+            weight_type: "linear",
           },
         },
       }),
@@ -289,19 +306,98 @@ describe("buildPortraitPayload reference sizing", () => {
         secondaryReferenceImage: "uploaded-location.png",
       },
       {
-        dualIpAdapterReframe: {
-          character: "moderate",
-          location: "subtle",
-        },
+        useDualIpAdapterProfiles: true,
       }
     );
 
     expect(workflow["10"].inputs.image).toBe("uploaded-character.png");
     expect(workflow["11"].inputs.image).toBe("uploaded-location.png");
-    expect(workflow["13"].inputs.weight).toBe(0.38);
-    expect(workflow["13"].inputs.end_at).toBe(0.5);
-    expect(workflow["14"].inputs.weight).toBe(0.45);
-    expect(workflow["14"].inputs.end_at).toBe(0.62);
+    expect(workflow["13"].inputs.weight).toBe(0.28);
+    expect(workflow["13"].inputs.end_at).toBe(0.38);
+    expect(workflow["14"].inputs.weight).toBe(0.62);
+    expect(workflow["14"].inputs.end_at).toBe(0.82);
+  });
+
+  it("swaps dual IP-Adapter chain for virtual backdrop shots", () => {
+    const dualTemplate: WorkflowTemplate = {
+      ...staleTemplate,
+      bindingsJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.bindingsJson),
+        referenceImageNodeId: "10",
+        referenceImageInputKey: "image",
+        secondaryReferenceImageNodeId: "11",
+        secondaryReferenceImageInputKey: "image",
+        characterIpAdapterNodeId: "14",
+        locationIpAdapterNodeId: "13",
+        referenceImageUsage: "ipadapter",
+      }),
+      workflowJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.workflowJson),
+        "10": {
+          class_type: "LoadImage",
+          inputs: { image: "character.png" },
+        },
+        "11": {
+          class_type: "LoadImage",
+          inputs: { image: "location.png" },
+        },
+        "12": {
+          class_type: "IPAdapterModelLoader",
+          inputs: { ipadapter_file: "plus.sdxl.vit.h.safetensors" },
+        },
+        "15": {
+          class_type: "CLIPVisionLoader",
+          inputs: {
+            clip_name: "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+          },
+        },
+        "13": {
+          class_type: "IPAdapterAdvanced",
+          inputs: {
+            model: ["4", 0],
+            ipadapter: ["12", 0],
+            clip_vision: ["15", 0],
+            image: ["11", 0],
+            weight: 0.28,
+            end_at: 0.38,
+            weight_type: "style transfer",
+          },
+        },
+        "14": {
+          class_type: "IPAdapterAdvanced",
+          inputs: {
+            model: ["13", 0],
+            ipadapter: ["12", 0],
+            clip_vision: ["15", 0],
+            image: ["10", 0],
+            weight: 0.62,
+            end_at: 0.82,
+            weight_type: "linear",
+          },
+        },
+      }),
+    };
+
+    const { workflow } = buildPortraitPayload(
+      dualTemplate,
+      JSON.parse(dualTemplate.bindingsJson),
+      { referenceAspectRatio: "16_9" },
+      {
+        prompt: "Lisa on gray seamless",
+        negativePrompt: "bad",
+        seed: 42,
+        referenceImage: "uploaded-character.png",
+        secondaryReferenceImage: "uploaded-location.png",
+      },
+      {
+        useDualIpAdapterBackdropProfiles: true,
+      }
+    );
+
+    expect(workflow["13"].inputs.image).toEqual(["10", 0]);
+    expect(workflow["14"].inputs.image).toEqual(["11", 0]);
+    expect(workflow["13"].inputs.weight).toBe(0.48);
+    expect(workflow["14"].inputs.weight).toBe(0.55);
   });
 });
 

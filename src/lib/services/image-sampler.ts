@@ -16,24 +16,39 @@ export const DEFAULT_VIDEO_SAMPLER: SamplerSettings = {
   scheduler: "normal",
 };
 
+export const DEFAULT_KREA2_IMAGE_SAMPLER: SamplerSettings = {
+  steps: 8,
+  cfg: 1,
+  sampler_name: "euler",
+  scheduler: "simple",
+};
+
 /** SDXL stills (storyboard frames, character/location sheets). */
 export function resolveImageSampler(
   settings: RenderSettings
 ): SamplerSettings {
+  const kreaDefaults =
+    settings.imageEngine === "krea2" ? DEFAULT_KREA2_IMAGE_SAMPLER : DEFAULT_IMAGE_SAMPLER;
+
   if (settings.imageSampler) {
-    return { ...DEFAULT_IMAGE_SAMPLER, ...settings.imageSampler };
+    return { ...kreaDefaults, ...settings.imageSampler };
   }
 
   if (settings.sampler) {
-    const cfg = settings.sampler.cfg ?? DEFAULT_IMAGE_SAMPLER.cfg!;
+    const cfg = settings.sampler.cfg ?? kreaDefaults.cfg!;
     return {
-      ...DEFAULT_IMAGE_SAMPLER,
+      ...kreaDefaults,
       ...settings.sampler,
-      cfg: cfg <= 2 ? DEFAULT_IMAGE_SAMPLER.cfg! : cfg,
+      cfg:
+        settings.imageEngine === "krea2"
+          ? (settings.sampler.cfg ?? kreaDefaults.cfg!)
+          : cfg <= 2
+            ? DEFAULT_IMAGE_SAMPLER.cfg!
+            : cfg,
     };
   }
 
-  return { ...DEFAULT_IMAGE_SAMPLER };
+  return { ...kreaDefaults };
 }
 
 /** LTX and other video workflow samplers. */
@@ -50,9 +65,13 @@ export function normalizeRenderSettings(
   const normalized = { ...settings };
   const videoSampler = resolveVideoSampler(normalized);
   const imageSampler = resolveImageSampler(normalized);
+  const imageDefaults =
+    normalized.imageEngine === "krea2"
+      ? DEFAULT_KREA2_IMAGE_SAMPLER
+      : DEFAULT_IMAGE_SAMPLER;
 
   normalized.imageSampler = {
-    ...DEFAULT_IMAGE_SAMPLER,
+    ...imageDefaults,
     ...normalized.imageSampler,
     ...imageSampler,
   };

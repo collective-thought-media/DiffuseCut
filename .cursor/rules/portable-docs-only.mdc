@@ -1,0 +1,26 @@
+---
+description: Shipped docs and UI must not reference the operator's private setup
+alwaysApply: true
+---
+
+# Portable documentation only
+
+DiffuseCut is open source. Anything another developer would read or see in the app must stand alone without knowledge of Chris's machine, LAN, or other personal projects.
+
+## Never put in README, template docs, seed descriptions, UI copy, placeholders, or user-facing errors
+
+- Personal project names (e.g. other repos, film titles used as dev fixtures)
+- Private folder paths (`G:\...`, `M:\...`, `~/Documents/...` unless that path is created by DiffuseCut itself for all users)
+- LAN IPs, hostnames, or SSH targets (`192.168.x.x`, named workhorse boxes)
+- "Same as my … setup", "like we did on …", or any cross-project workflow nickname from agent context
+
+## OK to reference
+
+- Public dependencies: ComfyUI, FFmpeg, npm packages, Hugging Face model filenames
+- Standard ComfyUI layout: `models/checkpoints`, `models/diffusion_models`, custom node names
+- Generic examples: `http://127.0.0.1:8188`, `http://localhost:8188`, `your-comfy-host:8188`
+
+## Agent workflow
+
+- User may point you at private repos or paths **only to learn implementation**. Use that context in code; do not copy those names into shipped text.
+- Before finishing doc or UI work, search changed files for private IPs, drive letters, and known personal project names.

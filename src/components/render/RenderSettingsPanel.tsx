@@ -2,6 +2,8 @@
 
 import type { RenderSettings } from "@/types";
 import { Card, Input, Label, Select, Textarea } from "@/components/ui/button";
+import { ImageModelPicker } from "@/components/render/ImageModelPicker";
+import { IMAGE_ENGINE_KREA2 } from "@/lib/services/image-checkpoints";
 import {
   DEFAULT_IMAGE_SAMPLER,
   DEFAULT_VIDEO_SAMPLER,
@@ -13,6 +15,9 @@ interface RenderSettingsPanelProps {
   showVideoSettings?: boolean;
   videoEngine?: "ltx" | "minimax" | "generic";
   variant?: "default" | "sidebar";
+  projectId?: string;
+  availableImageCheckpoints?: string[];
+  krea2Available?: boolean;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -29,6 +34,9 @@ export function RenderSettingsPanel({
   showVideoSettings = false,
   videoEngine = "generic",
   variant = "default",
+  projectId,
+  availableImageCheckpoints,
+  krea2Available = false,
 }: RenderSettingsPanelProps) {
   const imageSampler = {
     ...DEFAULT_IMAGE_SAMPLER,
@@ -46,24 +54,112 @@ export function RenderSettingsPanel({
         <SectionLabel>Image generation</SectionLabel>
         {!compact && (
           <p className="text-xs text-muted-foreground">
-            Storyboard frame options, character sheets, and location references
-            (SDXL / RealVisXL).
+            Storyboard stills, character sheets, and location references.
           </p>
         )}
 
-        <div className="space-y-1.5">
-          <Label htmlFor="checkpoint" className={compact ? "text-xs" : undefined}>
-            Image checkpoint (SDXL)
-          </Label>
-          <Input
-            id="checkpoint"
-            value={settings.checkpoint ?? ""}
-            onChange={(e) =>
-              onChange({ ...settings, checkpoint: e.target.value || undefined })
+        {projectId &&
+        availableImageCheckpoints &&
+        (availableImageCheckpoints.length > 0 || krea2Available) ? (
+          <ImageModelPicker
+            projectId={projectId}
+            checkpoints={availableImageCheckpoints}
+            imageEngine={settings.imageEngine ?? "sdxl"}
+            krea2Available={krea2Available}
+            value={
+              settings.imageEngine === "krea2"
+                ? settings.imageUnet ?? ""
+                : settings.checkpoint &&
+                    availableImageCheckpoints.includes(settings.checkpoint)
+                  ? settings.checkpoint
+                  : availableImageCheckpoints[0]
             }
-            placeholder="RealVisXL_V5.0_fp16.safetensors"
+            onValueChange={(checkpoint) =>
+              onChange({
+                ...settings,
+                checkpoint:
+                  checkpoint === IMAGE_ENGINE_KREA2
+                    ? settings.checkpoint
+                    : checkpoint,
+              })
+            }
+            onEngineChange={(engine) =>
+              onChange({ ...settings, imageEngine: engine })
+            }
+            onSaved={(_checkpoint, engine) =>
+              onChange({ ...settings, imageEngine: engine })
+            }
+            autoSave
+            id="checkpoint"
           />
-        </div>
+        ) : (
+          <div className="space-y-1.5">
+            <Label htmlFor="checkpoint" className={compact ? "text-xs" : undefined}>
+              Image model (SDXL checkpoint)
+            </Label>
+            <Input
+              id="checkpoint"
+              value={settings.checkpoint ?? ""}
+              onChange={(e) =>
+                onChange({ ...settings, checkpoint: e.target.value || undefined })
+              }
+              placeholder="realismFusion_v10.safetensors"
+            />
+            {!compact && (
+              <p className="text-xs text-muted-foreground">
+                Exact filename from ComfyUI models/checkpoints. Use the picker on
+                the storyboard or character sheet when ComfyUI is online.
+              </p>
+            )}
+          </div>
+        )}
+
+        {settings.imageEngine === "krea2" && (
+          <div className="grid gap-2 sm:grid-cols-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="image-unet">Krea UNET</Label>
+              <Input
+                id="image-unet"
+                value={settings.imageUnet ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...settings,
+                    imageUnet: e.target.value || undefined,
+                  })
+                }
+                placeholder="krea2_turbo_fp8_scaled.safetensors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="image-text-encoder">Krea text encoder</Label>
+              <Input
+                id="image-text-encoder"
+                value={settings.imageTextEncoder ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...settings,
+                    imageTextEncoder: e.target.value || undefined,
+                  })
+                }
+                placeholder="qwen3vl_4b_fp8_scaled.safetensors"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="image-vae">Krea VAE</Label>
+              <Input
+                id="image-vae"
+                value={settings.imageVae ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...settings,
+                    imageVae: e.target.value || undefined,
+                  })
+                }
+                placeholder="qwen_image_vae.safetensors"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-2">
           <div className="space-y-1.5">
@@ -103,6 +199,28 @@ export function RenderSettingsPanel({
               }
             />
           </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label
+            htmlFor="image-default-negative"
+            className={compact ? "text-xs" : undefined}
+          >
+            Default extra negative prompt (still images)
+          </Label>
+          <Textarea
+            id="image-default-negative"
+            value={settings.imageDefaultNegative ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...settings,
+                imageDefaultNegative: e.target.value || undefined,
+              })
+            }
+            placeholder="Optional. Merged into storyboard stills, character sheets, and location references for this project."
+            rows={compact ? 2 : 3}
+            className="text-sm"
+          />
         </div>
       </div>
 

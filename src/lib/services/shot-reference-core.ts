@@ -142,17 +142,12 @@ export function resolveShotCastReferenceSplit(
 }
 
 export function resolveShotReferencePathsFromData(input: {
-  shot: Pick<
-    Shot,
-    "visualReferenceFocus" | "locationStateId" | "locationAngleId"
-  >;
+  shot: Pick<Shot, "locationStateId" | "locationAngleId">;
   locationStates?: LocationStatePreview[];
   legacyLocationPath?: string | null;
   legacyLocationKind?: string | null;
   cast?: Array<{ character: Character; state: CharacterState }>;
 }): ShotReferencePaths {
-  const focus = (input.shot.visualReferenceFocus ??
-    "location") as ShotVisualReferenceFocus;
   const location = resolveShotLocationReferenceFromStates(
     input.shot,
     input.locationStates ?? [],
@@ -161,23 +156,22 @@ export function resolveShotReferencePathsFromData(input: {
   );
   const character = resolveShotCharacterReferenceFromCast(input.cast ?? []);
 
-  let primaryPath: string | null = null;
-  let primaryLabel: string | null = null;
+  const hasCharacter = Boolean(character.path);
+  const hasLocation = Boolean(location.path);
+  const focus: ShotVisualReferenceFocus = hasCharacter && !hasLocation
+    ? "character"
+    : "location";
 
-  if (focus === "location") {
-    primaryPath = location.path ?? character.path;
-    primaryLabel = location.path
-      ? [location.stateName, location.angleName].filter(Boolean).join(", ")
-      : character.path
-        ? character.name
-        : null;
-  } else {
-    primaryPath = character.path ?? location.path;
-    primaryLabel = character.path
-      ? character.name
-      : location.path
-        ? [location.stateName, location.angleName].filter(Boolean).join(", ")
-        : null;
+  const primaryPath = location.path ?? character.path;
+  let primaryLabel: string | null = null;
+  if (hasCharacter && hasLocation) {
+    primaryLabel = `${character.name ?? "Character"} + ${[location.stateName, location.angleName].filter(Boolean).join(", ") || "location"}`;
+  } else if (hasLocation) {
+    primaryLabel = [location.stateName, location.angleName]
+      .filter(Boolean)
+      .join(", ");
+  } else if (hasCharacter) {
+    primaryLabel = character.name;
   }
 
   return {

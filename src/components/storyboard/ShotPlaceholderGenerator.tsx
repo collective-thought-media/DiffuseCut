@@ -62,14 +62,68 @@ function statusVariant(
   return "default";
 }
 
+export function ShotReferenceInfoPanel({
+  usesReferenceMedia = false,
+  usesDualIpAdapter = false,
+  usesCharacterReference = false,
+  referenceMediaLabel,
+  referenceMediaDetail,
+}: {
+  usesReferenceMedia?: boolean;
+  usesDualIpAdapter?: boolean;
+  usesCharacterReference?: boolean;
+  referenceMediaLabel?: string | null;
+  referenceMediaDetail?: string | null;
+}) {
+  const { ipAdapterAvailable } = useShotPlaceholderContext();
+
+  if (!usesReferenceMedia) return null;
+
+  return (
+    <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 text-sm text-muted-foreground">
+      {ipAdapterAvailable !== false ? (
+        <>
+          {usesDualIpAdapter ? (
+            <>
+              Dual IP-Adapter sends separate character and location reference
+              images. Your shot prompt sets composition and action.
+            </>
+          ) : (
+            <>
+              IP-Adapter uses{" "}
+              {referenceMediaLabel
+                ? `"${referenceMediaLabel}"`
+                : "the selected visual reference"}{" "}
+              as the image input. Your shot prompt sets composition and action.
+            </>
+          )}
+          {usesCharacterReference ? (
+            <span className="mt-2 block text-xs text-sky-200/90">
+              Character reference locks face and wardrobe. Add outfit and
+              appearance details on the character state&apos;s look description
+              for a closer match.
+            </span>
+          ) : null}
+          {referenceMediaDetail ? (
+            <span className="mt-2 block text-xs">{referenceMediaDetail}</span>
+          ) : null}
+        </>
+      ) : (
+        <>
+          Reference media is available but IP-Adapter is not installed on your
+          ComfyUI server. Generation uses your prompt and cast descriptions only.
+          Install ComfyUI_IPAdapter_plus for reference-guided frames.
+        </>
+      )}
+    </div>
+  );
+}
+
 interface ShotPlaceholderControlsProps {
   projectId: string;
   visualStyleJson?: string | null;
   usesReferenceMedia?: boolean;
   usesDualIpAdapter?: boolean;
-  referenceMediaLabel?: string | null;
-  referenceMediaDetail?: string | null;
-  referenceFocus?: "character" | "location";
 }
 
 export function ShotPlaceholderControls({
@@ -77,9 +131,6 @@ export function ShotPlaceholderControls({
   visualStyleJson,
   usesReferenceMedia = false,
   usesDualIpAdapter = false,
-  referenceMediaLabel,
-  referenceMediaDetail,
-  referenceFocus = "location",
 }: ShotPlaceholderControlsProps) {
   const {
     batch,
@@ -87,8 +138,12 @@ export function ShotPlaceholderControls({
     setSampleCount,
     promptPreview,
     negativePreview,
+    previewLoading,
+    previewError,
+    stillNegativePrompt,
+    onStillNegativePromptChange,
     showPreview,
-    setShowPreview,
+    togglePromptPreview,
     comfyuiOk,
     setComfyuiOk,
     stackReady,
@@ -104,6 +159,7 @@ export function ShotPlaceholderControls({
     awaitingSelection,
     generateLabel,
     ready,
+    readyHint,
     displayError,
     canRegenerate,
     handleGenerate,
@@ -171,48 +227,6 @@ export function ShotPlaceholderControls({
             .
           </p>
 
-          {usesReferenceMedia && (
-            <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm text-muted-foreground">
-              {ipAdapterAvailable ? (
-                <>
-                  {usesDualIpAdapter ? (
-                    <>
-                      Dual IP-Adapter sends separate character and location
-                      reference images. Your shot prompt sets composition and
-                      action.
-                    </>
-                  ) : (
-                    <>
-                      IP-Adapter uses{" "}
-                      {referenceMediaLabel
-                        ? `"${referenceMediaLabel}"`
-                        : "the selected visual reference"}{" "}
-                      as the image input. Your shot prompt sets composition and
-                      action.
-                    </>
-                  )}
-                  {referenceFocus === "character" ? (
-                    <span className="mt-2 block text-xs text-sky-200/90">
-                      Character focus locks face and wardrobe to the reference.
-                      Add outfit and appearance details on the character
-                      state&apos;s look description for a closer match.
-                    </span>
-                  ) : null}
-                  {referenceMediaDetail ? (
-                    <span className="mt-2 block text-xs">{referenceMediaDetail}</span>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  Reference media is available but IP-Adapter is not installed
-                  on your ComfyUI server. Generation uses your prompt and cast
-                  descriptions only. Install ComfyUI_IPAdapter_plus for
-                  reference-guided frames.
-                </>
-              )}
-            </div>
-          )}
-
           {comfyuiOk === false && (
             <div className="rounded-lg bg-black p-3 text-sm text-amber-200/90">
               ComfyUI is not reachable. Configure endpoints in{" "}
@@ -260,12 +274,18 @@ export function ShotPlaceholderControls({
                     onSampleCountChange={setSampleCount}
                     generateLabel={generateLabel}
                     ready={ready}
+                    readyHint={readyHint}
                     disabled={descriptionEmpty || isGenerating}
                     showPreview={showPreview}
-                    onTogglePreview={() => setShowPreview((value) => !value)}
+                    onTogglePreview={togglePromptPreview}
                     promptPreview={promptPreview}
                     negativePreview={negativePreview}
+                    previewLoading={previewLoading}
+                    previewError={previewError}
+                    stillNegativePrompt={stillNegativePrompt}
+                    onStillNegativePromptChange={onStillNegativePromptChange}
                     onGenerate={() => void handleGenerate(canRegenerate)}
+                    previewDisabled={descriptionEmpty}
                   />
                   {settingsSummary}
                 </div>

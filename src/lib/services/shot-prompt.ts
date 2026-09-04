@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { detectVirtualBackdropLocation } from "@/lib/location-backdrop";
 import { buildAngleReferenceDescription } from "@/lib/location-preview";
 import { listLocationStates } from "@/lib/services/location-states";
 import {
@@ -8,7 +9,6 @@ import {
   resolveCharacterStateForCast,
 } from "@/lib/services/character-states";
 import { buildShotPlaceholderDescriptionFromData, buildShotPlaceholderContextFromData } from "@/lib/services/shot-placeholder-description";
-
 export {
   buildShotPlaceholderDescriptionFromData,
   buildShotPlaceholderContextFromData,
@@ -41,18 +41,11 @@ export function buildShotPlaceholderDescription(shotId: string): string {
         state.angles.find((item) => item.id === shot.locationAngleId) ??
         state.angles[0];
       if (angle) {
-        const focus = shot.visualReferenceFocus ?? "location";
-        if (focus === "character") {
-          locationDetail = [location?.description, state.lookDescription]
-            .filter(Boolean)
-            .join(". ");
-        } else {
-          locationDetail = buildAngleReferenceDescription(
-            location?.description ?? "",
-            state,
-            angle
-          );
-        }
+        locationDetail = buildAngleReferenceDescription(
+          location?.description ?? "",
+          state,
+          angle
+        );
       } else {
         locationDetail = [location?.description, state.lookDescription]
           .filter(Boolean)
@@ -81,7 +74,6 @@ export function buildShotPlaceholderDescription(shotId: string): string {
     location,
     locationDetail,
     cast,
-    referenceFocus: shot.visualReferenceFocus === "character" ? "character" : "location",
   });
 
   if (fromData.trim()) return fromData;
@@ -117,18 +109,11 @@ export function buildShotPlaceholderContext(shotId: string): string {
         state.angles.find((item) => item.id === shot.locationAngleId) ??
         state.angles[0];
       if (angle) {
-        const focus = shot.visualReferenceFocus ?? "location";
-        if (focus === "character") {
-          locationDetail = [location?.description, state.lookDescription]
-            .filter(Boolean)
-            .join(". ");
-        } else {
-          locationDetail = buildAngleReferenceDescription(
-            location?.description ?? "",
-            state,
-            angle
-          );
-        }
+        locationDetail = buildAngleReferenceDescription(
+          location?.description ?? "",
+          state,
+          angle
+        );
       } else {
         locationDetail = [location?.description, state.lookDescription]
           .filter(Boolean)
@@ -157,6 +142,54 @@ export function buildShotPlaceholderContext(shotId: string): string {
     location,
     locationDetail,
     cast,
-    referenceFocus: shot.visualReferenceFocus === "character" ? "character" : "location",
   });
+}
+
+export function resolveShotVirtualBackdrop(shotId: string): boolean {
+  const db = getDb();
+  const shot = db
+    .select()
+    .from(schema.shots)
+    .where(eq(schema.shots.id, shotId))
+    .get();
+  if (!shot) return false;
+
+  const parts: string[] = [shot.title, shot.prompt];
+  if (!shot.locationId) {
+    return detectVirtualBackdropLocation(...parts);
+  }
+
+  const location =
+    db
+      .select()
+      .from(schema.locations)
+      .where(eq(schema.locations.id, shot.locationId))
+      .get() ?? null;
+  if (location) {
+    parts.push(location.name, location.description);
+  }
+
+  const states = listLocationStates(shot.locationId);
+  const state =
+    states.find((item) => item.id === shot.locationStateId) ?? states[0];
+  if (state) {
+    parts.push(state.name, state.lookDescription);
+    const angle =
+      state.angles.find((item) => item.id === shot.locationAngleId) ??
+      state.angles[0];
+    if (angle) {
+      parts.push(angle.name, angle.viewDescription);
+      if (location) {
+        parts.push(
+          buildAngleReferenceDescription(
+            location.description ?? "",
+            state,
+            angle
+          )
+        );
+      }
+    }
+  }
+
+  return detectVirtualBackdropLocation(...parts);
 }

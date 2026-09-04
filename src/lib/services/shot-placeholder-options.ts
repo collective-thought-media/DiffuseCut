@@ -8,9 +8,8 @@ export function shotReferenceFocus(
 }
 
 export function buildShotWardrobeLock(
-  cast: Array<{ character: Character; state: CharacterState }>,
-  referenceFocus: "character" | "location"
+  cast: Array<{ character: Character; state: CharacterState }>
 ): string | null {
-  if (referenceFocus !== "character" || cast.length === 0) return null;
+  if (cast.length === 0) return null;
   return buildWardrobeLockDirective(cast);
 }

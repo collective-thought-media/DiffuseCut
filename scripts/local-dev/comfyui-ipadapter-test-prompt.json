@@ -1,0 +1,72 @@
+{
+  "prompt": {
+    "4": {
+      "class_type": "CheckpointLoaderSimple",
+      "inputs": { "ckpt_name": "realismFusion_v10.safetensors" }
+    },
+    "5": {
+      "class_type": "EmptyLatentImage",
+      "inputs": { "width": 512, "height": 512, "batch_size": 1 }
+    },
+    "6": {
+      "class_type": "CLIPTextEncode",
+      "inputs": { "text": "test", "clip": ["4", 1] }
+    },
+    "7": {
+      "class_type": "CLIPTextEncode",
+      "inputs": { "text": "bad", "clip": ["4", 1] }
+    },
+    "12": {
+      "class_type": "IPAdapterModelLoader",
+      "inputs": { "ipadapter_file": "plus.sdxl.vit.h.safetensors" }
+    },
+    "15": {
+      "class_type": "CLIPVisionLoader",
+      "inputs": {
+        "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+      }
+    },
+    "10": {
+      "class_type": "LoadImage",
+      "inputs": { "image": "example.png" }
+    },
+    "13": {
+      "class_type": "IPAdapterAdvanced",
+      "inputs": {
+        "model": ["4", 0],
+        "ipadapter": ["12", 0],
+        "clip_vision": ["15", 0],
+        "image": ["10", 0],
+        "weight": 0.5,
+        "weight_type": "linear",
+        "combine_embeds": "concat",
+        "start_at": 0,
+        "end_at": 1,
+        "embeds_scaling": "V only"
+      }
+    },
+    "3": {
+      "class_type": "KSampler",
+      "inputs": {
+        "seed": 1,
+        "steps": 4,
+        "cfg": 7,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1,
+        "model": ["13", 0],
+        "positive": ["6", 0],
+        "negative": ["7", 0],
+        "latent_image": ["5", 0]
+      }
+    },
+    "8": {
+      "class_type": "VAEDecode",
+      "inputs": { "samples": ["3", 0], "vae": ["4", 2] }
+    },
+    "9": {
+      "class_type": "SaveImage",
+      "inputs": { "filename_prefix": "DiffuseCutIpAdapterTest", "images": ["8", 0] }
+    }
+  }
+}

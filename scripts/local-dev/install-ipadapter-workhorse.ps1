@@ -70,11 +70,20 @@ function Ensure-ModelFile($url, $dest) {
 }
 
 $ipDest = Join-Path $ModelsRoot "ipadapter\ip-adapter-plus_sdxl_vit-h.safetensors"
+$ipPlusPreset = Join-Path $ModelsRoot "ipadapter\plus.sdxl.vit.h.safetensors"
 $clipDest = Join-Path $ModelsRoot "clip_vision\CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
 
 Ensure-ModelFile `
   "https://huggingface.co/h94/IP-Adapter/resolve/main/sdxl_models/ip-adapter-plus_sdxl_vit-h.safetensors" `
   $ipDest
+
+if (-not (Test-Path $ipPlusPreset)) {
+  Log "copy PLUS preset alias $ipPlusPreset"
+  Copy-Item -Path $ipDest -Destination $ipPlusPreset -Force
+} elseif ((Get-Item $ipPlusPreset).Length -lt 10MB) {
+  Remove-Item $ipPlusPreset -Force
+  Copy-Item -Path $ipDest -Destination $ipPlusPreset -Force
+}
 
 Ensure-ModelFile `
   "https://huggingface.co/h94/IP-Adapter/resolve/main/models/image_encoder/model.safetensors" `
@@ -111,7 +120,7 @@ if (Test-Path $startScript) {
 }
 
 $obj = Invoke-RestMethod http://127.0.0.1:8188/object_info -TimeoutSec 180
-foreach ($node in @("IPAdapterUnifiedLoader", "IPAdapterAdvanced")) {
+foreach ($node in @("IPAdapterModelLoader", "CLIPVisionLoader", "IPAdapterAdvanced")) {
   if ($obj.PSObject.Properties.Name -contains $node) { Log "NODE OK $node" }
   else { throw "NODE MISSING $node" }
 }

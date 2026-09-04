@@ -17,6 +17,13 @@ import {
   resolveShotCastReferenceSplit,
 } from "@/lib/services/shot-reference-core";
 import {
+  listAvailableShotStillReferenceModes,
+  resolveShotStillReferencePlan,
+  type ShotStillReferenceMode,
+} from "@/lib/services/shot-still-reference-mode";
+import { parseShotRenderOverrides, mergeShotRenderOverrides, serializeShotRenderOverrides } from "@/lib/shot-render-overrides";
+import { ShotStillReferenceControls } from "@/components/storyboard/ShotStillReferenceControls";
+import {
   frameAtTimelinePosition,
   totalProjectFrames,
 } from "@/lib/timing/frames";
@@ -27,6 +34,7 @@ import {
   ShotPlaceholderBatchProvider,
   ShotPlaceholderControls,
   ShotPlaceholderOptionsPanel,
+  ShotReferenceInfoPanel,
 } from "@/components/storyboard/ShotPlaceholderGenerator";
 import { MediaPanel } from "@/components/sheets/MediaPanel";
 import { useDebouncedSave, type DebouncedSaveContext } from "@/lib/hooks/useDebouncedSave";
@@ -138,8 +146,13 @@ export default function StoryboardPage({ params }: PageProps) {
       return {
         usesReferenceMedia: false,
         usesDualIpAdapter: false,
+        usesCharacterReference: false,
         referenceMediaLabel: null as string | null,
         referenceDetail: null as string | null,
+        stillReferenceMode: "auto" as ShotStillReferenceMode,
+        availableReferenceModes: [] as ShotStillReferenceMode[],
+        characterName: null as string | null,
+        locationLabel: null as string | null,
       };
     }
 
@@ -164,40 +177,57 @@ export default function StoryboardPage({ params }: PageProps) {
     });
 
     const castSplit = resolveShotCastReferenceSplit(castEntries);
+    const stillReferenceMode =
+      parseShotRenderOverrides(selectedShot.renderOverridesJson)
+        .stillReferenceMode ?? "auto";
+    const plan = resolveShotStillReferencePlan(refs, stillReferenceMode);
+    const locationLabel = [refs.locationStateName, refs.locationAngleName]
+      .filter(Boolean)
+      .join(", ");
 
-    if (!refs.primaryPath) {
+    if (!refs.characterPath && !refs.locationPath) {
       return {
         usesReferenceMedia: false,
         usesDualIpAdapter: false,
+        usesCharacterReference: false,
         referenceMediaLabel: null,
         referenceDetail: null,
+        stillReferenceMode,
+        availableReferenceModes: listAvailableShotStillReferenceModes(refs),
+        characterName: refs.characterName,
+        locationLabel: locationLabel || null,
       };
     }
 
-    const usesDualIpAdapter = Boolean(
-      refs.characterPath && refs.locationPath
-    );
-
     const detailParts: string[] = [];
 
-    if (usesDualIpAdapter) {
+    if (plan.useDualIpAdapter) {
       detailParts.push(
-        `Dual IP-Adapter: ${refs.characterName ?? "Character"} for identity and wardrobe, ${[refs.locationStateName, refs.locationAngleName].filter(Boolean).join(", ") || "location"} for background and set lighting.`
+        `Dual IP-Adapter: ${refs.characterName ?? "Character"} for identity and wardrobe, ${locationLabel || "location"} for background and set lighting.`
       );
-    } else if (refs.focus === "location") {
+    } else if (plan.effectiveMode === "character") {
+      detailParts.push(
+        `Single IP-Adapter: ${refs.characterName ?? "Character"} sheet for identity and wardrobe. Location and framing come from the prompt.`
+      );
+      if (castSplit.promptOnlyEntries.length > 0) {
+        detailParts.push(
+          `${castSplit.promptOnlyEntries.map((entry) => entry.character.name).join(", ")}: look descriptions in the prompt only, not reference art.`
+        );
+      }
+    } else if (plan.effectiveMode === "location") {
+      detailParts.push(
+        `Single IP-Adapter: ${locationLabel || "location"} reference for background and set lighting. Cast appearance comes from the prompt${refs.characterPath ? " and character look descriptions" : ""}.`
+      );
       if (castEntries.length > 0) {
         detailParts.push(
-          `Cast (${castEntries.map((entry) => entry.character.name).join(", ")}): look descriptions in the prompt only, not reference art.`
+          `Cast (${castEntries.map((entry) => entry.character.name).join(", ")}): look descriptions in the prompt only unless character reference mode is selected.`
         );
       }
-    } else {
-      if (refs.locationPath) {
-        detailParts.push(
-          `Location ${[refs.locationStateName, refs.locationAngleName]
-            .filter(Boolean)
-            .join(", ")}: described in the prompt only.`
-        );
-      }
+    } else if (plan.effectiveMode === "prompt_only") {
+      detailParts.push(
+        "Prompt only: no reference image is sent to ComfyUI for this shot."
+      );
+    } else if (refs.characterPath) {
       if (castSplit.promptOnlyEntries.length > 0) {
         detailParts.push(
           `${castSplit.promptOnlyEntries.map((entry) => entry.character.name).join(", ")}: look descriptions in the prompt only, not reference art.`
@@ -208,15 +238,23 @@ export default function StoryboardPage({ params }: PageProps) {
           `${castSplit.ipAdapterEntry.character.name} is the only cast member whose reference art is sent to IP-Adapter (first in list with a sheet).`
         );
       }
+    } else if (castEntries.length > 0) {
+      detailParts.push(
+        `Cast (${castEntries.map((entry) => entry.character.name).join(", ")}): look descriptions in the prompt only, not reference art.`
+      );
     }
 
     return {
-      usesReferenceMedia: true,
-      usesDualIpAdapter,
-      referenceMediaLabel: usesDualIpAdapter
-        ? `${refs.characterName ?? "Character"} + ${[refs.locationStateName, refs.locationAngleName].filter(Boolean).join(", ") || "location"}`
-        : refs.primaryLabel,
+      usesReferenceMedia: plan.useIpAdapter,
+      usesDualIpAdapter: plan.useDualIpAdapter,
+      usesCharacterReference:
+        plan.effectiveMode === "character" || plan.useDualIpAdapter,
+      referenceMediaLabel: plan.label ?? refs.primaryLabel,
       referenceDetail: detailParts.length > 0 ? detailParts.join(" ") : null,
+      stillReferenceMode,
+      availableReferenceModes: listAvailableShotStillReferenceModes(refs),
+      characterName: refs.characterName,
+      locationLabel: locationLabel || null,
     };
   }, [selectedShot, selectedLocation, characters]);
 
@@ -426,6 +464,16 @@ export default function StoryboardPage({ params }: PageProps) {
           shotTitle={selectedShot.title}
           placeholderDescription={shotPlaceholderDescription}
           hasPlaceholder={Boolean(selectedShot.placeholderPath)}
+          renderOverridesJson={selectedShot.renderOverridesJson}
+          hasLocationReference={Boolean(selectedShot.locationId)}
+          onRenderOverridesChange={(renderOverridesJson) => {
+            setShots((prev) =>
+              prev.map((s) =>
+                s.id === selectedShotId ? { ...s, renderOverridesJson } : s
+              )
+            );
+            schedule({ renderOverridesJson });
+          }}
           onPlaceholderSelected={handlePlaceholderSelected}
         >
           <div className="grid items-stretch gap-6 lg:grid-cols-2">
@@ -511,9 +559,6 @@ export default function StoryboardPage({ params }: PageProps) {
                 locationStates={selectedLocation.states}
                 locationStateId={selectedShot.locationStateId}
                 locationAngleId={selectedShot.locationAngleId}
-                visualReferenceFocus={
-                  selectedShot.visualReferenceFocus ?? "location"
-                }
                 onStateChange={(locationStateId) => {
                   const state = selectedLocation.states.find(
                     (item) => item.id === locationStateId
@@ -546,16 +591,6 @@ export default function StoryboardPage({ params }: PageProps) {
                   );
                   schedule({ locationAngleId });
                 }}
-                onFocusChange={(visualReferenceFocus) => {
-                  setShots((prev) =>
-                    prev.map((s) =>
-                      s.id === selectedShotId
-                        ? { ...s, visualReferenceFocus }
-                        : s
-                    )
-                  );
-                  schedule({ visualReferenceFocus });
-                }}
               />
             )}
             <ShotCastEditor
@@ -569,6 +604,35 @@ export default function StoryboardPage({ params }: PageProps) {
                 );
                 schedule({ characterCast });
               }}
+            />
+            <ShotStillReferenceControls
+              mode={shotReferenceMeta.stillReferenceMode}
+              availableModes={shotReferenceMeta.availableReferenceModes}
+              characterName={shotReferenceMeta.characterName}
+              locationLabel={shotReferenceMeta.locationLabel}
+              onChange={(stillReferenceMode) => {
+                const next = serializeShotRenderOverrides(
+                  mergeShotRenderOverrides(
+                    parseShotRenderOverrides(selectedShot.renderOverridesJson),
+                    { stillReferenceMode }
+                  )
+                );
+                setShots((prev) =>
+                  prev.map((s) =>
+                    s.id === selectedShotId
+                      ? { ...s, renderOverridesJson: next }
+                      : s
+                  )
+                );
+                schedule({ renderOverridesJson: next });
+              }}
+            />
+            <ShotReferenceInfoPanel
+              usesReferenceMedia={shotReferenceMeta.usesReferenceMedia}
+              usesDualIpAdapter={shotReferenceMeta.usesDualIpAdapter}
+              usesCharacterReference={shotReferenceMeta.usesCharacterReference}
+              referenceMediaLabel={shotReferenceMeta.referenceMediaLabel}
+              referenceMediaDetail={shotReferenceMeta.referenceDetail}
             />
           </Card>
 
@@ -601,15 +665,11 @@ export default function StoryboardPage({ params }: PageProps) {
             <ShotPlaceholderControls
               projectId={projectId}
               visualStyleJson={visualStyleJson}
-              usesReferenceMedia={shotReferenceMeta.usesReferenceMedia}
-              usesDualIpAdapter={shotReferenceMeta.usesDualIpAdapter}
-              referenceMediaLabel={shotReferenceMeta.referenceMediaLabel}
-              referenceMediaDetail={shotReferenceMeta.referenceDetail}
-              referenceFocus={
-                selectedShot.visualReferenceFocus === "character"
-                  ? "character"
-                  : "location"
+              usesReferenceMedia={
+                shotReferenceMeta.availableReferenceModes.length > 1 ||
+                shotReferenceMeta.usesReferenceMedia
               }
+              usesDualIpAdapter={shotReferenceMeta.usesDualIpAdapter}
             />
           </Card>
           </div>

@@ -8,6 +8,7 @@ import {
   BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
   BUILTIN_LTX_I2V_TEMPLATE_ID,
   BUILTIN_MINIMAX_I2V_TEMPLATE_ID,
+  BUILTIN_KREA2_STILL_TEMPLATE_ID,
 } from "@/lib/db/builtin-template-ids";
 
 export {
@@ -17,6 +18,7 @@ export {
   BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
   BUILTIN_LTX_I2V_TEMPLATE_ID,
   BUILTIN_MINIMAX_I2V_TEMPLATE_ID,
+  BUILTIN_KREA2_STILL_TEMPLATE_ID,
 } from "@/lib/db/builtin-template-ids";
 
 const BUILTIN_LTX_I2V = {
@@ -65,6 +67,14 @@ const BUILTIN_LOCATION_REFERENCE_IMG2IMG = {
   description:
     "Legacy img2img anchor workflow. Deprecated: img2img cannot produce independent camera angles from an establishing wide.",
   purpose: "location_sheet" as const,
+};
+
+const BUILTIN_KREA2_STILL = {
+  id: BUILTIN_KREA2_STILL_TEMPLATE_ID,
+  name: "Krea 2 turbo (txt2img)",
+  description:
+    "Built-in Krea 2 turbo still workflow for local ComfyUI. Uses UNET, Qwen3-VL text encoder, and qwen_image VAE. 8 steps at CFG 1.0.",
+  purpose: "character_sheet" as const,
 };
 
 function readTemplateFile(relativePath: string): string {
@@ -168,6 +178,21 @@ function loadBuiltinMinimaxI2vFiles(): {
   return { workflowJson, bindingsJson };
 }
 
+function loadBuiltinKrea2StillFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/krea2-still/workflow.api.json"
+  );
+  const bindingsJson = readTemplateFile("templates/krea2-still/bindings.json");
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
 function upsertBuiltinTemplate(
   db: Database.Database,
   template: {
@@ -239,6 +264,11 @@ export function seedBuiltinWorkflowTemplates(db: Database.Database): void {
     db,
     BUILTIN_MINIMAX_I2V,
     loadBuiltinMinimaxI2vFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_KREA2_STILL,
+    loadBuiltinKrea2StillFiles()
   );
 }
 

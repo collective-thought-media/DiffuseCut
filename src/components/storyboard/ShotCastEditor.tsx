@@ -62,9 +62,9 @@ export function ShotCastEditor({
       <div className="space-y-1">
         <Label>Characters in this shot</Label>
         <p className="text-xs text-muted-foreground">
-          Every selected character is written into the generation prompt. Only
-          one cast reference image can feed IP-Adapter at a time (first listed
-          character with art, when Character sheet focus is selected).
+          Selected characters are written into the generation prompt. When both
+          a character sheet and location reference exist, dual IP-Adapter sends
+          both images automatically.
         </p>
       </div>
       {characters.map((character) => {

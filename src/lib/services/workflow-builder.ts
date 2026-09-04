@@ -11,6 +11,10 @@ import {
 } from "@/lib/services/reference-aspect-ratio";
 import type { AnchorReframeIntensity } from "@/lib/ip-adapter-profiles";
 import {
+  DUAL_IP_ADAPTER_CHARACTER_PROFILE,
+  DUAL_IP_ADAPTER_LOCATION_PROFILE,
+  DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_CHARACTER_PROFILE,
+  DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_LOCATION_PROFILE,
   IP_ADAPTER_REFRAME_PROFILES,
   type IpAdapterProfileSettings,
 } from "@/lib/ip-adapter-profiles";
@@ -19,6 +23,10 @@ import {
   type RenderSettings,
   type WorkflowBindings,
 } from "@/types";
+import {
+  CLIP_VISION_SDXL_FILENAME,
+  IP_ADAPTER_SDXL_PLUS_FILENAME,
+} from "@/lib/services/comfyui-workflow-requirements";
 import { applyFrameCountTransform } from "@/lib/services/frame-count-transform";
 import { resolveImageSampler, resolveVideoSampler } from "@/lib/services/image-sampler";
 
@@ -129,6 +137,12 @@ function resolveControlValue(
   switch (controlType) {
     case "checkpoint":
       return renderSettings.checkpoint;
+    case "image_unet":
+      return renderSettings.imageUnet;
+    case "image_vae":
+      return renderSettings.imageVae;
+    case "image_text_encoder":
+      return renderSettings.imageTextEncoder;
     case "unet":
       return renderSettings.videoUnet;
     case "vae":
@@ -460,14 +474,32 @@ function applyReferenceLatentSize(
   }
 }
 
+function applyIpAdapterModelFiles(
+  workflow: Record<string, WorkflowNode>,
+  options?: {
+    ipadapterFile?: string;
+    clipVisionFile?: string;
+  }
+): void {
+  const ipadapterFile =
+    options?.ipadapterFile ?? IP_ADAPTER_SDXL_PLUS_FILENAME;
+  const clipVisionFile = options?.clipVisionFile ?? CLIP_VISION_SDXL_FILENAME;
+
+  for (const node of Object.values(workflow)) {
+    if (node.class_type === "IPAdapterModelLoader") {
+      node.inputs.ipadapter_file = ipadapterFile;
+    }
+    if (node.class_type === "CLIPVisionLoader") {
+      node.inputs.clip_name = clipVisionFile;
+    }
+  }
+}
+
 function applyIpAdapterSettings(
   workflow: Record<string, WorkflowNode>,
   profile: IpAdapterProfileSettings
 ): void {
   for (const node of Object.values(workflow)) {
-    if (node.class_type === "IPAdapterUnifiedLoader") {
-      node.inputs.preset = profile.preset;
-    }
     if (node.class_type === "IPAdapterAdvanced") {
       node.inputs.weight = profile.weight;
       node.inputs.end_at = profile.endAt;
@@ -514,10 +546,18 @@ export function buildPortraitPayload(
       character?: AnchorReframeIntensity;
       location?: AnchorReframeIntensity;
     };
+    /** Apply fixed dual IP-Adapter profiles (background pass, then character pass). */
+    useDualIpAdapterProfiles?: boolean;
+    /** Virtual backdrop: character IP first, location IP last so gray backdrop wins. */
+    useDualIpAdapterBackdropProfiles?: boolean;
     detailMacro?: boolean;
     detailMacroWidth?: number;
     detailMacroHeight?: number;
     referenceDimensions?: { width: number; height: number };
+    ipAdapterFilenames?: {
+      ipadapter?: string;
+      clipVision?: string;
+    };
   }
 ): WorkflowPayload {
   const parsedBindings = JSON.parse(
@@ -573,19 +613,62 @@ export function buildPortraitPayload(
   }
 
   const checkpoint = options?.checkpoint ?? renderSettings.checkpoint;
-  if (checkpoint && mergedBindings.controls) {
-    const checkpointControl = mergedBindings.controls.find(
-      (control) => control.type === "checkpoint"
-    );
-    if (checkpointControl) {
-      setNodeInput(
-        workflow,
-        checkpointControl.nodeId,
-        checkpointControl.inputKey ??
-          checkpointControl.nameInputKey ??
-          "ckpt_name",
-        checkpoint
-      );
+  if (mergedBindings.controls) {
+    for (const control of mergedBindings.controls) {
+      if (control.type === "checkpoint") {
+        if (!checkpoint) continue;
+        setNodeInput(
+          workflow,
+          control.nodeId,
+          control.inputKey ??
+            control.nameInputKey ??
+            "ckpt_name",
+          checkpoint
+        );
+        continue;
+      }
+
+      const value = resolveControlValue(control.type, renderSettings);
+      if (value == null || value === "") continue;
+
+      if (
+        control.type === "unet" ||
+        control.type === "image_unet"
+      ) {
+        setNodeInput(
+          workflow,
+          control.nodeId,
+          control.nameInputKey ?? "unet_name",
+          value
+        );
+      } else if (
+        control.type === "vae" ||
+        control.type === "image_vae"
+      ) {
+        setNodeInput(
+          workflow,
+          control.nodeId,
+          control.nameInputKey ?? "vae_name",
+          value
+        );
+      } else if (
+        control.type === "text_encoder" ||
+        control.type === "image_text_encoder"
+      ) {
+        setNodeInput(
+          workflow,
+          control.nodeId,
+          control.nameInputKey ?? control.inputKey ?? "clip_name",
+          value
+        );
+      } else if (control.type === "model_device" || control.type === "vae_device") {
+        setNodeInput(
+          workflow,
+          control.nodeId,
+          control.inputKey ?? "device",
+          value
+        );
+      }
     }
   }
 
@@ -648,15 +731,60 @@ export function buildPortraitPayload(
     referenceUsage === "ipadapter" &&
     input.referenceImage &&
     input.secondaryReferenceImage &&
+    options?.useDualIpAdapterBackdropProfiles
+  ) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options.ipAdapterFilenames?.clipVision,
+    });
+    const charLoadId = mergedBindings.referenceImageNodeId;
+    const locLoadId = mergedBindings.secondaryReferenceImageNodeId;
+    const firstIpId = mergedBindings.locationIpAdapterNodeId;
+    const lastIpId = mergedBindings.characterIpAdapterNodeId;
+    if (charLoadId && locLoadId && firstIpId && lastIpId) {
+      setNodeInput(workflow, firstIpId, "image", [charLoadId, 0]);
+      setNodeInput(workflow, lastIpId, "image", [locLoadId, 0]);
+      applyIpAdapterSettingsToNode(
+        workflow,
+        firstIpId,
+        DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_CHARACTER_PROFILE
+      );
+      applyIpAdapterSettingsToNode(
+        workflow,
+        lastIpId,
+        DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_LOCATION_PROFILE
+      );
+    }
+  } else if (
+    referenceUsage === "ipadapter" &&
+    input.referenceImage &&
+    input.secondaryReferenceImage &&
+    options?.useDualIpAdapterProfiles
+  ) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options.ipAdapterFilenames?.clipVision,
+    });
+    applyIpAdapterSettingsToNode(
+      workflow,
+      mergedBindings.locationIpAdapterNodeId,
+      DUAL_IP_ADAPTER_LOCATION_PROFILE
+    );
+    applyIpAdapterSettingsToNode(
+      workflow,
+      mergedBindings.characterIpAdapterNodeId,
+      DUAL_IP_ADAPTER_CHARACTER_PROFILE
+    );
+  } else if (
+    referenceUsage === "ipadapter" &&
+    input.referenceImage &&
+    input.secondaryReferenceImage &&
     options?.dualIpAdapterReframe
   ) {
-    const loaderPreset =
-      IP_ADAPTER_REFRAME_PROFILES.moderate.preset;
-    for (const node of Object.values(workflow)) {
-      if (node.class_type === "IPAdapterUnifiedLoader") {
-        node.inputs.preset = loaderPreset;
-      }
-    }
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options.ipAdapterFilenames?.clipVision,
+    });
     if (options.dualIpAdapterReframe.character) {
       applyIpAdapterSettingsToNode(
         workflow,
@@ -676,6 +804,10 @@ export function buildPortraitPayload(
     input.referenceImage &&
     options?.ipAdapterOverrides
   ) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options.ipAdapterFilenames?.clipVision,
+    });
     applyIpAdapterSettings(workflow, {
       ...IP_ADAPTER_REFRAME_PROFILES.extreme,
       ...options.ipAdapterOverrides,
@@ -685,7 +817,16 @@ export function buildPortraitPayload(
     input.referenceImage &&
     options?.ipAdapterReframe
   ) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options.ipAdapterFilenames?.clipVision,
+    });
     applyIpAdapterReframeProfile(workflow, options.ipAdapterReframe);
+  } else if (referenceUsage === "ipadapter" && input.referenceImage) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options?.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options?.ipAdapterFilenames?.clipVision,
+    });
   }
 
   return {

@@ -61,3 +61,27 @@ export const BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS: IpAdapterProfileSettings = {
   preset: "PLUS (high strength)",
   weightType: "style transfer",
 };
+
+/** Fixed dual IP-Adapter tuning: background first, character last in the chain. */
+export const DUAL_IP_ADAPTER_LOCATION_PROFILE: IpAdapterProfileSettings =
+  BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS;
+
+export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
+  IP_ADAPTER_REFRAME_PROFILES.character_lock;
+
+/** Virtual backdrop dual chain: character first, location last so gray wins over sheet bg. */
+export const DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_CHARACTER_PROFILE: IpAdapterProfileSettings =
+  {
+    weight: 0.48,
+    endAt: 0.58,
+    preset: "PLUS (high strength)",
+    weightType: "linear",
+  };
+
+export const DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_LOCATION_PROFILE: IpAdapterProfileSettings =
+  {
+    weight: 0.55,
+    endAt: 0.72,
+    preset: "PLUS (high strength)",
+    weightType: "linear",
+  };

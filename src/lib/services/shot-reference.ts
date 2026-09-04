@@ -114,9 +114,34 @@ export function resolveShotReferencePath(shotId: string): string | null {
 export function resolveShotReferencePathForBatch(batch: {
   entityType: string;
   entityId: string;
+  generationOptionsJson?: string | null;
 }): string | null {
   if (batch.entityType !== "shot") return null;
-  return resolveShotReferencePath(batch.entityId);
+
+  const { characterPath, locationPath } =
+    resolveShotDualReferencePathsForBatch(batch);
+
+  if (batch.generationOptionsJson) {
+    try {
+      const options = JSON.parse(
+        batch.generationOptionsJson
+      ) as { referenceFocus?: "character" | "location"; useIpAdapter?: boolean };
+      if (options.useIpAdapter === false) return null;
+      if (options.referenceFocus === "character") return characterPath;
+      if (options.referenceFocus === "location") return locationPath;
+    } catch {
+      /* fall through */
+    }
+  }
+
+  const db = getDb();
+  const shot = db
+    .select()
+    .from(schema.shots)
+    .where(eq(schema.shots.id, batch.entityId))
+    .get();
+  if (!shot) return null;
+  return resolveShotReferencePaths(shot).primaryPath;
 }
 
 export function resolveShotDualReferencePathsForBatch(batch: {

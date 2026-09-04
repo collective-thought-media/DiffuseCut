@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { GenerationStack } from "@/types";
-import type { RenderSettings } from "@/types";
-import { Button, Label, Select } from "@/components/ui/button";
+import { ImageModelPicker } from "@/components/render/ImageModelPicker";
+import {
+  isIpAdapterFriendlyCheckpoint,
+  shortCheckpointLabel,
+} from "@/lib/services/image-checkpoints";
 import { cn } from "@/lib/utils";
 
 const STACK_EXPANDED_STORAGE_KEY = "diffusecut-generation-stack-expanded";
@@ -22,11 +25,6 @@ interface ComfyuiGenerationStackProps {
   workflowNameOverride?: string;
   batchActive?: boolean;
   children: (slots: ComfyuiGenerationStackSlots) => ReactNode;
-}
-
-function shortCheckpoint(name: string): string {
-  const base = name.split(/[/\\]/).pop() ?? name;
-  return base.replace(/\.(safetensors|ckpt|pt)$/i, "");
 }
 
 function shortEndpoint(url: string): string {
@@ -88,11 +86,8 @@ export function ComfyuiGenerationStack({
   children,
 }: ComfyuiGenerationStackProps) {
   const [stack, setStack] = useState<GenerationStack | null>(null);
-  const [selectedCheckpoint, setSelectedCheckpoint] = useState("");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [detailsExpanded, setDetailsExpanded] = useState(readStoredExpanded);
   const onReadyChangeRef = useRef(onReadyChange);
   const onStackChangeRef = useRef(onStackChange);
@@ -102,6 +97,9 @@ export function ComfyuiGenerationStack({
     onStackChangeRef.current = onStackChange;
   }, [onReadyChange, onStackChange]);
 
+  const imageCheckpoints =
+    stack?.availableImageCheckpoints ?? stack?.availableCheckpoints ?? [];
+
   const applyStack = useCallback((nextStack: GenerationStack | null) => {
     setStack(nextStack);
     onStackChangeRef.current?.(nextStack);
@@ -109,13 +107,20 @@ export function ComfyuiGenerationStack({
       onReadyChangeRef.current?.(false);
       return;
     }
+    const pool =
+      nextStack.availableImageCheckpoints.length > 0
+        ? nextStack.availableImageCheckpoints
+        : nextStack.availableCheckpoints;
+    const usingKrea = nextStack.imageEngine === "krea2";
     const ready =
       nextStack.comfyuiReachable &&
-      nextStack.availableCheckpoints.length > 0 &&
-      Boolean(
-        nextStack.configuredCheckpoint &&
-          nextStack.availableCheckpoints.includes(nextStack.configuredCheckpoint)
-      );
+      (usingKrea
+        ? nextStack.krea2Available && Boolean(nextStack.effectiveImageUnet)
+        : pool.length > 0 &&
+          Boolean(
+            nextStack.configuredCheckpoint &&
+              pool.includes(nextStack.configuredCheckpoint)
+          ));
     onReadyChangeRef.current?.(ready);
   }, []);
 
@@ -133,12 +138,6 @@ export function ComfyuiGenerationStack({
         }
         const nextStack = data.stack as GenerationStack;
         applyStack(nextStack);
-        setSelectedCheckpoint(
-          nextStack.configuredCheckpoint ??
-            nextStack.effectiveCheckpoint ??
-            nextStack.availableCheckpoints[0] ??
-            ""
-        );
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load stack");
         applyStack(null);
@@ -176,46 +175,16 @@ export function ComfyuiGenerationStack({
     });
   }
 
-  async function saveCheckpoint(checkpoint: string) {
-    if (!checkpoint) return;
-    setSaving(true);
-    setError(null);
-    setSavedMessage(null);
-    try {
-      const settingsRes = await fetch(
-        `/api/projects/${projectId}/render-settings`
-      );
-      const settingsData = await settingsRes.json();
-      if (!settingsRes.ok) {
-        throw new Error(settingsData.error ?? "Failed to load render settings");
-      }
-      const existing = (settingsData.renderSettings ?? {}) as RenderSettings;
-
-      const res = await fetch(`/api/projects/${projectId}/render-settings`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          renderSettings: { ...existing, checkpoint },
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save checkpoint");
-
-      if (stack) {
-        applyStack({
-          ...stack,
-          configuredCheckpoint: checkpoint,
-          effectiveCheckpoint: checkpoint,
-          needsCheckpointSelection: false,
-        });
-      }
-      setSavedMessage("Checkpoint saved for this project.");
-      void loadStack({ silent: true });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save checkpoint");
-    } finally {
-      setSaving(false);
-    }
+  function handleCheckpointSaved(checkpoint: string, engine: "sdxl" | "krea2") {
+    if (!stack) return;
+    applyStack({
+      ...stack,
+      configuredCheckpoint: engine === "krea2" ? stack.configuredCheckpoint : checkpoint,
+      effectiveCheckpoint: engine === "krea2" ? stack.effectiveCheckpoint : checkpoint,
+      imageEngine: engine,
+      needsCheckpointSelection: false,
+    });
+    void loadStack({ silent: true });
   }
 
   if (loading) {
@@ -241,15 +210,17 @@ export function ComfyuiGenerationStack({
   }
 
   const workflowName = workflowNameOverride ?? stack.workflowTemplateName;
-  const checkpointName =
-    stack.configuredCheckpoint ?? stack.effectiveCheckpoint ?? "";
+  const usingKrea = stack.imageEngine === "krea2";
+  const checkpointName = usingKrea
+    ? stack.effectiveImageUnet ?? "Krea 2 turbo"
+    : stack.configuredCheckpoint ?? stack.effectiveCheckpoint ?? "";
   const loraSummary =
     stack.loras.length > 0
       ? stack.loras.map((lora) => lora.name).join(", ")
       : null;
 
   const summaryParts = [
-    checkpointName ? shortCheckpoint(checkpointName) : null,
+    checkpointName ? shortCheckpointLabel(checkpointName) : null,
     shortSampler(stack),
     workflowName,
     shortEndpoint(stack.endpointUrl),
@@ -258,48 +229,45 @@ export function ComfyuiGenerationStack({
 
   const showCompactSummary = batchActive && !detailsExpanded;
 
-  const checkpointGate =
-    stack.availableCheckpoints.length === 0 ? (
-      <p className="text-sm text-amber-200/90">
-        No checkpoint models found on ComfyUI. Install at least one checkpoint
-        in models/checkpoints, then refresh this page.
-      </p>
-    ) : stack.needsCheckpointSelection ? (
-      <div className="space-y-2 rounded-lg border border-amber-500/30 bg-neutral-950 p-4">
-        <Label htmlFor="stack-checkpoint">Checkpoint (required before generating)</Label>
-        <Select
-          id="stack-checkpoint"
-          value={selectedCheckpoint}
-          onChange={(e) => setSelectedCheckpoint(e.target.value)}
-        >
-          {stack.availableCheckpoints.map((checkpoint) => (
-            <option key={checkpoint} value={checkpoint}>
-              {checkpoint}
-            </option>
-          ))}
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          {stack.configuredCheckpoint &&
-          !stack.availableCheckpoints.includes(stack.configuredCheckpoint)
-            ? `Saved checkpoint "${stack.configuredCheckpoint}" is not on this ComfyUI server. Pick one from the list.`
-            : "Choose the checkpoint to use for this project's ComfyUI jobs."}
-        </p>
-        <Button
-          type="button"
-          size="sm"
-          disabled={!selectedCheckpoint || saving}
-          onClick={() => void saveCheckpoint(selectedCheckpoint)}
-        >
-          {saving ? "Saving…" : "Save checkpoint"}
-        </Button>
-        {savedMessage && (
-          <p className="text-xs text-emerald-400">{savedMessage}</p>
-        )}
-      </div>
-    ) : null;
+  const usesIpAdapterWorkflow = Boolean(
+    workflowNameOverride?.toLowerCase().includes("ip-adapter")
+  );
+  const ipAdapterCheckpointWarning =
+    usesIpAdapterWorkflow &&
+    !usingKrea &&
+    checkpointName &&
+    !isIpAdapterFriendlyCheckpoint(checkpointName)
+      ? `Reference-guided shots auto-switch to EpicRealism XL (or similar). ${shortCheckpointLabel(checkpointName)} often produces splotchy output with IP-Adapter.`
+      : null;
+
+  const imageModelPicker = (
+    <ImageModelPicker
+      projectId={projectId}
+      checkpoints={imageCheckpoints}
+      imageEngine={stack.imageEngine}
+      krea2Available={stack.krea2Available}
+      value={
+        usingKrea
+          ? checkpointName
+          : checkpointName && imageCheckpoints.includes(checkpointName)
+            ? checkpointName
+            : imageCheckpoints[0] ?? ""
+      }
+      autoSave
+      compact={showCompactSummary}
+      onSaved={handleCheckpointSaved}
+      className={
+        !usingKrea &&
+        stack.configuredCheckpoint &&
+        !imageCheckpoints.includes(stack.configuredCheckpoint)
+          ? "rounded-lg border border-amber-500/30 bg-neutral-950 p-3"
+          : undefined
+      }
+    />
+  );
 
   const settingsSummary = (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {!stack.comfyuiReachable && (
         <p className="text-sm text-amber-200/90">
           ComfyUI is not reachable at {stack.endpointUrl}. Check{" "}
@@ -309,6 +277,21 @@ export function ComfyuiGenerationStack({
           .
         </p>
       )}
+
+      {!usingKrea &&
+        stack.configuredCheckpoint &&
+        !imageCheckpoints.includes(stack.configuredCheckpoint) && (
+          <p className="text-xs text-amber-200/90">
+            Saved model &quot;{stack.configuredCheckpoint}&quot; is not on this
+            ComfyUI server. Pick a model below.
+          </p>
+        )}
+
+      {imageModelPicker}
+
+      {ipAdapterCheckpointWarning ? (
+        <p className="text-xs text-amber-200/90">{ipAdapterCheckpointWarning}</p>
+      ) : null}
 
       <div className="rounded-lg bg-neutral-950/80 px-3 py-2">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -337,7 +320,7 @@ export function ComfyuiGenerationStack({
               href={`/projects/${projectId}/render#image-generation`}
               className="text-xs text-muted-foreground hover:text-primary hover:underline"
             >
-              Edit image settings
+              More image settings
             </Link>
           </div>
         </div>
@@ -361,13 +344,6 @@ export function ComfyuiGenerationStack({
                   : "None configured"
               }
             />
-            {checkpointName && (
-              <StackDetailRow
-                label="Checkpoint"
-                value={checkpointName}
-                mono
-              />
-            )}
           </dl>
         )}
       </div>
@@ -377,19 +353,11 @@ export function ComfyuiGenerationStack({
           {error}
         </p>
       )}
-
-      {!stack.needsCheckpointSelection &&
-        stack.availableCheckpoints.length > 0 &&
-        !stack.configuredCheckpoint && (
-          <p className="text-xs text-muted-foreground">
-            Save a checkpoint above before generating.
-          </p>
-        )}
     </div>
   );
 
   return children({
-    checkpointGate,
+    checkpointGate: null,
     settingsSummary,
     loading: false,
   });

@@ -20,11 +20,12 @@ Without IP-Adapter, DiffuseCut falls back to **txt2img** so your angle descripti
    git clone https://github.com/cubiq/ComfyUI_IPAdapter_plus.git
    ```
 2. **Models** (SDXL, match your checkpoint family):
-   - `ComfyUI/models/ipadapter/ip-adapter-plus_sdxl_vit_h.safetensors`
+   - `ComfyUI/models/ipadapter/plus.sdxl.vit.h.safetensors` (required for PLUS preset)
+   - Legacy Hugging Face name `ip-adapter-plus_sdxl_vit-h.safetensors` must be copied to that name if you downloaded it manually
    - `ComfyUI/models/clip_vision/CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors`
 
    Download links are in the IPAdapter_plus repo README. Use **ComfyUI Manager** if you prefer one-click installs.
 
-3. Restart ComfyUI. DiffuseCut expects nodes `IPAdapterUnifiedLoader` and `IPAdapterAdvanced`.
+3. Restart ComfyUI. DiffuseCut expects nodes `IPAdapterModelLoader`, `CLIPVisionLoader`, and `IPAdapterAdvanced`.
 
 RealVisXL and other SDXL checkpoints work with the `PLUS (high strength)` preset in the bundled workflow.
