@@ -66,6 +66,7 @@ interface ShotPlaceholderControlsProps {
   projectId: string;
   visualStyleJson?: string | null;
   usesReferenceMedia?: boolean;
+  usesDualIpAdapter?: boolean;
   referenceMediaLabel?: string | null;
   referenceMediaDetail?: string | null;
   referenceFocus?: "character" | "location";
@@ -75,6 +76,7 @@ export function ShotPlaceholderControls({
   projectId,
   visualStyleJson,
   usesReferenceMedia = false,
+  usesDualIpAdapter = false,
   referenceMediaLabel,
   referenceMediaDetail,
   referenceFocus = "location",
@@ -173,12 +175,22 @@ export function ShotPlaceholderControls({
             <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3 text-sm text-muted-foreground">
               {ipAdapterAvailable ? (
                 <>
-                  IP-Adapter uses{" "}
-                  {referenceMediaLabel
-                    ? `"${referenceMediaLabel}"`
-                    : "the selected visual reference"}{" "}
-                  as the image input. Your shot prompt sets composition and
-                  action.
+                  {usesDualIpAdapter ? (
+                    <>
+                      Dual IP-Adapter sends separate character and location
+                      reference images. Your shot prompt sets composition and
+                      action.
+                    </>
+                  ) : (
+                    <>
+                      IP-Adapter uses{" "}
+                      {referenceMediaLabel
+                        ? `"${referenceMediaLabel}"`
+                        : "the selected visual reference"}{" "}
+                      as the image input. Your shot prompt sets composition and
+                      action.
+                    </>
+                  )}
                   {referenceFocus === "character" ? (
                     <span className="mt-2 block text-xs text-sky-200/90">
                       Character focus locks face and wardrobe to the reference.
@@ -227,7 +239,9 @@ export function ShotPlaceholderControls({
               workflowNameOverride={
                 usesReferenceMedia
                   ? ipAdapterAvailable
-                    ? "Shot frame from reference (IP-Adapter)"
+                    ? usesDualIpAdapter
+                      ? "Shot frame (dual IP-Adapter)"
+                      : "Shot frame from reference (IP-Adapter)"
                     : "Shot frame (prompt driven, no IP-Adapter)"
                   : undefined
               }

@@ -24,7 +24,7 @@ import {
   uploadMedia,
   assertComfyuiNodeClasses,
 } from "@/lib/services/comfyui-client";
-import { resolveShotReferencePathForBatch } from "@/lib/services/shot-reference";
+import { resolveShotReferencePathForBatch, resolveShotDualReferencePathsForBatch } from "@/lib/services/shot-reference";
 import {
   shouldUseMacroDetailLatent,
   SHOT_MACRO_LATENT_HEIGHT,
@@ -62,6 +62,7 @@ import {
 import {
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
 } from "@/lib/db/seed-builtin-templates";
 import { runExport, type ExportSettings } from "@/lib/services/ffmpeg-export";
 import { formatComfyuiError } from "@/lib/services/comfyui-errors";
@@ -79,10 +80,12 @@ const POLL_INTERVAL_MS = 2000;
 const LOCATION_ANCHOR_TEMPLATE_IDS = new Set([
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
 ]);
 const activeBridges = new Map<string, ComfyUIWsBridge>();
 const activeAssetBridges = new Map<string, ComfyUIWsBridge>();
-const anchorUploadByBatch = new Map<string, string>();
+type BatchAnchorUploads = { primary?: string; secondary?: string };
+const anchorUploadByBatch = new Map<string, BatchAnchorUploads>();
 
 function parseBatchGenerationOptions(
   json: string | null | undefined
@@ -99,30 +102,66 @@ function now(): number {
   return Date.now();
 }
 
-async function resolveBatchAnchorReferenceImage(
+async function resolveBatchAnchorReferenceImages(
   batch: typeof schema.assetGenerationBatches.$inferSelect,
   projectRoot: string
-): Promise<string | undefined> {
+): Promise<BatchAnchorUploads> {
   const cached = anchorUploadByBatch.get(batch.id);
   if (cached) return cached;
 
-  let anchorRelative: string | null = null;
+  const uploads: BatchAnchorUploads = {};
+
   if (batch.entityType === "location_angle") {
-    anchorRelative = resolveLocationAnchorReferencePathForBatch(batch);
+    const anchorRelative = resolveLocationAnchorReferencePathForBatch(batch);
+    if (anchorRelative) {
+      const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
+      if (fs.existsSync(anchorAbs)) {
+        uploads.primary = await uploadAnchorReferenceImage(
+          batch.comfyuiEndpointUrl,
+          anchorAbs
+        );
+      }
+    }
   } else if (batch.entityType === "shot") {
-    anchorRelative = resolveShotReferencePathForBatch(batch);
+    if (batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID) {
+      const { characterPath, locationPath } =
+        resolveShotDualReferencePathsForBatch(batch);
+      if (characterPath) {
+        const characterAbs = resolveMediaPath(projectRoot, characterPath);
+        if (fs.existsSync(characterAbs)) {
+          uploads.primary = await uploadAnchorReferenceImage(
+            batch.comfyuiEndpointUrl,
+            characterAbs
+          );
+        }
+      }
+      if (locationPath) {
+        const locationAbs = resolveMediaPath(projectRoot, locationPath);
+        if (fs.existsSync(locationAbs)) {
+          uploads.secondary = await uploadAnchorReferenceImage(
+            batch.comfyuiEndpointUrl,
+            locationAbs
+          );
+        }
+      }
+    } else {
+      const anchorRelative = resolveShotReferencePathForBatch(batch);
+      if (anchorRelative) {
+        const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
+        if (fs.existsSync(anchorAbs)) {
+          uploads.primary = await uploadAnchorReferenceImage(
+            batch.comfyuiEndpointUrl,
+            anchorAbs
+          );
+        }
+      }
+    }
   }
-  if (!anchorRelative) return undefined;
 
-  const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
-  if (!fs.existsSync(anchorAbs)) return undefined;
-
-  const uploadedName = await uploadAnchorReferenceImage(
-    batch.comfyuiEndpointUrl,
-    anchorAbs
-  );
-  anchorUploadByBatch.set(batch.id, uploadedName);
-  return uploadedName;
+  if (uploads.primary || uploads.secondary) {
+    anchorUploadByBatch.set(batch.id, uploads);
+  }
+  return uploads;
 }
 
 function clearBatchAnchorUpload(batchId: string): void {
@@ -740,6 +779,7 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
 
     const projectRoot = resolveProjectRoot(project);
     let referenceImage: string | undefined;
+    let secondaryReferenceImage: string | undefined;
 
     const needsAnchorImage = LOCATION_ANCHOR_TEMPLATE_IDS.has(
       batch.workflowTemplateId
@@ -750,17 +790,24 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
         batch.entityType === "shot") &&
       needsAnchorImage
     ) {
-      referenceImage = await resolveBatchAnchorReferenceImage(batch, projectRoot);
-      if (referenceImage) {
+      const uploads = await resolveBatchAnchorReferenceImages(batch, projectRoot);
+      referenceImage = uploads.primary;
+      secondaryReferenceImage = uploads.secondary;
+      if (referenceImage || secondaryReferenceImage) {
+        const usingDualIpAdapter =
+          batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID;
         const usingIpAdapter =
+          usingDualIpAdapter ||
           batch.workflowTemplateId ===
-          BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
+            BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
         updateAssetOption(option.id, {
           statusMessage:
             batch.entityType === "shot"
-              ? usingIpAdapter
-                ? "Using location or character reference via IP-Adapter"
-                : "Using reference media for img2img"
+              ? usingDualIpAdapter
+                ? "Using character and location references via dual IP-Adapter"
+                : usingIpAdapter
+                  ? "Using location or character reference via IP-Adapter"
+                  : "Using reference media for img2img"
               : usingIpAdapter
                 ? "Using establishing reference via IP-Adapter"
                 : "Using establishing reference for img2img",
@@ -782,7 +829,8 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     if (
       batch.entityType === "shot" &&
       LOCATION_ANCHOR_TEMPLATE_IDS.has(batch.workflowTemplateId) &&
-      !referenceImage
+      !referenceImage &&
+      !secondaryReferenceImage
     ) {
       updateAssetOption(option.id, {
         statusMessage: "Reference image unavailable, generating from prompt only",
@@ -792,7 +840,8 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
 
     if (
       batch.workflowTemplateId ===
-      BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID
+        BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID ||
+      batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID
     ) {
       await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
         "IPAdapterUnifiedLoader",
@@ -833,14 +882,32 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
           }
         : undefined;
 
+    const dualIpAdapterReframe =
+      !ipAdapterOverrides &&
+      batch.entityType === "shot" &&
+      batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID &&
+      referenceImage &&
+      secondaryReferenceImage
+        ? {
+            character: resolveShotReframeIntensity(shotPromptForComposition, {
+              referenceFocus: "character",
+            }),
+            location: resolveShotReframeIntensity(shotPromptForComposition, {
+              referenceFocus: "location",
+            }),
+          }
+        : undefined;
+
     const ipAdapterReframe =
       !ipAdapterOverrides &&
+      !dualIpAdapterReframe &&
       batch.entityType === "location_angle" &&
       batch.workflowTemplateId ===
         BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
       referenceImage
         ? resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
         : !ipAdapterOverrides &&
+            !dualIpAdapterReframe &&
             batch.entityType === "shot" &&
             batch.workflowTemplateId ===
               BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
@@ -876,10 +943,12 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
         negativePrompt: batch.negativePrompt,
         seed: option.seed,
         referenceImage,
+        secondaryReferenceImage,
       },
       {
         checkpoint: resolvedSettings.checkpoint,
         ipAdapterReframe,
+        dualIpAdapterReframe,
         ipAdapterOverrides,
         detailMacro,
         detailMacroWidth: SHOT_MACRO_LATENT_WIDTH,

@@ -5,6 +5,7 @@ import {
   BUILTIN_CHARACTER_SHEET_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
   BUILTIN_LTX_I2V_TEMPLATE_ID,
   BUILTIN_MINIMAX_I2V_TEMPLATE_ID,
 } from "@/lib/db/builtin-template-ids";
@@ -13,6 +14,7 @@ export {
   BUILTIN_CHARACTER_SHEET_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
   BUILTIN_LTX_I2V_TEMPLATE_ID,
   BUILTIN_MINIMAX_I2V_TEMPLATE_ID,
 } from "@/lib/db/builtin-template-ids";
@@ -46,6 +48,14 @@ const BUILTIN_LOCATION_REFERENCE_IPADAPTER = {
   name: "Location reference from anchor (IP-Adapter)",
   description:
     "Built-in txt2img workflow with IP-Adapter for location angles after an establishing reference exists. Matches set design and materials from the anchor while generating a new camera composition from the angle description.",
+  purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_DUAL_IPADAPTER = {
+  id: BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
+  name: "Storyboard shot (dual IP-Adapter)",
+  description:
+    "Built-in storyboard still workflow with two IP-Adapter inputs: character casting reference for identity and wardrobe, plus location reference for background and set lighting. Used when a shot has both references available.",
   purpose: "location_sheet" as const,
 };
 
@@ -88,6 +98,23 @@ function loadBuiltinLocationReferenceIpAdapterFiles(): {
   );
   const bindingsJson = readTemplateFile(
     "templates/location-reference/bindings-ipadapter.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotDualIpAdapterFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-placeholder/workflow-dual-ipadapter.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-placeholder/bindings-dual-ipadapter.json"
   );
 
   JSON.parse(workflowJson);
@@ -201,6 +228,11 @@ export function seedBuiltinWorkflowTemplates(db: Database.Database): void {
     db,
     BUILTIN_LOCATION_REFERENCE_IPADAPTER,
     loadBuiltinLocationReferenceIpAdapterFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_DUAL_IPADAPTER,
+    loadBuiltinShotDualIpAdapterFiles()
   );
   upsertBuiltinTemplate(db, BUILTIN_LTX_I2V, loadBuiltinLtxI2vFiles());
   upsertBuiltinTemplate(

@@ -118,3 +118,26 @@ export function resolveShotReferencePathForBatch(batch: {
   if (batch.entityType !== "shot") return null;
   return resolveShotReferencePath(batch.entityId);
 }
+
+export function resolveShotDualReferencePathsForBatch(batch: {
+  entityType: string;
+  entityId: string;
+}): { characterPath: string | null; locationPath: string | null } {
+  if (batch.entityType !== "shot") {
+    return { characterPath: null, locationPath: null };
+  }
+  const db = getDb();
+  const shot = db
+    .select()
+    .from(schema.shots)
+    .where(eq(schema.shots.id, batch.entityId))
+    .get();
+  if (!shot) {
+    return { characterPath: null, locationPath: null };
+  }
+  const refs = resolveShotReferencePaths(shot);
+  return {
+    characterPath: refs.characterPath,
+    locationPath: refs.locationPath,
+  };
+}

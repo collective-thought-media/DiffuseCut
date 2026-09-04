@@ -137,6 +137,7 @@ export default function StoryboardPage({ params }: PageProps) {
     if (!selectedShot) {
       return {
         usesReferenceMedia: false,
+        usesDualIpAdapter: false,
         referenceMediaLabel: null as string | null,
         referenceDetail: null as string | null,
       };
@@ -167,14 +168,23 @@ export default function StoryboardPage({ params }: PageProps) {
     if (!refs.primaryPath) {
       return {
         usesReferenceMedia: false,
+        usesDualIpAdapter: false,
         referenceMediaLabel: null,
         referenceDetail: null,
       };
     }
 
+    const usesDualIpAdapter = Boolean(
+      refs.characterPath && refs.locationPath
+    );
+
     const detailParts: string[] = [];
 
-    if (refs.focus === "location") {
+    if (usesDualIpAdapter) {
+      detailParts.push(
+        `Dual IP-Adapter: ${refs.characterName ?? "Character"} for identity and wardrobe, ${[refs.locationStateName, refs.locationAngleName].filter(Boolean).join(", ") || "location"} for background and set lighting.`
+      );
+    } else if (refs.focus === "location") {
       if (castEntries.length > 0) {
         detailParts.push(
           `Cast (${castEntries.map((entry) => entry.character.name).join(", ")}): look descriptions in the prompt only, not reference art.`
@@ -202,7 +212,10 @@ export default function StoryboardPage({ params }: PageProps) {
 
     return {
       usesReferenceMedia: true,
-      referenceMediaLabel: refs.primaryLabel,
+      usesDualIpAdapter,
+      referenceMediaLabel: usesDualIpAdapter
+        ? `${refs.characterName ?? "Character"} + ${[refs.locationStateName, refs.locationAngleName].filter(Boolean).join(", ") || "location"}`
+        : refs.primaryLabel,
       referenceDetail: detailParts.length > 0 ? detailParts.join(" ") : null,
     };
   }, [selectedShot, selectedLocation, characters]);
@@ -589,6 +602,7 @@ export default function StoryboardPage({ params }: PageProps) {
               projectId={projectId}
               visualStyleJson={visualStyleJson}
               usesReferenceMedia={shotReferenceMeta.usesReferenceMedia}
+              usesDualIpAdapter={shotReferenceMeta.usesDualIpAdapter}
               referenceMediaLabel={shotReferenceMeta.referenceMediaLabel}
               referenceMediaDetail={shotReferenceMeta.referenceDetail}
               referenceFocus={

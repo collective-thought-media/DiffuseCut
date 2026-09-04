@@ -5,6 +5,7 @@ import { nanoid } from "nanoid";
 import { getDb, schema } from "@/lib/db";
 import {
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
 } from "@/lib/db/seed-builtin-templates";
 import type {
   AssetGenerationBatch,
@@ -55,14 +56,30 @@ function randomSeed(): number {
 import {
   resolveShotReferencePath,
   resolveShotReferencePathForBatch,
+  resolveShotReferencePaths,
 } from "@/lib/services/shot-reference";
 
 export async function resolveShotPlaceholderTemplateId(
   projectId: string,
-  options?: { referencePath?: string | null; endpointUrl?: string }
+  options?: {
+    referencePath?: string | null;
+    characterReferencePath?: string | null;
+    locationReferencePath?: string | null;
+    endpointUrl?: string;
+  }
 ): Promise<string> {
-  if (options?.referencePath && options?.endpointUrl) {
-    if (await isIpAdapterAvailable(options.endpointUrl)) {
+  if (options?.endpointUrl && (await isIpAdapterAvailable(options.endpointUrl))) {
+    if (
+      options.characterReferencePath &&
+      options.locationReferencePath
+    ) {
+      return BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID;
+    }
+    const primary =
+      options.referencePath ??
+      options.characterReferencePath ??
+      options.locationReferencePath;
+    if (primary) {
       return BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
     }
   }
@@ -308,9 +325,11 @@ export async function enqueueShotPlaceholderBatch(
     throw new Error("No reachable ComfyUI endpoint configured");
   }
 
-  const referencePath = resolveShotReferencePath(shotId);
+  const referencePaths = resolveShotReferencePaths(shot);
   const templateId = await resolveShotPlaceholderTemplateId(projectId, {
-    referencePath,
+    referencePath: referencePaths.primaryPath,
+    characterReferencePath: referencePaths.characterPath,
+    locationReferencePath: referencePaths.locationPath,
     endpointUrl,
   });
 

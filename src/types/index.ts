@@ -44,6 +44,12 @@ export interface WorkflowBindings {
   frameCountMirrorNodes?: Array<{ nodeId: string; inputKey: string }>;
   referenceImageNodeId?: string;
   referenceImageInputKey?: string;
+  /** Second reference image (e.g. location background in dual IP-Adapter shots). */
+  secondaryReferenceImageNodeId?: string;
+  secondaryReferenceImageInputKey?: string;
+  /** Per-node IP-Adapter tuning in dual-reference workflows. */
+  characterIpAdapterNodeId?: string;
+  locationIpAdapterNodeId?: string;
   /** img2img encodes the reference into the latent; ipadapter keeps txt2img composition freedom. */
   referenceImageUsage?: "img2img" | "ipadapter";
   referenceVideoNodeId?: string;

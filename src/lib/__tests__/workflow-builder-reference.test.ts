@@ -224,6 +224,85 @@ describe("buildPortraitPayload reference sizing", () => {
     expect(workflow["5"].inputs.width).toBe(1344);
     expect(workflow["5"].inputs.height).toBe(768);
   });
+
+  it("wires dual IP-Adapter references with per-node reframe profiles", () => {
+    const dualTemplate: WorkflowTemplate = {
+      ...staleTemplate,
+      bindingsJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.bindingsJson),
+        referenceImageNodeId: "10",
+        referenceImageInputKey: "image",
+        secondaryReferenceImageNodeId: "11",
+        secondaryReferenceImageInputKey: "image",
+        characterIpAdapterNodeId: "13",
+        locationIpAdapterNodeId: "14",
+        referenceImageUsage: "ipadapter",
+      }),
+      workflowJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.workflowJson),
+        "10": {
+          class_type: "LoadImage",
+          inputs: { image: "character.png" },
+        },
+        "11": {
+          class_type: "LoadImage",
+          inputs: { image: "location.png" },
+        },
+        "12": {
+          class_type: "IPAdapterUnifiedLoader",
+          inputs: { model: ["4", 0], preset: "PLUS (high strength)" },
+        },
+        "13": {
+          class_type: "IPAdapterAdvanced",
+          inputs: {
+            model: ["12", 0],
+            ipadapter: ["12", 1],
+            image: ["10", 0],
+            weight: 0.58,
+            end_at: 0.78,
+            weight_type: "linear",
+          },
+        },
+        "14": {
+          class_type: "IPAdapterAdvanced",
+          inputs: {
+            model: ["13", 0],
+            ipadapter: ["12", 1],
+            image: ["11", 0],
+            weight: 0.38,
+            end_at: 0.52,
+            weight_type: "style transfer",
+          },
+        },
+      }),
+    };
+
+    const { workflow } = buildPortraitPayload(
+      dualTemplate,
+      JSON.parse(dualTemplate.bindingsJson),
+      { referenceAspectRatio: "16_9" },
+      {
+        prompt: "medium shot in the park",
+        negativePrompt: "bad",
+        seed: 42,
+        referenceImage: "uploaded-character.png",
+        secondaryReferenceImage: "uploaded-location.png",
+      },
+      {
+        dualIpAdapterReframe: {
+          character: "moderate",
+          location: "subtle",
+        },
+      }
+    );
+
+    expect(workflow["10"].inputs.image).toBe("uploaded-character.png");
+    expect(workflow["11"].inputs.image).toBe("uploaded-location.png");
+    expect(workflow["13"].inputs.weight).toBe(0.38);
+    expect(workflow["13"].inputs.end_at).toBe(0.5);
+    expect(workflow["14"].inputs.weight).toBe(0.45);
+    expect(workflow["14"].inputs.end_at).toBe(0.62);
+  });
 });
 
 describe("buildWorkflowPayload shot prompts", () => {

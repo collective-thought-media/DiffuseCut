@@ -62,6 +62,9 @@ function collectBindingNodeIds(bindings: WorkflowBindings): string[] {
   add(bindings.negativePromptNodeId);
   add(bindings.frameCountNodeId);
   add(bindings.referenceImageNodeId);
+  add(bindings.secondaryReferenceImageNodeId);
+  add(bindings.characterIpAdapterNodeId);
+  add(bindings.locationIpAdapterNodeId);
   add(bindings.referenceVideoNodeId);
   add(bindings.seedNodeId);
   bindings.outputNodeIds?.forEach(add);
@@ -438,6 +441,7 @@ export interface PortraitPromptInput {
   negativePrompt?: string;
   seed: number;
   referenceImage?: string;
+  secondaryReferenceImage?: string;
 }
 
 export const CHARACTER_SHEET_LATENT_WIDTH = 1536;
@@ -472,6 +476,19 @@ function applyIpAdapterSettings(
   }
 }
 
+function applyIpAdapterSettingsToNode(
+  workflow: Record<string, WorkflowNode>,
+  nodeId: string | undefined,
+  profile: IpAdapterProfileSettings
+): void {
+  if (!nodeId) return;
+  const node = workflow[nodeId];
+  if (!node || node.class_type !== "IPAdapterAdvanced") return;
+  node.inputs.weight = profile.weight;
+  node.inputs.end_at = profile.endAt;
+  node.inputs.weight_type = profile.weightType;
+}
+
 function applyIpAdapterReframeProfile(
   workflow: Record<string, WorkflowNode>,
   intensity: AnchorReframeIntensity
@@ -493,6 +510,10 @@ export function buildPortraitPayload(
     checkpoint?: string;
     ipAdapterReframe?: AnchorReframeIntensity;
     ipAdapterOverrides?: Pick<IpAdapterProfileSettings, "weight" | "endAt">;
+    dualIpAdapterReframe?: {
+      character?: AnchorReframeIntensity;
+      location?: AnchorReframeIntensity;
+    };
     detailMacro?: boolean;
     detailMacroWidth?: number;
     detailMacroHeight?: number;
@@ -539,6 +560,15 @@ export function buildPortraitPayload(
       mergedBindings.referenceImageNodeId,
       mergedBindings.referenceImageInputKey ?? "image",
       input.referenceImage
+    );
+  }
+
+  if (input.secondaryReferenceImage) {
+    setNodeInput(
+      workflow,
+      mergedBindings.secondaryReferenceImageNodeId,
+      mergedBindings.secondaryReferenceImageInputKey ?? "image",
+      input.secondaryReferenceImage
     );
   }
 
@@ -615,6 +645,33 @@ export function buildPortraitPayload(
   }
 
   if (
+    referenceUsage === "ipadapter" &&
+    input.referenceImage &&
+    input.secondaryReferenceImage &&
+    options?.dualIpAdapterReframe
+  ) {
+    const loaderPreset =
+      IP_ADAPTER_REFRAME_PROFILES.moderate.preset;
+    for (const node of Object.values(workflow)) {
+      if (node.class_type === "IPAdapterUnifiedLoader") {
+        node.inputs.preset = loaderPreset;
+      }
+    }
+    if (options.dualIpAdapterReframe.character) {
+      applyIpAdapterSettingsToNode(
+        workflow,
+        mergedBindings.characterIpAdapterNodeId,
+        IP_ADAPTER_REFRAME_PROFILES[options.dualIpAdapterReframe.character]
+      );
+    }
+    if (options.dualIpAdapterReframe.location) {
+      applyIpAdapterSettingsToNode(
+        workflow,
+        mergedBindings.locationIpAdapterNodeId,
+        IP_ADAPTER_REFRAME_PROFILES[options.dualIpAdapterReframe.location]
+      );
+    }
+  } else if (
     referenceUsage === "ipadapter" &&
     input.referenceImage &&
     options?.ipAdapterOverrides
