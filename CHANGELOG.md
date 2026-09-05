@@ -6,6 +6,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 
 - First `npm start` pins the Next.js project root so a clone under the user home folder does not fail the production build.
 - `npm start` runs `npm install` when project dependencies are missing. Next.js is an npm dependency, not a separate Windows install.
+- SQLite uses `better-sqlite3` 12.9.0, which has Node 24 Windows prebuilds, so a current LTS install does not need Visual Studio C++ tools.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

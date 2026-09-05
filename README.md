@@ -59,6 +59,8 @@ npm start
 
 `npm start` is the production local app. First launch builds the bundle, then serves it without the Next.js developer overlay or hot-reload stack. Open [http://localhost:3004/setup](http://localhost:3004/setup) and work through the checklist.
 
+`npm install` should finish without Visual Studio or C++ build tools. Next.js, SQLite, and the rest of the app come from that command. If install asks for Visual Studio, stop and update this repo. You do not install Next.js as a separate Windows app.
+
 Use `npm run dev` only when you are changing DiffuseCut source code. That mode is slower and shows the developer error overlay.
 
 Copy `.env.example` to `.env` only if you need a non-default port or data folder. Leave `DIFFUSECUT_DATA_DIR` empty to use `Documents/DiffuseCut` on that computer.
