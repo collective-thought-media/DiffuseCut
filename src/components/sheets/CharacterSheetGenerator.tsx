@@ -479,7 +479,7 @@ export function CharacterSheetGenerator({
       : comfyuiOk === false
         ? "ComfyUI is not reachable. Check Settings or System Status."
         : !stackReady
-          ? "Choose a valid image model in the stack below."
+          ? "The image model below is not saved for this project yet. Pick one, then Generate will unlock."
           : batchBusy && !canReplaceBatch
             ? "Wait for the current batch to finish."
             : null;

@@ -47,6 +47,11 @@ export function SheetGenerationControls({
 }: SheetGenerationControlsProps) {
   return (
     <div className="space-y-3">
+      {!ready && readyHint ? (
+        <p className="text-sm text-amber-200/90" role="status">
+          {readyHint}
+        </p>
+      ) : null}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="w-full sm:max-w-[10rem]">
           <Label htmlFor="sample-count">Options per batch</Label>
@@ -67,14 +72,11 @@ export function SheetGenerationControls({
           className="h-10 w-full sm:flex-1"
           onClick={onGenerate}
           disabled={!ready || disabled}
+          title={!ready && readyHint ? readyHint : undefined}
         >
           {generateLabel}
         </Button>
       </div>
-
-      {!ready && readyHint ? (
-        <p className="text-xs text-muted-foreground">{readyHint}</p>
-      ) : null}
 
       {onStillNegativePromptChange ? (
         <div className="space-y-1.5">

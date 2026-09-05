@@ -235,7 +235,7 @@ export async function getGenerationStack(
   let needsCheckpointSelection = availableCheckpoints.length === 0;
   let effectiveImageUnet: string | null = renderSettings.imageUnet?.trim() || null;
 
-  const configuredCheckpoint = renderSettings.checkpoint?.trim() || null;
+  let configuredCheckpoint = renderSettings.checkpoint?.trim() || null;
 
   if (imageEngine === "krea2") {
     needsCheckpointSelection = !krea2Available || !effectiveImageUnet;
@@ -244,20 +244,33 @@ export async function getGenerationStack(
     }
   } else if (availableCheckpoints.length > 0) {
     try {
+      const pool =
+        availableImageCheckpoints.length > 0
+          ? availableImageCheckpoints
+          : availableCheckpoints;
       const resolution = await resolveCheckpoint(
         endpointUrl,
         renderSettings,
-        availableImageCheckpoints.length > 0
-          ? availableImageCheckpoints
-          : availableCheckpoints
+        pool
       );
       effectiveCheckpoint = resolution.checkpoint;
       needsCheckpointSelection =
-        !configuredCheckpoint ||
-        !(availableImageCheckpoints.length > 0
-          ? availableImageCheckpoints
-          : availableCheckpoints
-        ).includes(configuredCheckpoint);
+        !configuredCheckpoint || !pool.includes(configuredCheckpoint);
+      if (needsCheckpointSelection && effectiveCheckpoint) {
+        const updated = withResolvedCheckpoint(
+          renderSettings,
+          effectiveCheckpoint
+        );
+        db.update(schema.projects)
+          .set({
+            renderSettingsJson: JSON.stringify(updated),
+            updatedAt: nowMs(),
+          })
+          .where(eq(schema.projects.id, projectId))
+          .run();
+        configuredCheckpoint = effectiveCheckpoint;
+        needsCheckpointSelection = false;
+      }
     } catch {
       needsCheckpointSelection = true;
     }

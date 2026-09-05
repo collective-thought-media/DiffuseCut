@@ -10,6 +10,10 @@ import {
 } from "@/lib/services/image-checkpoints";
 import { cn } from "@/lib/utils";
 import { parseApiResponse } from "@/lib/parse-api-response";
+import {
+  isImageStackReady,
+  resolvedImageStackCheckpoint,
+} from "@/lib/services/image-stack-ready";
 
 const STACK_EXPANDED_STORAGE_KEY = "diffusecut-generation-stack-expanded";
 
@@ -108,21 +112,7 @@ export function ComfyuiGenerationStack({
       onReadyChangeRef.current?.(false);
       return;
     }
-    const pool =
-      nextStack.availableImageCheckpoints.length > 0
-        ? nextStack.availableImageCheckpoints
-        : nextStack.availableCheckpoints;
-    const usingKrea = nextStack.imageEngine === "krea2";
-    const ready =
-      nextStack.comfyuiReachable &&
-      (usingKrea
-        ? nextStack.krea2Available && Boolean(nextStack.effectiveImageUnet)
-        : pool.length > 0 &&
-          Boolean(
-            nextStack.configuredCheckpoint &&
-              pool.includes(nextStack.configuredCheckpoint)
-          ));
-    onReadyChangeRef.current?.(ready);
+    onReadyChangeRef.current?.(isImageStackReady(nextStack));
   }, []);
 
   const loadStack = useCallback(
@@ -213,7 +203,7 @@ export function ComfyuiGenerationStack({
   const usingKrea = stack.imageEngine === "krea2";
   const checkpointName = usingKrea
     ? stack.effectiveImageUnet ?? "Krea 2 turbo"
-    : stack.configuredCheckpoint ?? stack.effectiveCheckpoint ?? "";
+    : resolvedImageStackCheckpoint(stack) ?? "";
   const loraSummary =
     stack.loras.length > 0
       ? stack.loras.map((lora) => lora.name).join(", ")
@@ -251,7 +241,7 @@ export function ComfyuiGenerationStack({
           ? checkpointName
           : checkpointName && imageCheckpoints.includes(checkpointName)
             ? checkpointName
-            : imageCheckpoints[0] ?? ""
+            : ""
       }
       autoSave
       compact={showCompactSummary}

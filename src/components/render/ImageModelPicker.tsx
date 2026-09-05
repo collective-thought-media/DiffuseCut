@@ -328,6 +328,16 @@ export function ImageModelPicker({
 
       >
 
+        {!selected ? (
+
+          <option value="" disabled>
+
+            Select an image model
+
+          </option>
+
+        ) : null}
+
         {krea2Available && (
 
           <option value={IMAGE_ENGINE_KREA2}>
