@@ -167,29 +167,22 @@ export function RenderJobCenter({
     );
   }
 
-  const media = (() => {
-    if (!selectedDisplay?.playablePath) {
-      return { kind: "none" as const, src: null, cacheKey: null };
-    }
-    const version = previewMediaVersion(selectedDisplay);
-    const lower = selectedDisplay.playablePath.toLowerCase();
-    if (
-      lower.endsWith(".mp4") ||
-      lower.endsWith(".webm") ||
-      lower.endsWith(".mov")
-    ) {
-      return {
-        kind: "video" as const,
-        src: mediaUrl(projectId, selectedDisplay.playablePath, { version }),
-        cacheKey: `${selectedDisplay.shotId}:${selectedDisplay.playablePath}:${version ?? "stable"}`,
-      };
-    }
-    return {
-      kind: "image" as const,
-      src: mediaUrl(projectId, selectedDisplay.playablePath, { version }),
-      cacheKey: `${selectedDisplay.shotId}:${selectedDisplay.playablePath}:${version ?? "stable"}`,
-    };
-  })();
+  const playablePath = selectedDisplay?.playablePath ?? null;
+  const previewVersion = selectedDisplay
+    ? previewMediaVersion(selectedDisplay)
+    : null;
+  const previewSrc = playablePath
+    ? mediaUrl(projectId, playablePath, { version: previewVersion })
+    : null;
+  const previewIsVideo =
+    !!playablePath &&
+    [".mp4", ".webm", ".mov"].some((ext) =>
+      playablePath.toLowerCase().endsWith(ext)
+    );
+  const previewCacheKey =
+    selectedDisplay && playablePath
+      ? `${selectedDisplay.shotId}:${playablePath}:${previewVersion ?? "stable"}`
+      : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
@@ -228,19 +221,19 @@ export function RenderJobCenter({
           )}
 
           <div className="relative aspect-video max-h-[min(42vh,520px)] w-full shrink-0 overflow-hidden rounded-lg bg-black">
-            {media.kind === "video" && media.src ? (
+            {previewSrc && previewIsVideo ? (
               <video
-                key={media.cacheKey ?? media.src}
-                src={media.src}
+                key={previewCacheKey ?? previewSrc}
+                src={previewSrc}
                 controls
                 playsInline
                 className="absolute inset-0 h-full w-full object-contain"
               />
-            ) : media.kind === "image" && media.src ? (
+            ) : previewSrc ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                key={media.cacheKey ?? media.src}
-                src={media.src}
+                key={previewCacheKey ?? previewSrc}
+                src={previewSrc}
                 alt=""
                 className="absolute inset-0 h-full w-full object-contain"
               />

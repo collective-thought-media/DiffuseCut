@@ -9,7 +9,6 @@ import {
 
 function shot(partial: Partial<Shot> & Pick<Shot, "id">): Shot {
   return {
-    id: partial.id,
     projectId: "p1",
     title: partial.title ?? partial.id,
     prompt: "",
@@ -24,14 +23,13 @@ function shot(partial: Partial<Shot> & Pick<Shot, "id">): Shot {
     createdAt: 1,
     updatedAt: 1,
     ...partial,
+    id: partial.id,
   } as Shot;
 }
 
 function job(partial: Partial<RenderJob> & Pick<RenderJob, "id" | "shotId">): RenderJob {
   return {
-    id: partial.id,
     projectId: "p1",
-    shotId: partial.shotId,
     workflowTemplateId: "tpl",
     comfyuiEndpointUrl: "http://127.0.0.1:8188",
     comfyuiPromptId: null,
@@ -51,6 +49,8 @@ function job(partial: Partial<RenderJob> & Pick<RenderJob, "id" | "shotId">): Re
     createdAt: partial.createdAt ?? 1,
     completedAt: partial.completedAt ?? null,
     ...partial,
+    id: partial.id,
+    shotId: partial.shotId,
   } as RenderJob;
 }
 

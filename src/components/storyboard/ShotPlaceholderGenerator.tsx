@@ -116,6 +116,7 @@ interface ShotPlaceholderControlsProps {
   visualStyleJson?: string | null;
   usesReferenceMedia?: boolean;
   usesDualIpAdapter?: boolean;
+  referenceMediaLabel?: string | null;
 }
 
 export function ShotPlaceholderControls({

@@ -76,7 +76,11 @@ function configureFfmpeg(customPath?: string | null): void {
 function runFfmpeg(
   command: ffmpeg.FfmpegCommand,
   options?: {
-    onProgress?: (progress: ffmpeg.FfmpegProgress) => void;
+    onProgress?: (progress: {
+      percent?: number;
+      timemark?: string;
+      frames?: number;
+    }) => void;
   }
 ): Promise<void> {
   return new Promise((resolve, reject) => {

@@ -202,11 +202,11 @@ function isKrea2ImageStack(settings: RenderSettings): boolean {
 function isLtxVideoStack(settings: RenderSettings): boolean {
   if (isMinimaxVideoStack(settings)) return false;
   return (
-    settings.videoUnet?.toLowerCase().includes("ltx") ||
-    settings.videoCheckpoint?.toLowerCase().includes("ltx") ||
-    settings.videoVae?.toLowerCase().includes("ltx") ||
-    settings.videoTextEncoder?.toLowerCase().includes("ltx") ||
-    settings.videoTextEncoder?.toLowerCase().includes("gemma")
+    settings.videoUnet?.toLowerCase().includes("ltx") === true ||
+    settings.videoCheckpoint?.toLowerCase().includes("ltx") === true ||
+    settings.videoVae?.toLowerCase().includes("ltx") === true ||
+    settings.videoTextEncoder?.toLowerCase().includes("ltx") === true ||
+    settings.videoTextEncoder?.toLowerCase().includes("gemma") === true
   );
 }
 

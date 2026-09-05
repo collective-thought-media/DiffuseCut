@@ -16,7 +16,7 @@ import { resolveProjectRoot } from "@/lib/paths/project-paths";
 const execFileAsync = promisify(execFile);
 
 /** Explorer args that open the parent folder and select this file. */
-export function windowsRevealExplorerArgs(filePath: string): string[] {
+function windowsRevealExplorerArgs(filePath: string): string[] {
   return [`/select,${filePath}`];
 }
 

@@ -172,7 +172,9 @@ export function getVisualStyleNegativeExtras(style: VisualStyle): string {
   return getVisualStyleDefinition(style).negativeExtras;
 }
 
-export function mergeNegativePrompts(...parts: (string | undefined)[]): string {
+export function mergeNegativePrompts(
+  ...parts: Array<string | null | undefined>
+): string {
   const seen = new Set<string>();
   const tokens: string[] = [];
   for (const part of parts) {

@@ -115,10 +115,11 @@ export default function FinishingPage({ params }: PageProps) {
             shots?: Shot[];
           };
           if (data.jobs) setJobs(data.jobs);
-          if (data.shots) {
+          const incomingShots = data.shots;
+          if (incomingShots) {
             setShots((prev) => {
-              if (prev.length === 0) return data.shots ?? prev;
-              const incoming = new Map(data.shots.map((shot) => [shot.id, shot]));
+              if (prev.length === 0) return incomingShots;
+              const incoming = new Map(incomingShots.map((shot) => [shot.id, shot]));
               const merged = prev
                 .filter((shot) => incoming.has(shot.id))
                 .map((shot) => {
@@ -152,7 +153,7 @@ export default function FinishingPage({ params }: PageProps) {
                   };
                 });
               const known = new Set(merged.map((shot) => shot.id));
-              const added = data.shots.filter((shot) => !known.has(shot.id));
+              const added = incomingShots.filter((shot) => !known.has(shot.id));
               if (added.length === 0) return merged;
               return [...merged, ...added].sort(
                 (a, b) => a.sortOrder - b.sortOrder
