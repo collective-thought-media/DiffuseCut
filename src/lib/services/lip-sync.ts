@@ -6,6 +6,7 @@ import { getDb } from "@/lib/db";
 import * as schema from "@/lib/db/schema";
 import type { AudioTrack, RenderJob, Shot } from "@/lib/db/schema";
 import { resolveProjectRoot, resolveMediaPath } from "@/lib/paths/project-paths";
+import { resolveFfmpegBinary } from "@/lib/services/ffmpeg-path";
 import { getFfmpegPathSetting } from "@/lib/services/settings";
 import { resolveTrackTiming } from "@/lib/finishing/audio-track-timing";
 import {
@@ -108,9 +109,9 @@ export function getLipSyncDialogText(
 }
 
 async function configureFfmpeg(): Promise<void> {
-  const custom = await getFfmpegPathSetting();
-  if (custom) {
-    ffmpeg.setFfmpegPath(custom);
+  const resolved = await resolveFfmpegBinary(await getFfmpegPathSetting());
+  if (resolved && resolved !== "ffmpeg") {
+    ffmpeg.setFfmpegPath(resolved);
   }
 }
 

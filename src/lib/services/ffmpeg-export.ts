@@ -13,6 +13,7 @@ import {
   totalTimelineFrames as computeTotalTimelineFrames,
 } from "@/lib/timing/frames";
 import { resolveTrackTiming } from "@/lib/finishing/audio-track-timing";
+import { resolveFfmpegBinary } from "@/lib/services/ffmpeg-path";
 import { getFfmpegPathSetting } from "@/lib/services/settings";
 import {
   parseShotRenderOverrides,
@@ -63,13 +64,13 @@ export type ExportProgressCallback = (
   update: ExportProgressUpdate
 ) => void | Promise<void>;
 
-function configureFfmpeg(customPath?: string | null): void {
-  if (customPath) {
-    ffmpeg.setFfmpegPath(customPath);
-    const ffprobePath = customPath.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
-    if (fs.existsSync(ffprobePath)) {
-      ffmpeg.setFfprobePath(ffprobePath);
-    }
+async function configureFfmpeg(customPath?: string | null): Promise<void> {
+  const resolved = await resolveFfmpegBinary(customPath);
+  if (!resolved || resolved === "ffmpeg") return;
+  ffmpeg.setFfmpegPath(resolved);
+  const ffprobePath = resolved.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
+  if (fs.existsSync(ffprobePath)) {
+    ffmpeg.setFfprobePath(ffprobePath);
   }
 }
 
@@ -144,7 +145,7 @@ export async function conformVideoToExactSize(
   width: number,
   height: number
 ): Promise<void> {
-  configureFfmpeg(await getFfmpegPathSetting());
+  await configureFfmpeg(await getFfmpegPathSetting());
   const probed = await probeExportOutputMeta(filePath);
   if (probed.width === width && probed.height === height) return;
 
@@ -290,7 +291,7 @@ export async function runExport(
     throw new Error(`Project not found: ${projectId}`);
   }
 
-  configureFfmpeg(await getFfmpegPathSetting());
+  await configureFfmpeg(await getFfmpegPathSetting());
 
   const fps = settings.fps ?? project.defaultFps;
   const frameSize = resolveOutputFrameSize(

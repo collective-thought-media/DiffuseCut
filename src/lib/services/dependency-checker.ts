@@ -18,6 +18,10 @@ import {
   getModels,
   normalizeUrl,
 } from "@/lib/services/comfyui-client";
+import {
+  ffprobeBeside,
+  resolveFfmpegBinary,
+} from "@/lib/services/ffmpeg-path";
 import { getScoreAudioSourceStatus } from "@/lib/services/score-audio-source";
 import { getAceStepComputeStatus } from "@/lib/services/ace-step-compute";
 import {
@@ -127,8 +131,27 @@ async function loadComfyModelFolders(baseUrl: string): Promise<ComfyModelFolders
 }
 
 async function checkFfmpeg(customPath?: string | null): Promise<DependencyStatus> {
-  const ffmpegBin = customPath || "ffmpeg";
   const lastCheckedAt = Date.now();
+  const ffmpegBin = await resolveFfmpegBinary(customPath);
+  if (!ffmpegBin) {
+    return {
+      id: "ffmpeg",
+      label: "FFmpeg + ffprobe",
+      status: "missing",
+      requiredFor: ["export"],
+      message: customPath
+        ? `FFmpeg not found at ${customPath}`
+        : "FFmpeg not found on PATH. After winget, close this terminal, open a new one, and run npm start. Or set Settings, FFmpeg path.",
+      installHint: platformHint({
+        win: "winget install Gyan.FFmpeg, then start DiffuseCut from a new terminal",
+        mac: "brew install ffmpeg",
+        linux: "sudo apt install ffmpeg",
+      }),
+      docsUrl: "https://ffmpeg.org/download.html",
+      lastCheckedAt,
+    };
+  }
+
   try {
     const { stdout } = await execFileAsync(ffmpegBin, ["-version"], {
       timeout: 5000,
@@ -136,19 +159,23 @@ async function checkFfmpeg(customPath?: string | null): Promise<DependencyStatus
     const versionLine = stdout.split("\n")[0] ?? "FFmpeg detected";
     let ffprobeOk = true;
     try {
-      const ffprobeBin = customPath
-        ? customPath.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1")
-        : "ffprobe";
+      const ffprobeBin =
+        ffmpegBin === "ffmpeg" ? "ffprobe" : ffprobeBeside(ffmpegBin);
       await execFileAsync(ffprobeBin, ["-version"], { timeout: 5000 });
     } catch {
       ffprobeOk = false;
     }
+    const foundOffPath = ffmpegBin !== "ffmpeg" && !customPath;
     return {
       id: "ffmpeg",
       label: "FFmpeg + ffprobe",
       status: ffprobeOk ? "ok" : "warning",
       requiredFor: ["export"],
-      message: ffprobeOk ? versionLine : "FFmpeg found but ffprobe missing",
+      message: ffprobeOk
+        ? foundOffPath
+          ? `${versionLine} (found at ${ffmpegBin})`
+          : versionLine
+        : "FFmpeg found but ffprobe missing",
       installHint: platformHint({
         win: "winget install Gyan.FFmpeg, or download from https://ffmpeg.org",
         mac: "brew install ffmpeg",
@@ -168,7 +195,7 @@ async function checkFfmpeg(customPath?: string | null): Promise<DependencyStatus
         ? `FFmpeg not found at ${customPath}`
         : "FFmpeg not found on PATH",
       installHint: platformHint({
-        win: "winget install Gyan.FFmpeg",
+        win: "winget install Gyan.FFmpeg, then start DiffuseCut from a new terminal",
         mac: "brew install ffmpeg",
         linux: "sudo apt install ffmpeg",
       }),

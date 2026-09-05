@@ -8,6 +8,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - `npm start` runs `npm install` when project dependencies are missing. Next.js is an npm dependency, not a separate Windows install.
 - SQLite uses `better-sqlite3` 12.9.0, which has Node 24 Windows prebuilds, so a current LTS install does not need Visual Studio C++ tools.
 - First production build typecheck now passes. The export reveal helper is no longer an illegal route export.
+- Setup re-reads the Windows PATH and looks in WinGet folders for FFmpeg, so a winget install does not stay missing until a new terminal.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

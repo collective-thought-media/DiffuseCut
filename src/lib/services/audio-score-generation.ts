@@ -4,6 +4,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import ffmpeg from "fluent-ffmpeg";
 import { generateAceStepAudioFile } from "@/lib/services/ace-step-audio-generation";
+import { resolveFfmpegBinary } from "@/lib/services/ffmpeg-path";
 import { getFfmpegPathSetting, getSetting } from "@/lib/services/settings";
 import { resolveScoreGenerationProvider } from "@/lib/services/score-audio-source";
 import { ensureDir } from "@/lib/paths/app-paths";
@@ -13,16 +14,15 @@ const ELEVENLABS_MAX_SECONDS = 22;
 const execFileAsync = promisify(execFile);
 
 async function configureFfmpeg(): Promise<void> {
-  const custom = await getFfmpegPathSetting();
-  if (custom) {
-    ffmpeg.setFfmpegPath(custom);
+  const resolved = await resolveFfmpegBinary(await getFfmpegPathSetting());
+  if (resolved && resolved !== "ffmpeg") {
+    ffmpeg.setFfmpegPath(resolved);
   }
 }
 
 async function getConfiguredFfmpegPath(): Promise<string> {
-  await configureFfmpeg();
-  const custom = await getFfmpegPathSetting();
-  if (custom?.trim()) return custom.trim();
+  const resolved = await resolveFfmpegBinary(await getFfmpegPathSetting());
+  if (resolved) return resolved;
   return "ffmpeg";
 }
 

@@ -10,6 +10,33 @@ const isProd = process.argv.includes("--production");
 const shouldClean = process.argv.includes("--clean");
 const port = process.env.PORT ?? "3004";
 
+function refreshWindowsPath() {
+  if (process.platform !== "win32") return;
+  try {
+    const extra = execSync(
+      "powershell -NoProfile -Command \"[Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [Environment]::GetEnvironmentVariable('Path','User')\"",
+      { encoding: "utf8" }
+    ).trim();
+    if (!extra) return;
+    const parts = [...(process.env.PATH ?? "").split(";"), ...extra.split(";")]
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const seen = new Set();
+    const merged = [];
+    for (const part of parts) {
+      const key = part.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(part);
+    }
+    process.env.PATH = merged.join(";");
+  } catch {
+    /* keep the process PATH */
+  }
+}
+
+refreshWindowsPath();
+
 function resolveAppDataDir() {
   if (process.env.DIFFUSECUT_DATA_DIR) return process.env.DIFFUSECUT_DATA_DIR;
   const home = process.env.USERPROFILE ?? process.env.HOME ?? os.homedir();

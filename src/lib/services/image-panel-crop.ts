@@ -4,6 +4,7 @@ import path from "path";
 
 import ffmpeg from "fluent-ffmpeg";
 
+import { resolveFfmpegBinary } from "@/lib/services/ffmpeg-path";
 import { getFfmpegPathSetting } from "@/lib/services/settings";
 
 
@@ -16,19 +17,19 @@ const DEFAULT_PAD_COLOR = "0x808080";
 
 
 
-function configureFfmpeg(customPath?: string | null): void {
+async function configureFfmpeg(customPath?: string | null): Promise<void> {
 
-  if (customPath) {
+  const resolved = await resolveFfmpegBinary(customPath);
 
-    ffmpeg.setFfmpegPath(customPath);
+  if (!resolved || resolved === "ffmpeg") return;
 
-    const ffprobePath = customPath.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
+  ffmpeg.setFfmpegPath(resolved);
 
-    if (fs.existsSync(ffprobePath)) {
+  const ffprobePath = resolved.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
 
-      ffmpeg.setFfprobePath(ffprobePath);
+  if (fs.existsSync(ffprobePath)) {
 
-    }
+    ffmpeg.setFfprobePath(ffprobePath);
 
   }
 
@@ -78,7 +79,7 @@ export async function cropImagePanel(
 
   const ffmpegPath = await getFfmpegPathSetting();
 
-  configureFfmpeg(ffmpegPath);
+  await configureFfmpeg(ffmpegPath);
 
   fs.mkdirSync(path.dirname(destAbs), { recursive: true });
 
@@ -136,7 +137,7 @@ export async function cropAndPadImagePanel(
 
   const ffmpegPath = await getFfmpegPathSetting();
 
-  configureFfmpeg(ffmpegPath);
+  await configureFfmpeg(ffmpegPath);
 
   fs.mkdirSync(path.dirname(destAbs), { recursive: true });
 

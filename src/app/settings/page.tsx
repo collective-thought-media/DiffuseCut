@@ -272,7 +272,7 @@ export default function SettingsPage() {
               id="ffmpeg-path"
               value={ffmpegPath}
               onChange={(e) => setFfmpegPath(e.target.value)}
-              placeholder="Leave empty to use PATH"
+              placeholder="Leave empty to use PATH or a winget install"
             />
           </div>
 

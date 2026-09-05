@@ -17,15 +17,16 @@ import {
   resolveOutputFrameSize,
 } from "@/lib/services/export-filters";
 import { parseProjectRenderSettings } from "@/lib/services/render-settings-resolver";
+import { resolveFfmpegBinary } from "@/lib/services/ffmpeg-path";
 import { getFfmpegPathSetting } from "@/lib/services/settings";
 import { nowMs } from "@/lib/utils";
 
-function configureFfmpeg(customPath?: string | null): void {
-  if (customPath) {
-    ffmpeg.setFfmpegPath(customPath);
-    const ffprobePath = customPath.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
-    ffmpeg.setFfprobePath(ffprobePath);
-  }
+async function configureFfmpeg(customPath?: string | null): Promise<void> {
+  const resolved = await resolveFfmpegBinary(customPath);
+  if (!resolved || resolved === "ffmpeg") return;
+  ffmpeg.setFfmpegPath(resolved);
+  const ffprobePath = resolved.replace(/ffmpeg(\.exe)?$/i, "ffprobe$1");
+  ffmpeg.setFfprobePath(ffprobePath);
 }
 
 function probeDurationFrames(
@@ -99,7 +100,7 @@ export async function installShotRenderVideo(options: {
   );
   const absolutePath = path.join(projectRoot, relativePath);
 
-  configureFfmpeg(await getFfmpegPathSetting());
+  await configureFfmpeg(await getFfmpegPathSetting());
   const fps = shot.fps ?? project.defaultFps ?? 24;
   const durationFrames =
     (await probeDurationFrames(absolutePath, fps)) ?? shot.durationFrames;
