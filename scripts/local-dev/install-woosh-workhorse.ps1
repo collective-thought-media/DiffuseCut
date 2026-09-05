@@ -1,7 +1,6 @@
-# Install ComfyUI-Woosh + minimum T2A models on workhorse (192.168.1.7).
-# Run on workhorse: powershell -NoProfile -ExecutionPolicy Bypass -File install-woosh-workhorse.ps1
-# From desk via SSH:
-#   ssh chris@192.168.1.7 "powershell -NoProfile -ExecutionPolicy Bypass -File M:/ComfyUI/_agent/install-woosh-workhorse.ps1"
+# Install ComfyUI-Woosh + minimum T2A models on a remote ComfyUI host.
+# Run on that host: powershell -NoProfile -ExecutionPolicy Bypass -File install-woosh-workhorse.ps1
+# Edit $AppRoot / $ModelsRoot below to match the ComfyUI layout on that machine.
 
 $ErrorActionPreference = "Stop"
 $AppRoot = "M:\ComfyUI\app"
@@ -104,10 +103,7 @@ if (Test-Path $appWoosh) {
   cmd /c mklink /J "$appWoosh" "$modelsWoosh" | Out-Null
 }
 
-$startScript = "M:\ComfyUI\_agent\restart-comfy-workhorse.ps1"
-if (-not (Test-Path $startScript)) {
-  $startScript = "G:\CTM\control-gate\scripts\comfy\workhorse\wmi-start-comfy-custom-nodes.ps1"
-}
+$startScript = Join-Path $AppRoot "..\_agent\restart-comfy-workhorse.ps1"
 if (Test-Path $startScript) {
   Log "restart ComfyUI via $startScript"
   & powershell -NoProfile -ExecutionPolicy Bypass -File $startScript

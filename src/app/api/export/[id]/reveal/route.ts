@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import fs from "fs";
 import path from "path";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { eq } from "drizzle-orm";
 import {
@@ -14,6 +14,28 @@ import { getDb, schema } from "@/lib/db";
 import { resolveProjectRoot } from "@/lib/paths/project-paths";
 
 const execFileAsync = promisify(execFile);
+
+/** Explorer args that open the parent folder and select this file. */
+export function windowsRevealExplorerArgs(filePath: string): string[] {
+  return [`/select,${filePath}`];
+}
+
+/**
+ * Open Explorer on the file. Hide the cmd helper window only.
+ * explorer.exe itself must stay visible, and it often exits 1 after success.
+ */
+function revealWindowsFile(filePath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(
+      "cmd.exe",
+      ["/c", "start", "", "explorer.exe", ...windowsRevealExplorerArgs(filePath)],
+      { detached: true, stdio: "ignore", windowsHide: true }
+    );
+    child.once("error", reject);
+    child.unref();
+    resolve();
+  });
+}
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -61,9 +83,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
           windowsHide: true,
         });
       } else {
-        await execFileAsync("explorer.exe", [`/select,${absolutePath}`], {
-          windowsHide: true,
-        });
+        await revealWindowsFile(absolutePath);
       }
     } else if (process.platform === "darwin") {
       if (action === "open") {

@@ -2,7 +2,7 @@
 
 Last updated: 2026-09-03  
 Primary dev port: **3004**  
-Reference test project: **Demon's Ascent** (`FpszjyqoP6T4V5NUzFW4A`)
+Reference test project: create a new local project for QA. Do not rely on another machine's database.
 
 This document captures what we have built so far, what we learned while building it, and where we are in the linear pipeline walk (Dashboard → Export). It is meant for maintainers and future contributors, not end-user install docs (see root `README.md` for that).
 
@@ -10,7 +10,7 @@ This document captures what we have built so far, what we learned while building
 
 ## Product vision (why this exists)
 
-DiffuseCut is a **local-first, open-source** pre-production and generation pipeline for AI filmmakers. The browser UI runs on the editing machine (`localhost:3004`). ComfyUI runs locally or on a LAN GPU host (for example a 3090 workhorse at `http://192.168.1.7:8188`). FFmpeg handles final mux/export.
+DiffuseCut is a **local-first, open-source** pre-production and generation pipeline for AI filmmakers. The browser UI runs on the editing machine (`localhost:3004`). ComfyUI runs locally or on a LAN GPU host (for example `http://127.0.0.1:8188` or `http://your-comfy-host:8188`). FFmpeg handles final mux/export.
 
 The design goal is **headless ComfyUI**: import API workflows once, bind nodes, then drive checkpoint/LoRA/prompt/render queue from DiffuseCut without opening the native ComfyUI UI for day-to-day work.
 
@@ -216,7 +216,7 @@ We have been working roughly in this order. Below: what exists, what we QA'd in 
   - **Dialog** — voiceover tracks (same editor layout, different copy/kind filter)
 - Volume label: **Volume (0 to 1)** with live percent readout
 - Title case on tab labels and section headings
-- Audio: **ACE-Step 1.5 on ComfyUI** (primary for Chris's workhorse), **ElevenLabs** optional, **Epidemic Sound upload** always available
+- Audio: **ACE-Step 1.5 on ComfyUI**, **ElevenLabs** optional, **Epidemic Sound upload** always available
 
 **QA confidence:** Medium–high for playback and trim (implemented + unit tests). Audio generation: ACE-Step wiring new; ElevenLabs path previously hit "no key" before ACE-Step was added.
 
@@ -284,7 +284,7 @@ What Setup now verifies against **bundled workflows** and Finishing:
 | ACE-Step 1.5 nodes + checkpoint | Finishing score generation |
 | Score audio summary | ACE-Step / Epidemic upload / ElevenLabs |
 
-Chris's workhorse pattern: ComfyUI on **3090** with IP-Adapter, LTX 2.3, and ACE-Step 1.5 (`ace_step_1.5_turbo_aio.safetensors`) aligned with existing Control Gate / Hits80s scripts.
+Typical GPU host stack: ComfyUI with IP-Adapter, LTX 2.3, and ACE-Step 1.5 (`ace_step_1.5_turbo_aio.safetensors`).
 
 ---
 

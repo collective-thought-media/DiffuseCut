@@ -37,6 +37,8 @@ import {
   ShotReferenceInfoPanel,
 } from "@/components/storyboard/ShotPlaceholderGenerator";
 import { MediaPanel } from "@/components/sheets/MediaPanel";
+import { InstallShotClip } from "@/components/storyboard/InstallShotClip";
+import { downloadStoryboardPacket } from "@/lib/storyboard-download";
 import { useDebouncedSave, type DebouncedSaveContext } from "@/lib/hooks/useDebouncedSave";
 import { useSyncedEditableFields } from "@/lib/hooks/useSyncedEditableFields";
 import {
@@ -93,6 +95,8 @@ export default function StoryboardPage({ params }: PageProps) {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exportingBoard, setExportingBoard] = useState(false);
+  const [exportingShot, setExportingShot] = useState(false);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedShot = shots.find((s) => s.id === selectedShotId) ?? null;
@@ -448,6 +452,21 @@ export default function StoryboardPage({ params }: PageProps) {
 
   const { schedule, saving, saved } = useDebouncedSave(saveShot);
 
+  async function handleExportStoryboard(shotId?: string) {
+    const setBusy = shotId ? setExportingShot : setExportingBoard;
+    setBusy(true);
+    setError(null);
+    try {
+      await downloadStoryboardPacket(projectId, shotId);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Could not export storyboard"
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading storyboard…</p>;
   }
@@ -462,7 +481,17 @@ export default function StoryboardPage({ params }: PageProps) {
             timeline.
           </p>
         </div>
-        <Button onClick={() => void handleAddShot()}>Add shot</Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={exportingBoard || shots.length === 0}
+            onClick={() => void handleExportStoryboard()}
+          >
+            {exportingBoard ? "Exporting…" : "Export storyboard"}
+          </Button>
+          <Button onClick={() => void handleAddShot()}>Add shot</Button>
+        </div>
       </div>
 
       {error && (
@@ -523,15 +552,26 @@ export default function StoryboardPage({ params }: PageProps) {
         >
           <div className="grid items-stretch gap-6 lg:grid-cols-2">
             <Card className="mb-0 flex h-full flex-col space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="entity-card-subheader">Shot Editor</h2>
-              {saving ? (
-                <Badge variant="warning">Saving…</Badge>
-              ) : saved ? (
-                <Badge variant="success">Saved</Badge>
-              ) : (
-                <Badge>Unsaved</Badge>
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={exportingShot}
+                  onClick={() => void handleExportStoryboard(selectedShot.id)}
+                >
+                  {exportingShot ? "Exporting…" : "Export this shot"}
+                </Button>
+                {saving ? (
+                  <Badge variant="warning">Saving…</Badge>
+                ) : saved ? (
+                  <Badge variant="success">Saved</Badge>
+                ) : (
+                  <Badge>Unsaved</Badge>
+                )}
+              </div>
             </div>
             <ShotTextFields
               shotId={selectedShot.id}
@@ -787,6 +827,29 @@ export default function StoryboardPage({ params }: PageProps) {
               }
               usesDualIpAdapter={shotReferenceMeta.usesDualIpAdapter}
             />
+            <div className="border-t border-neutral-800 pt-4">
+              <InstallShotClip
+                projectId={projectId}
+                shotId={selectedShot.id}
+                onInstalled={(shot) => {
+                  setShots((prev) =>
+                    prev.map((item) =>
+                      item.id === shot.id
+                        ? {
+                            ...item,
+                            videoPath: shot.videoPath,
+                            renderStatus: shot.renderStatus,
+                            durationFrames: shot.durationFrames,
+                            trimInFrames: shot.trimInFrames,
+                            trimOutFrames: shot.trimOutFrames,
+                            updatedAt: shot.updatedAt,
+                          }
+                        : item
+                    )
+                  );
+                }}
+              />
+            </div>
           </Card>
           </div>
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AudioTrack, Shot } from "@/lib/db/schema";
+import type { AudioTrack, RenderJob, Shot } from "@/lib/db/schema";
 import { FinishingTimeline } from "@/components/finishing/FinishingTimeline";
 import {
   FinishingDeskTabs,
@@ -16,6 +16,7 @@ import {
 } from "@/components/export/OverlayEditor";
 import type { TrimUpdateOptions } from "@/components/export/TrimEditor";
 import { Badge, Card } from "@/components/ui/button";
+import { InstallShotClip } from "@/components/storyboard/InstallShotClip";
 import { clampTrim, trimPreviewFrameInShot } from "@/lib/finishing/trim";
 import {
   mergeShotRenderOverrides,
@@ -36,6 +37,7 @@ type PageProps = { params: Promise<{ projectId: string }> };
 export default function FinishingPage({ params }: PageProps) {
   const { projectId } = use(params);
   const [shots, setShots] = useState<Shot[]>([]);
+  const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [overlays, setOverlays] = useState<TextOverlayDraft[]>([]);
   const [audioTracks, setAudioTracks] = useState<AudioTrack[]>([]);
   const [fps, setFps] = useState(24);
@@ -97,6 +99,86 @@ export default function FinishingPage({ params }: PageProps) {
   useEffect(() => {
     void loadAll();
   }, [loadAll]);
+
+  useEffect(() => {
+    let es: EventSource | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let closed = false;
+
+    const connect = () => {
+      if (closed) return;
+      es = new EventSource(`/api/render-jobs/stream?projectId=${projectId}`);
+      es.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data) as {
+            jobs?: RenderJob[];
+            shots?: Shot[];
+          };
+          if (data.jobs) setJobs(data.jobs);
+          if (data.shots) {
+            setShots((prev) => {
+              if (prev.length === 0) return data.shots ?? prev;
+              const incoming = new Map(data.shots.map((shot) => [shot.id, shot]));
+              const merged = prev
+                .filter((shot) => incoming.has(shot.id))
+                .map((shot) => {
+                  const next = incoming.get(shot.id);
+                  if (!next) return shot;
+                  if (
+                    next.videoPath === shot.videoPath &&
+                    next.renderStatus === shot.renderStatus &&
+                    next.updatedAt === shot.updatedAt &&
+                    next.trimInFrames === shot.trimInFrames &&
+                    next.trimOutFrames === shot.trimOutFrames &&
+                    next.durationFrames === shot.durationFrames &&
+                    next.title === shot.title &&
+                    next.sortOrder === shot.sortOrder
+                  ) {
+                    return shot;
+                  }
+                  return {
+                    ...shot,
+                    title: next.title,
+                    videoPath: next.videoPath,
+                    renderStatus: next.renderStatus,
+                    renderJobId: next.renderJobId,
+                    updatedAt: next.updatedAt,
+                    durationFrames: next.durationFrames,
+                    trimInFrames: next.trimInFrames,
+                    trimOutFrames: next.trimOutFrames,
+                    sortOrder: next.sortOrder,
+                    placeholderPath: next.placeholderPath,
+                    placeholderKind: next.placeholderKind,
+                  };
+                });
+              const known = new Set(merged.map((shot) => shot.id));
+              const added = data.shots.filter((shot) => !known.has(shot.id));
+              if (added.length === 0) return merged;
+              return [...merged, ...added].sort(
+                (a, b) => a.sortOrder - b.sortOrder
+              );
+            });
+          }
+        } catch {
+          /* ignore malformed events */
+        }
+      };
+      es.onerror = () => {
+        es?.close();
+        es = null;
+        if (!closed) {
+          reconnectTimer = setTimeout(connect, 2000);
+        }
+      };
+    };
+
+    connect();
+    return () => {
+      closed = true;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      es?.close();
+    };
+  }, [projectId]);
 
   useEffect(() => {
     return () => {
@@ -399,6 +481,20 @@ export default function FinishingPage({ params }: PageProps) {
         />
       </section>
 
+      {selectedShotId ? (
+        <Card className="mb-0 space-y-0 p-4">
+          <InstallShotClip
+            projectId={projectId}
+            shotId={selectedShotId}
+            onInstalled={(shot) => {
+              setShots((prev) =>
+                prev.map((item) => (item.id === shot.id ? { ...item, ...shot } : item))
+              );
+            }}
+          />
+        </Card>
+      ) : null}
+
       <section className="space-y-3">
         <FinishingDeskTabs
           activeTab={activeDeskTab}
@@ -418,6 +514,7 @@ export default function FinishingPage({ params }: PageProps) {
               projectId={projectId}
               tracks={audioTracks}
               shots={shots}
+              jobs={jobs}
               totalFrames={totalFrames}
               fps={fps}
               currentFrame={currentFrame}
@@ -438,6 +535,7 @@ export default function FinishingPage({ params }: PageProps) {
               projectId={projectId}
               tracks={audioTracks}
               shots={shots}
+              jobs={jobs}
               totalFrames={totalFrames}
               fps={fps}
               currentFrame={currentFrame}

@@ -11,10 +11,6 @@ export default function ExportPage({ params }: PageProps) {
   const { projectId } = use(params);
   const [shots, setShots] = useState<Shot[]>([]);
   const [fps, setFps] = useState(24);
-  const [configuredSize, setConfiguredSize] = useState<{
-    width: number | null;
-    height: number | null;
-  }>({ width: null, height: null });
   const [activeJob, setActiveJob] = useState<ExportJob | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,17 +33,6 @@ export default function ExportPage({ params }: PageProps) {
       if (!shotsRes.ok) throw new Error(shotsData.error);
 
       setFps(projData.project.defaultFps ?? 24);
-      try {
-        const renderSettings = JSON.parse(
-          projData.project.renderSettingsJson || "{}"
-        ) as { videoWidth?: number; videoHeight?: number };
-        setConfiguredSize({
-          width: renderSettings.videoWidth ?? null,
-          height: renderSettings.videoHeight ?? null,
-        });
-      } catch {
-        setConfiguredSize({ width: null, height: null });
-      }
       setShots(shotsData.shots ?? []);
 
       const jobs = (exportsData.jobs ?? []) as ExportJob[];
@@ -107,8 +92,6 @@ export default function ExportPage({ params }: PageProps) {
         renderedCount={renderedCount}
         shotCount={shots.length}
         initialJob={activeJob}
-        configuredWidth={configuredSize.width}
-        configuredHeight={configuredSize.height}
       />
     </div>
   );

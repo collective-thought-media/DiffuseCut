@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { RenderJob, Shot } from "@/lib/db/schema";
-import { deriveShotRenderDisplay, previewMediaVersion } from "@/lib/render-shot-display";
+import {
+  deriveShotRenderDisplay,
+  displayIsLipSync,
+  previewMediaVersion,
+  shotDisplayStatusLabel,
+} from "@/lib/render-shot-display";
 
 function shot(partial: Partial<Shot> & Pick<Shot, "id">): Shot {
   return {
@@ -158,5 +163,30 @@ describe("render-shot-display", () => {
     expect(display.showingPriorRender).toBe(true);
     expect(previewMediaVersion(display)).toBe(completedAt);
     expect(previewMediaVersion(display)).not.toBe(5000);
+  });
+
+  it("labels a completed lip sync job separately from a regular render", () => {
+    const display = deriveShotRenderDisplay(
+      shot({
+        id: "s5",
+        videoPath: "renders/lipsync.mp4",
+        renderStatus: "done",
+      }),
+      [
+        job({
+          id: "j-lip",
+          shotId: "s5",
+          status: "completed",
+          outputPath: "renders/lipsync.mp4",
+          lipSyncAudioPath: "audio/lipsync/s5.wav",
+          createdAt: 4,
+        }),
+      ]
+    );
+
+    expect(displayIsLipSync(display)).toBe(true);
+    expect(
+      shotDisplayStatusLabel(display.displayStatus, { lipSync: true })
+    ).toBe("lip synced");
   });
 });

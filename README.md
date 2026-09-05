@@ -1,6 +1,10 @@
 # DiffuseCut
 
-Local-first pre-production and generation pipeline for AI filmmakers. Storyboard → ComfyUI batch render → FFmpeg export — all from your browser at `localhost`.
+**0.1.0-alpha.1** (first tester cut)
+
+Local-first pre-production and generation pipeline for AI filmmakers. Storyboard, ComfyUI batch render, and FFmpeg export from your browser at `http://localhost:3004`.
+
+A fresh clone on another computer does not use this machine, its LAN, or anyone else's projects. App data lives under that user's Documents folder. ComfyUI is whatever URL you type in Settings (default `http://127.0.0.1:8188`).
 
 ## Prerequisites
 
@@ -11,7 +15,7 @@ Local-first pre-production and generation pipeline for AI filmmakers. Storyboard
 | Writable app data dir | Always | Auto-created |
 | FFmpeg + ffprobe | Export | No |
 | ComfyUI server | Render | No |
-| SDXL checkpoints on ComfyUI | Character & location sheets | No |
+| SDXL checkpoints on ComfyUI | Character and location sheets | No |
 | IP-Adapter nodes + weights | Anchored location angles (recommended) | No |
 | LTX 2.3 nodes + models | Default shot video workflow | No |
 | Qwen Image Edit 2511 + Lightning LoRA | Scene edit shot mode and instruction edits (optional) | No |
@@ -21,17 +25,21 @@ Local-first pre-production and generation pipeline for AI filmmakers. Storyboard
 
 `npm install` does **not** install FFmpeg, ComfyUI, ML models, or music licenses.
 
-## Quick start
+## Quick start (fresh machine)
 
 ```bash
-git clone <your-repo-url> DiffuseCut
+git clone https://github.com/collective-thought-media/DiffuseCut.git
 cd DiffuseCut
 npm install
-npm run doctor    # check dependencies
-npm run dev       # http://localhost:3004
+npm run doctor
+npm run dev
 ```
 
-Open [http://localhost:3004/setup](http://localhost:3004/setup) on first run to review the dependency checklist.
+Then open [http://localhost:3004/setup](http://localhost:3004/setup) and work through the checklist.
+
+Copy `.env.example` to `.env` only if you need a non-default port or data folder. Leave `DIFFUSECUT_DATA_DIR` empty to use `Documents/DiffuseCut` on that computer.
+
+Create a new project on the laptop. Do not copy another machine's `diffusecut.db` unless you also copy that machine's project folders.
 
 ## Installing FFmpeg
 
@@ -47,26 +55,27 @@ If FFmpeg is installed but not on PATH, set the path in **Settings → FFmpeg pa
 
 ComfyUI is a separate install. See [ComfyUI on GitHub](https://github.com/comfyanonymous/ComfyUI).
 
-Start with network listen for LAN rendering:
+Start it locally, or on another machine you control:
 
 ```bash
 python main.py --listen 0.0.0.0 --port 8188
 ```
 
-Configure the URL in **Settings** or per-project **Render machines** (supports multiple endpoints, e.g. `:8188` and `:8189`).
+In DiffuseCut, set **Settings → ComfyUI endpoints** to `http://127.0.0.1:8188` for same-machine, or `http://your-comfy-host:8188` for a GPU box on your network.
 
 ## Workflow
 
-1. **Pre-Production** — Project logline, character & location sheets (image or video refs)
-2. **Storyboard** — Frame-quantized timeline, shot list, animatic preview
-3. **Render** — Import ComfyUI API workflow, bind nodes, queue shots, live progress
-4. **Export** — Trim, captions/credits, FFmpeg final MP4
+1. **Pre-Production.** Project logline, character and location sheets (image or video refs).
+2. **Storyboard.** Frame-quantized timeline, shot list, animatic preview. Export a still packet, or install a clip from another video tool.
+3. **Render.** Import a ComfyUI API workflow, bind nodes, queue shots, live progress.
+4. **Finishing.** Trim, captions, score, dialog, and SFX.
+5. **Export.** FFmpeg final MP4 at the project output size.
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Next.js on port 3004 + background worker |
+| `npm run dev` | Next.js on port 3004 plus background worker |
 | `npm run doctor` | CLI dependency checklist |
 | `npm run build` | Production build |
 | `npm run typecheck` | TypeScript check |
@@ -74,14 +83,14 @@ Configure the URL in **Settings** or per-project **Render machines** (supports m
 
 ## E2E eval
 
-For a frontier-agent or Grokbot-driven end-to-end pass (create project, touch every major surface, render 1 to 2 shots, export final video), see [`doc/E2E-AGENT-PLAYBOOK.md`](doc/E2E-AGENT-PLAYBOOK.md). Run `npm run eval:journey` after `npm run dev` and `npm run doctor`. Reports are written under your app data folder in `eval-runs/`.
+For a frontier-agent end-to-end pass (create project, touch every major surface, render 1 to 2 shots, export final video), see [`doc/E2E-AGENT-PLAYBOOK.md`](doc/E2E-AGENT-PLAYBOOK.md). Run `npm run eval:journey` after `npm run dev` and `npm run doctor`. Reports are written under your app data folder in `eval-runs/`.
 
 ## Data locations
 
 - **App data:** `%USERPROFILE%/Documents/DiffuseCut/` (Windows) or `~/Documents/DiffuseCut/`
 - **Projects:** `{appData}/projects/{slug}/`
-- Override via Settings or per-project root path
+- Override via Settings, `.env`, or a per-project root path
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).

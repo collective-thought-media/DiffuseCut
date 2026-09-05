@@ -100,9 +100,15 @@ import {
   BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID,
   BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
 } from "@/lib/db/seed-builtin-templates";
+import { resolveOutputFrameSize } from "@/lib/services/export-filters";
 import { computeIntegrateSubjectMaskBox } from "@/lib/integrate-subject-mask";
 import { readImageDimensions } from "@/lib/services/image-dimensions";
-import { runExport, type ExportSettings } from "@/lib/services/ffmpeg-export";
+import {
+  conformVideoToExactSize,
+  isVideoRenderFile,
+  runExport,
+  type ExportSettings,
+} from "@/lib/services/ffmpeg-export";
 import { formatComfyuiError } from "@/lib/services/comfyui-errors";
 import {
   ensureProjectStillImageSettings,
@@ -113,10 +119,14 @@ import {
   resolveCheckpointForIpAdapter,
   shortCheckpointLabel,
 } from "@/lib/services/image-checkpoints";
-import { hydrateProjectRenderSettings } from "@/lib/services/render-settings-resolver";
+import {
+  hydrateProjectRenderSettings,
+  parseProjectRenderSettings,
+} from "@/lib/services/render-settings-resolver";
 import {
   buildLipSyncShotPrompt,
   getLipSyncDialogText,
+  LIP_SYNC_SEED,
 } from "@/lib/services/lip-sync";
 import { buildShotCharacterLookSuffix, resolveCharacterStateForCast } from "@/lib/services/character-states";
 import { parseVisualStyle } from "@/lib/services/visual-style";
@@ -637,6 +647,11 @@ async function startRenderJob(job: RenderJob): Promise<void> {
         persist: true,
         updateAppDefaults: true,
       });
+    // Lip sync articulation is seed sensitive; pin the proven seed so a
+    // random seed can't silently render a closed mouth (see LIP_SYNC_SEED).
+    const settingsForJob = job.lipSyncAudioPath
+      ? { ...resolvedSettings, seedMode: "fixed" as const, seed: LIP_SYNC_SEED }
+      : resolvedSettings;
     const uploadedRefs = await collectUploadedRefs(job, job.comfyuiEndpointUrl);
 
     const fps = project.defaultFps ?? 24;
@@ -644,7 +659,7 @@ async function startRenderJob(job: RenderJob): Promise<void> {
     const { workflow, clientId } = buildWorkflowPayload(
       template,
       JSON.parse(template.bindingsJson || "{}"),
-      resolvedSettings,
+      settingsForJob,
       styledShot,
       uploadedRefs,
       {
@@ -841,6 +856,17 @@ async function finalizeRenderJob(job: RenderJob): Promise<void> {
     const absoluteOutput = path.join(dirs.renders, fileName);
 
     await downloadOutput(job.comfyuiEndpointUrl, output, absoluteOutput);
+
+    const frameSize = resolveOutputFrameSize(
+      parseProjectRenderSettings(project.renderSettingsJson)
+    );
+    if (frameSize && isVideoRenderFile(absoluteOutput)) {
+      await conformVideoToExactSize(
+        absoluteOutput,
+        frameSize.width,
+        frameSize.height
+      );
+    }
 
     const projectRoot = resolveProjectRoot(project);
     const relativeOutput = path

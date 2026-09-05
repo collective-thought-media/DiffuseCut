@@ -20,10 +20,14 @@ import {
 } from "@/lib/shot-render-overrides";
 import { listTextOverlays } from "@/lib/services/text-overlays";
 import {
+  buildExactSizeVideoFilter,
   buildExportAudioMixGraph,
   buildOverlayDrawtextFilters,
   EXPORT_LOUDNORM_FILTER,
+  resolveOutputFrameSize,
 } from "@/lib/services/export-filters";
+import { parseProjectRenderSettings } from "@/lib/services/render-settings-resolver";
+import { writeSilentWav } from "@/lib/services/silent-wav";
 
 /** Bundled font used to burn text overlays into the export. */
 export function resolveExportOverlayFontPath(): string {
@@ -119,6 +123,53 @@ export interface ExportOutputMeta {
   audioSource: "shots" | "shots+tracks" | "none";
 }
 
+const VIDEO_RENDER_EXTENSIONS = new Set([
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".mkv",
+]);
+
+export function isVideoRenderFile(filePath: string): boolean {
+  return VIDEO_RENDER_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+/** Re-encode a render so it matches the project output size exactly. */
+export async function conformVideoToExactSize(
+  filePath: string,
+  width: number,
+  height: number
+): Promise<void> {
+  configureFfmpeg(await getFfmpegPathSetting());
+  const probed = await probeExportOutputMeta(filePath);
+  if (probed.width === width && probed.height === height) return;
+
+  const tempPath = `${filePath}.conform-${width}x${height}.mp4`;
+  const hasAudio = await probeHasAudioStream(filePath).catch(() => false);
+  const command = ffmpeg(filePath).videoFilters(
+    buildExactSizeVideoFilter(width, height)
+  );
+  const outputOptions = [
+    "-map",
+    "0:v:0",
+    "-c:v",
+    "libx264",
+    "-crf",
+    "16",
+    "-pix_fmt",
+    "yuv420p",
+  ];
+  if (hasAudio) {
+    outputOptions.push("-map", "0:a:0", "-c:a", "copy");
+  } else {
+    outputOptions.push("-an");
+  }
+
+  await runFfmpeg(command.outputOptions(outputOptions).output(tempPath));
+  fs.rmSync(filePath, { force: true });
+  fs.renameSync(tempPath, filePath);
+}
+
 export function probeExportOutputMeta(
   filePath: string
 ): Promise<{ width: number | null; height: number | null; durationSeconds: number | null }> {
@@ -162,7 +213,8 @@ async function trimClip(
   startSec: number,
   durationSec: number,
   fps: number,
-  audio: "source" | "silent"
+  audio: "source" | "silent",
+  frameSize?: { width: number; height: number } | null
 ): Promise<void> {
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
 
@@ -170,13 +222,21 @@ async function trimClip(
   // demuxer sees consistent streams whether shots keep or mute their audio.
   let command = ffmpeg(inputPath).setStartTime(startSec);
   const outputOptions = ["-r", String(fps), "-vsync", "cfr"];
+  if (frameSize) {
+    command = command.videoFilters(
+      buildExactSizeVideoFilter(frameSize.width, frameSize.height)
+    );
+  }
 
   if (audio === "source") {
     outputOptions.push("-map", "0:v:0", "-map", "0:a:0", "-af", "apad");
   } else {
-    command = command
-      .input("anullsrc=channel_layout=stereo:sample_rate=48000")
-      .inputFormat("lavfi");
+    // fluent-ffmpeg rejects -f lavfi on FFmpeg 8 because it no longer
+    // parses the device-flag column in `ffmpeg -formats`. A real silent
+    // WAV avoids that check and works on any build.
+    const silencePath = outputPath.replace(/(\.[^.]+)?$/, "-silence.wav");
+    writeSilentWav(silencePath, durationSec + 0.05);
+    command = command.input(silencePath);
     outputOptions.push("-map", "0:v:0", "-map", "1:a:0");
   }
 
@@ -229,6 +289,9 @@ export async function runExport(
   configureFfmpeg(await getFfmpegPathSetting());
 
   const fps = settings.fps ?? project.defaultFps;
+  const frameSize = resolveOutputFrameSize(
+    parseProjectRenderSettings(project.renderSettingsJson)
+  );
   const dirs = ensureProjectDirs(project);
   const projectRoot = resolveProjectRoot(project);
 
@@ -363,7 +426,8 @@ export async function runExport(
         startSec,
         durationSec,
         fps,
-        sourceHasAudio ? "source" : "silent"
+        sourceHasAudio ? "source" : "silent",
+        frameSize
       );
       clips.push(clipPath);
 

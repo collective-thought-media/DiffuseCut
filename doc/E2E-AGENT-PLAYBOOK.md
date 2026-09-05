@@ -185,13 +185,13 @@ You are running the DiffuseCut representative E2E eval.
 Read doc/E2E-AGENT-PLAYBOOK.md first.
 
 Rules:
-- Create a NEW isolated project only. Never edit Lisa or Demon's Ascent fixtures.
+- Create a NEW isolated project only. Never edit other projects already on the machine.
 - Do NOT test diptych/triptych panel split or "Use this design (front + back)". That feature is in progress. Use full-image select-sheet only.
 - Start with: npm run doctor && npm run eval:journey -- --runner fable --model "Fable"
 - If the harness fails one step, fix or document, then continue manually via API/browser until export MP4 exists.
 - Fill the quality rubric in the eval report when done.
 
-Dev server should already be on http://localhost:3004 with worker. ComfyUI is on the LAN workhorse.
+Dev server should already be on http://localhost:3004 with worker. ComfyUI is the URL in Settings.
 ```
 
 ---

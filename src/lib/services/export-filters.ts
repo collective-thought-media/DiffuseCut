@@ -7,6 +7,34 @@
 export const EXPORT_LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1.5:LRA=11";
 
 /**
+ * Cover-and-crop a clip to an exact frame size so the deliverable matches
+ * the project output width and height, even when a model wrote a nearby size.
+ */
+export function buildExactSizeVideoFilter(
+  width: number,
+  height: number
+): string {
+  return `scale=${width}:${height}:force_original_aspect_ratio=increase,crop=${width}:${height}`;
+}
+
+export function resolveOutputFrameSize(settings: {
+  videoWidth?: number;
+  videoHeight?: number;
+}): { width: number; height: number } | null {
+  const width = Number(settings.videoWidth);
+  const height = Number(settings.videoHeight);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width < 64 ||
+    height < 64
+  ) {
+    return null;
+  }
+  return { width: Math.round(width), height: Math.round(height) };
+}
+
+/**
  * Escape a user string for use inside a single-quoted drawtext text value
  * within an ffmpeg filtergraph.
  */

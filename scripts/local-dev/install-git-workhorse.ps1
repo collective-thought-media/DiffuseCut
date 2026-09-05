@@ -1,8 +1,6 @@
-# Install Git for Windows on the ComfyUI workhorse (3090 LAN box).
-# Run ON the workhorse:
+# Install Git for Windows on a remote ComfyUI host.
+# Run on that host:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File install-git-workhorse.ps1
-# From desk via SSH:
-#   ssh chris@192.168.1.7 "winget install --id Git.Git -e --source winget --accept-package-agreements --accept-source-agreements"
 
 $ErrorActionPreference = "Stop"
 $Log = "M:\ComfyUI\_agent\install-git.log"

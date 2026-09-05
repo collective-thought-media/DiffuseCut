@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { DependencyStatus } from "@/types";
 import { DependencyChecklist } from "@/components/setup/DependencyChecklist";
 import { Button, Card, Badge } from "@/components/ui/button";
+import { APP_VERSION } from "@/lib/app-version";
 
 export default function SetupPage() {
   const [deps, setDeps] = useState<DependencyStatus[]>([]);
@@ -57,9 +58,10 @@ export default function SetupPage() {
       <div>
         <h1 className="text-2xl font-semibold">System Status</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Live health check for DiffuseCut, ComfyUI, FFmpeg, and optional
-          workflow stacks (SDXL sheets, IP-Adapter, LTX, MiniMax, ACE-Step).
-          Re-check after you install models or change endpoints.
+          DiffuseCut {APP_VERSION}. Live health check for DiffuseCut, ComfyUI,
+          FFmpeg, and optional workflow stacks (SDXL sheets, IP-Adapter, LTX,
+          MiniMax, ACE-Step). Re-check after you install models or change
+          endpoints.
         </p>
       </div>
 

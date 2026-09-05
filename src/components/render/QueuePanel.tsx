@@ -3,6 +3,7 @@
 import type { RenderJob, Shot } from "@/lib/db/schema";
 import {
   deriveShotRenderDisplay,
+  displayIsLipSync,
   shotDisplayStatusLabel,
   shotDisplayStatusVariant,
   shotHasActiveRenderJob,
@@ -83,6 +84,7 @@ export function QueuePanel({
             const label = shotDisplayStatusLabel(display.displayStatus, {
               showingPriorRender: display.showingPriorRender,
               activeJobStatus: display.activeJob?.status,
+              lipSync: displayIsLipSync(display),
             });
             const badgeVariant =
               display.showingPriorRender &&

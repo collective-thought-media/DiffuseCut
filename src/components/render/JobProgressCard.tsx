@@ -128,6 +128,11 @@ export function JobProgressCard({
         <div className="flex items-center justify-between gap-2">
           <p className="truncate text-sm font-medium">
             {shotTitle ?? job.shotId}
+            {job.lipSyncAudioPath ? (
+              <span className="ml-2 text-[11px] font-normal text-sky-300">
+                Lip sync
+              </span>
+            ) : null}
           </p>
           <Badge variant={statusVariant(job.status)} className="shrink-0">
             {renderJobStatusLabel(job.status)}
@@ -154,7 +159,14 @@ export function JobProgressCard({
     <Card className="space-y-3">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="font-medium">{shotTitle ?? job.shotId}</p>
+          <p className="font-medium">
+            {shotTitle ?? job.shotId}
+            {job.lipSyncAudioPath ? (
+              <span className="ml-2 text-xs font-normal text-sky-300">
+                Lip sync
+              </span>
+            ) : null}
+          </p>
           <p className="text-xs text-muted-foreground">
             {job.comfyuiEndpointUrl}
           </p>

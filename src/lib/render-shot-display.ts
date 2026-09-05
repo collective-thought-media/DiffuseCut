@@ -123,10 +123,44 @@ export function shotHasActiveRenderJob(
   return getActiveJobForShot(shotId, jobs) != null;
 }
 
+export function isLipSyncJob(job: RenderJob | null | undefined): boolean {
+  return Boolean(job?.lipSyncAudioPath);
+}
+
+export function displayIsLipSync(display: ShotRenderDisplay): boolean {
+  return (
+    isLipSyncJob(display.activeJob) ||
+    (!display.activeJob && isLipSyncJob(display.latestJob))
+  );
+}
+
 export function shotDisplayStatusLabel(
   status: ShotRenderDisplayStatus,
-  options?: { showingPriorRender?: boolean; activeJobStatus?: RenderJob["status"] }
+  options?: {
+    showingPriorRender?: boolean;
+    activeJobStatus?: RenderJob["status"];
+    lipSync?: boolean;
+  }
 ): string {
+  if (options?.lipSync) {
+    if (options.showingPriorRender) {
+      if (options.activeJobStatus === "running") return "lip syncing";
+      if (options.activeJobStatus === "queued") return "lip sync queued";
+    }
+    switch (status) {
+      case "rendered":
+        return "lip synced";
+      case "rendering":
+        return "lip syncing";
+      case "queued":
+        return "lip sync queued";
+      case "failed":
+        return "lip sync failed";
+      default:
+        return "pending";
+    }
+  }
+
   if (options?.showingPriorRender) {
     if (options.activeJobStatus === "running") return "re-rendering";
     if (options.activeJobStatus === "queued") return "re-queue";

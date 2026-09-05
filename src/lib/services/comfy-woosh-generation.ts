@@ -111,7 +111,7 @@ export async function generateComfyWooshSfxFile(options: {
   const ready = await isComfyWooshAvailable(baseUrl);
   if (!ready) {
     throw new Error(
-      `ComfyUI at ${baseUrl} does not have ComfyUI-Woosh installed. Run scripts/local-dev/install-woosh-workhorse.ps1 on the GPU box.`
+      `ComfyUI at ${baseUrl} does not have ComfyUI-Woosh installed.`
     );
   }
 

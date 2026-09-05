@@ -43,6 +43,8 @@ next-env.d.ts
 # local scratch and export artifacts
 /scratch/
 /preview-exports/
+.tmp-*
+eval-journey-run.log
 
 # typescript build info
 tsconfig.tsbuildinfo

@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
-import type { AudioTrack, Shot } from "@/lib/db/schema";
+import type { AudioTrack, RenderJob, Shot } from "@/lib/db/schema";
+import { isLipSyncJob } from "@/lib/render-shot-display";
 import {
   applySpanModeToTrack,
   AUDIO_SPAN_MODES,
@@ -36,6 +37,7 @@ interface AudioTrackEditorProps {
   currentFrame?: number;
   onChange: (tracks: AudioTrack[]) => void;
   variant?: "score" | "dialog";
+  jobs?: RenderJob[];
 }
 
 const KINDS = ["music", "voiceover", "sfx"] as const;
@@ -105,6 +107,7 @@ export function AudioTrackEditor({
   currentFrame = 0,
   onChange,
   variant = "score",
+  jobs = [],
 }: AudioTrackEditorProps) {
   const config = VARIANT_CONFIG[variant];
   const visibleTracks = tracks.filter((track) => track.kind === config.kind);
@@ -113,7 +116,22 @@ export function AudioTrackEditor({
   const [lipSyncBusy, setLipSyncBusy] = useState(false);
   const [lipSyncMessage, setLipSyncMessage] = useState<string | null>(null);
   const [lipSyncTarget, setLipSyncTarget] = useState<string>("");
+  const [watchedLipSyncJobIds, setWatchedLipSyncJobIds] = useState<string[]>(
+    []
+  );
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const watchedLipSyncJobs = useMemo(() => {
+    const wanted = new Set(watchedLipSyncJobIds);
+    return jobs
+      .filter((job) => wanted.has(job.id) && isLipSyncJob(job))
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [jobs, watchedLipSyncJobIds]);
+
+  const lipSyncProgressJob =
+    watchedLipSyncJobs.find(
+      (job) => job.status === "running" || job.status === "queued"
+    ) ?? watchedLipSyncJobs[0] ?? null;
 
   const dialogCoveredShots = useMemo(() => {
     if (variant !== "dialog") return [];
@@ -321,9 +339,16 @@ export function AudioTrackEditor({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Lip sync render failed");
-      const count = data.jobs?.length ?? 0;
+      const queuedJobs = (data.jobs ?? []) as RenderJob[];
+      setWatchedLipSyncJobIds(queuedJobs.map((job) => job.id));
+      const count = queuedJobs.length;
+      const firstTitle =
+        shots.find((shot) => shot.id === queuedJobs[0]?.shotId)?.title?.trim() ||
+        "the selected shot";
       setLipSyncMessage(
-        `Queued ${count} lip sync ${count === 1 ? "clip" : "clips"}. Watch progress on the storyboard or render queue, then come back here to preview.`
+        count === 1
+          ? `Lip sync queued for ${firstTitle}. Stay on this page. Progress shows below, and the timeline swaps the clip when it finishes.`
+          : `Queued ${count} lip sync clips. Stay on this page. Progress shows below, and the timeline swaps each clip when it finishes.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Lip sync render failed");
@@ -738,10 +763,10 @@ export function AudioTrackEditor({
             Re-render every shot covered by a dialog track using the
             audio-conditioned LTX workflow. Each clip gets only the portion of
             the dialog that plays during it, plus speech direction in the
-            prompt, so mouths match the words. Works best when the speaker
+            prompt,             so mouths match the words. Works best when the speaker
             faces the camera in a medium shot or closer. In wide shots the face
-            is too small for visible lip movement. Renders replace the shot
-            videos when they finish.
+            is too small for visible lip movement. The timeline updates in
+            place when a take finishes.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <Select
@@ -771,6 +796,34 @@ export function AudioTrackEditor({
           </div>
           {lipSyncMessage && (
             <p className="text-xs text-emerald-400">{lipSyncMessage}</p>
+          )}
+          {lipSyncProgressJob && (
+            <div className="space-y-1">
+              <div className="h-1.5 overflow-hidden rounded-full bg-neutral-800">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{
+                    width: `${Math.round(
+                      (lipSyncProgressJob.status === "completed"
+                        ? 1
+                        : lipSyncProgressJob.progress) * 100
+                    )}%`,
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {lipSyncProgressJob.status === "queued"
+                  ? "Lip sync queued on ComfyUI…"
+                  : lipSyncProgressJob.status === "running"
+                    ? `Lip syncing ${Math.round(lipSyncProgressJob.progress * 100)}%`
+                    : lipSyncProgressJob.status === "completed"
+                      ? "Lip sync finished. The timeline now plays this take."
+                      : lipSyncProgressJob.status === "failed"
+                        ? (lipSyncProgressJob.errorMessage ??
+                          "Lip sync failed.")
+                        : lipSyncProgressJob.statusMessage}
+              </p>
+            </div>
           )}
         </Card>
       )}

@@ -109,9 +109,9 @@ The old Export page showed **"Export started."** and stopped. Root cause: API re
 | Musical score | 1 track, ACE-Step generated |
 | SFX | 9 per-shot tracks; shots 4 & 5 include lightning strike layer (regenerated with synthetic crack) |
 | Export | At least one successful `export-*-audio.mp4` in `exports/` |
-| ComfyUI workhorse | `http://192.168.1.7:8188` (Woosh, LTX, ACE-Step) |
+| ComfyUI | URL from Settings (default `http://127.0.0.1:8188`) |
 
-Project files on disk: `%USERPROFILE%/Documents/DiffuseCut/projects/demon-s-ascent-Fpszjy/`
+Project files on disk: `%USERPROFILE%/Documents/DiffuseCut/projects/{slug}/`
 
 ---
 

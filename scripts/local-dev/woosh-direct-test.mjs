@@ -3,7 +3,7 @@
  * Usage: node scripts/local-dev/woosh-direct-test.mjs
  *
  * Env:
- *   WOOSH_COMFY_URL  default http://192.168.1.7:8188
+ *   WOOSH_COMFY_URL  default http://127.0.0.1:8188
  *   WOOSH_PROMPT     text prompt
  *   WOOSH_FRAMES     latent_frames (100 frames ~ 1s)
  *   WOOSH_SEED       optional seed
@@ -15,7 +15,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
-const BASE_URL = process.env.WOOSH_COMFY_URL ?? "http://192.168.1.7:8188";
+const BASE_URL = process.env.WOOSH_COMFY_URL ?? "http://127.0.0.1:8188";
 const PROMPT =
   process.env.WOOSH_PROMPT ??
   "fast UI swoosh, short whoosh transition, clean digital";

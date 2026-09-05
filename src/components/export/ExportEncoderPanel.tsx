@@ -12,9 +12,6 @@ type ExportEncoderPanelProps = {
   renderedCount: number;
   shotCount: number;
   initialJob?: ExportJob | null;
-  /** Configured render size, used to flag when the encoder output differs. */
-  configuredWidth?: number | null;
-  configuredHeight?: number | null;
 };
 
 type ExportOutputMeta = {
@@ -63,8 +60,6 @@ export function ExportEncoderPanel({
   renderedCount,
   shotCount,
   initialJob = null,
-  configuredWidth = null,
-  configuredHeight = null,
 }: ExportEncoderPanelProps) {
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [job, setJob] = useState<ExportJob | null>(initialJob);
@@ -322,27 +317,11 @@ export function ExportEncoderPanel({
                   );
                   parts.push(`audio: ${audioSourceLabel(meta.audioSource)}`);
 
-                  const sizeDiffers =
-                    meta.width != null &&
-                    meta.height != null &&
-                    configuredWidth != null &&
-                    configuredHeight != null &&
-                    (meta.width !== configuredWidth ||
-                      meta.height !== configuredHeight);
-
                   return (
                     <div className="space-y-1 pt-1">
                       <p className="text-xs text-muted-foreground">
                         {parts.join(" · ")}
                       </p>
-                      {sizeDiffers ? (
-                        <p className="text-xs text-amber-400">
-                          Output is {meta.width}x{meta.height}, while the
-                          configured render size is {configuredWidth}x
-                          {configuredHeight}. The video model rounds to its
-                          supported dimensions.
-                        </p>
-                      ) : null}
                     </div>
                   );
                 })()

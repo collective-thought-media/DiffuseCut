@@ -1,8 +1,5 @@
-# Start ACE-Step OpenRouter API on the workhorse (3090 LAN box).
-# Run ON the workhorse, or from desk via SSH:
-#   ssh chris@192.168.1.7 "powershell -NoProfile -ExecutionPolicy Bypass -File G:/CTM/DarkLabResearch/DiffuseCut/scripts/local-dev/start-ace-step-api-workhorse.ps1"
-#
-# DiffuseCut Settings: remote URL http://192.168.1.7:8002
+# Start ACE-Step OpenRouter API on a remote GPU host.
+# Run on that host. Point DiffuseCut Settings at http://your-comfy-host:8002
 
 param(
   [string]$InstallDir = "M:\ACE-Step-1.5",

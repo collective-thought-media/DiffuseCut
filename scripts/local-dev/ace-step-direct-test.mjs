@@ -1,5 +1,5 @@
 /**
- * ACE-Step direct test using Control Gate proven settings on workhorse.
+ * ACE-Step direct test against a local ComfyUI endpoint.
  * Usage: node scripts/local-dev/ace-step-direct-test.mjs
  */
 import fs from "fs";
@@ -8,7 +8,7 @@ import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, "../..");
-const BASE_URL = "http://192.168.1.7:8188";
+const BASE_URL = process.env.COMFYUI_URL ?? "http://127.0.0.1:8188";
 
 const CHECKPOINT = "ace_step_1.5_turbo_aio.safetensors";
 const DURATION_SEC = 60;

@@ -39,6 +39,15 @@ export interface LipSyncShotPlan {
 }
 
 /**
+ * Seed used for lip sync renders. LTX 2.3 IA2V mouth articulation is highly
+ * seed sensitive: with identical image, audio, and prompt, some seeds render
+ * a closed mouth for the whole clip while others articulate every word. This
+ * seed has repeatedly produced correct lip sync in side-by-side tests where
+ * other seeds froze, so lip sync jobs pin it instead of using a random seed.
+ */
+export const LIP_SYNC_SEED = 424242;
+
+/**
  * Build the prompt for a lip sync render. LTX 2.3 IA2V only produces mouth
  * movement when the prompt LEADS with the speech act; a static scene
  * description first (with a speech clause appended) renders a closed mouth.

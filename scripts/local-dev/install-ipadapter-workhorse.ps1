@@ -1,5 +1,6 @@
-# Install ComfyUI_IPAdapter_plus + SDXL weights on workhorse (192.168.1.7).
-# Run on workhorse: powershell -NoProfile -ExecutionPolicy Bypass -File install-ipadapter-workhorse.ps1
+# Install ComfyUI_IPAdapter_plus + SDXL weights on a remote ComfyUI host.
+# Run on that host: powershell -NoProfile -ExecutionPolicy Bypass -File install-ipadapter-workhorse.ps1
+# Edit $AppRoot / $ModelsRoot below to match the ComfyUI layout on that machine.
 
 $ErrorActionPreference = "Stop"
 $AppRoot = "M:\ComfyUI\app"
@@ -94,7 +95,7 @@ if ($clipSize -lt 2000000000) {
 }
 
 Log "restart Comfy with custom nodes"
-$startScript = "G:\CTM\control-gate\scripts\comfy\workhorse\wmi-start-comfy-custom-nodes.ps1"
+$startScript = Join-Path $AppRoot "..\_agent\restart-comfy-workhorse.ps1"
 if (Test-Path $startScript) {
   & powershell -NoProfile -ExecutionPolicy Bypass -File $startScript
   if ($LASTEXITCODE -ne 0) { throw "Comfy restart failed exit=$LASTEXITCODE" }

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildExactSizeVideoFilter,
   buildExportAudioMixGraph,
   buildOverlayDrawtextFilters,
   escapeDrawtextFontPath,
   escapeDrawtextText,
   EXPORT_LOUDNORM_FILTER,
+  resolveOutputFrameSize,
 } from "@/lib/services/export-filters";
 
 describe("escapeDrawtextText", () => {
@@ -87,5 +89,28 @@ describe("buildExportAudioMixGraph", () => {
       "[0:a:0]amix=inputs=1:duration=first[mixed]",
       `[mixed]${EXPORT_LOUDNORM_FILTER}[aout]`,
     ]);
+  });
+});
+
+describe("buildExactSizeVideoFilter", () => {
+  it("covers and crops to the requested output size", () => {
+    expect(buildExactSizeVideoFilter(1920, 1080)).toBe(
+      "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080"
+    );
+  });
+});
+
+describe("resolveOutputFrameSize", () => {
+  it("returns the project output size when both sides are valid", () => {
+    expect(
+      resolveOutputFrameSize({ videoWidth: 1920, videoHeight: 1080 })
+    ).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it("rejects incomplete or tiny sizes", () => {
+    expect(resolveOutputFrameSize({ videoWidth: 1920 })).toBeNull();
+    expect(
+      resolveOutputFrameSize({ videoWidth: 32, videoHeight: 18 })
+    ).toBeNull();
   });
 });

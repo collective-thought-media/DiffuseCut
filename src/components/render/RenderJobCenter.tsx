@@ -4,6 +4,8 @@ import { useEffect, useMemo } from "react";
 import type { RenderJob, Shot } from "@/lib/db/schema";
 import {
   deriveShotRenderDisplay,
+  displayIsLipSync,
+  isLipSyncJob,
   previewMediaVersion,
   shotDisplayStatusLabel,
   shotDisplayStatusVariant,
@@ -60,6 +62,7 @@ function displayLabel(display: ShotRenderDisplay): string {
   return shotDisplayStatusLabel(display.displayStatus, {
     showingPriorRender: display.showingPriorRender,
     activeJobStatus: display.activeJob?.status,
+    lipSync: displayIsLipSync(display),
   });
 }
 
@@ -91,7 +94,7 @@ function jobForCard(display: ShotRenderDisplay): RenderJob | null {
       ...job,
       progress: 1,
       status: "completed",
-      statusMessage: "Completed",
+      statusMessage: isLipSyncJob(job) ? "Lip sync complete" : "Completed",
     };
   }
 
