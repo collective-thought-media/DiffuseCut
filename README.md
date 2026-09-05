@@ -32,10 +32,12 @@ git clone https://github.com/collective-thought-media/DiffuseCut.git
 cd DiffuseCut
 npm install
 npm run doctor
-npm run dev
+npm start
 ```
 
-Then open [http://localhost:3004/setup](http://localhost:3004/setup) and work through the checklist.
+`npm start` is the production local app. First launch builds the bundle, then serves it without the Next.js developer overlay or hot-reload stack. Open [http://localhost:3004/setup](http://localhost:3004/setup) and work through the checklist.
+
+Use `npm run dev` only when you are changing DiffuseCut source code. That mode is slower and shows the developer error overlay.
 
 Copy `.env.example` to `.env` only if you need a non-default port or data folder. Leave `DIFFUSECUT_DATA_DIR` empty to use `Documents/DiffuseCut` on that computer.
 
@@ -75,9 +77,10 @@ In DiffuseCut, set **Settings → ComfyUI endpoints** to `http://127.0.0.1:8188`
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | Next.js on port 3004 plus background worker |
+| `npm start` | Production local app on port 3004 plus worker (what testers should run) |
 | `npm run doctor` | CLI dependency checklist |
-| `npm run build` | Production build |
+| `npm run build` | Production build (also happens automatically on first `npm start`) |
+| `npm run dev` | Developer hot-reload stack. Not for everyday use. |
 | `npm run typecheck` | TypeScript check |
 | `npm run eval:journey` | Representative full-user E2E eval (see `doc/E2E-AGENT-PLAYBOOK.md`) |
 

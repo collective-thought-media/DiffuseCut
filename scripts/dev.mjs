@@ -54,16 +54,40 @@ if (shouldClean) {
   }
 }
 
+function hasProductionBuild() {
+  return (
+    fs.existsSync(path.join(root, ".next", "BUILD_ID")) &&
+    fs.existsSync(path.join(root, ".next", "required-server-files.json"))
+  );
+}
+
+if (isProd) {
+  process.env.NODE_ENV = "production";
+  if (!hasProductionBuild()) {
+    console.log("[app] Building the production app. This can take a few minutes the first time.");
+    execSync("npx next build", { cwd: root, stdio: "inherit", shell: true });
+  }
+  console.log("[app] Starting DiffuseCut in production mode on port", port);
+} else {
+  console.log("[app] Starting DiffuseCut in developer mode on port", port);
+}
+
 const nextCmd = isProd ? "start" : "dev";
 const nextArgs = isProd
   ? ["next", nextCmd, "-p", port]
   : ["next", nextCmd, "-p", port, "--turbo"];
 
+const nextEnv = {
+  ...process.env,
+  PORT: port,
+  NODE_ENV: isProd ? "production" : process.env.NODE_ENV,
+};
+
 const next = spawn("npx", nextArgs, {
   cwd: root,
   stdio: "inherit",
   shell: true,
-  env: { ...process.env, PORT: port },
+  env: nextEnv,
 });
 
 let worker = null;
@@ -77,7 +101,9 @@ function startWorker() {
     cwd: root,
     stdio: "inherit",
     shell: true,
-    env: process.env,
+    env: isProd
+      ? { ...process.env, NODE_ENV: "production" }
+      : process.env,
   });
 
   worker.on("exit", (code) => {

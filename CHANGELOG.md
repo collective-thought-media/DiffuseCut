@@ -8,3 +8,4 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Show in folder opens Explorer and selects the file.
 - Storyboard packet export (stills plus shot notes) for outside video tools.
 - Install clip attaches an outside video to a shot as the finished render.
+- `npm start` launches the production local app (no Next.js developer overlay). Use `npm run dev` only while editing source.
