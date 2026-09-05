@@ -25,7 +25,7 @@ describe("parseVisualStyle", () => {
 describe("buildCharacterSheetPromptTemplate with visual style", () => {
   it("uses photoreal theme by default", () => {
     const prompt = buildCharacterSheetPromptTemplate("Aria", "Pilot", DEFAULT_VISUAL_STYLE);
-    expect(prompt.toLowerCase()).toContain("canon eos 5d mark iii");
+    expect(prompt.toLowerCase()).toContain("50mm lens");
     expect(prompt.toLowerCase()).not.toContain("animation character");
   });
 

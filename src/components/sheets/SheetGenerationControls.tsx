@@ -17,8 +17,11 @@ interface SheetGenerationControlsProps {
   previewError?: string | null;
   stillNegativePrompt?: string;
   onStillNegativePromptChange?: (value: string) => void;
+  extraNegativeLabel?: string;
+  extraNegativePlaceholder?: string;
   onGenerate: () => void;
   previewDisabled?: boolean;
+  previewEmptyHint?: string;
 }
 
 export function SheetGenerationControls({
@@ -36,8 +39,11 @@ export function SheetGenerationControls({
   previewError = null,
   stillNegativePrompt,
   onStillNegativePromptChange,
+  extraNegativeLabel = "Extra negative prompt (this generation)",
+  extraNegativePlaceholder = "Optional. Appended to this generation's negatives only.",
   onGenerate,
   previewDisabled = false,
+  previewEmptyHint = "No preview text returned. Check the description and try again.",
 }: SheetGenerationControlsProps) {
   return (
     <div className="space-y-3">
@@ -60,7 +66,7 @@ export function SheetGenerationControls({
           type="button"
           className="h-10 w-full sm:flex-1"
           onClick={onGenerate}
-          disabled={!ready}
+          disabled={!ready || disabled}
         >
           {generateLabel}
         </Button>
@@ -72,14 +78,12 @@ export function SheetGenerationControls({
 
       {onStillNegativePromptChange ? (
         <div className="space-y-1.5">
-          <Label htmlFor="still-negative-prompt">
-            Extra negative prompt (this shot)
-          </Label>
+          <Label htmlFor="extra-negative-prompt">{extraNegativeLabel}</Label>
           <Textarea
-            id="still-negative-prompt"
+            id="extra-negative-prompt"
             value={stillNegativePrompt ?? ""}
             onChange={(e) => onStillNegativePromptChange(e.target.value)}
-            placeholder="Optional. Appended to this shot's still generation negatives only."
+            placeholder={extraNegativePlaceholder}
             rows={2}
             className="text-sm"
             disabled={disabled}
@@ -120,9 +124,7 @@ export function SheetGenerationControls({
               ) : null}
             </>
           ) : (
-            <p className="text-muted-foreground">
-              No preview text returned. Check the shot prompt and try again.
-            </p>
+            <p className="text-muted-foreground">{previewEmptyHint}</p>
           )}
         </div>
       ) : null}

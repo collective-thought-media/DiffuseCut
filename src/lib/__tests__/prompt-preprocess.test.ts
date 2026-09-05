@@ -43,10 +43,23 @@ describe("buildCharacterSheetPromptTemplate", () => {
       "Blonde woman in a green dress",
       { preset: "photoreal_cinematic" }
     );
-    expect(prompt.toLowerCase()).toContain("casting reference photograph");
-    expect(prompt.toLowerCase()).toContain("single subject");
-    expect(prompt.toLowerCase()).toContain("canon eos 5d mark iii");
+    expect(prompt.toLowerCase()).toContain("single photograph");
+    expect(prompt.toLowerCase()).toContain("one person");
+    expect(prompt.toLowerCase()).toContain("16:9");
     expect(prompt.toLowerCase()).not.toContain("front view, back view");
+  });
+
+  it("uses front+back diptych layout when requested", () => {
+    const prompt = buildCharacterSheetPromptTemplate(
+      "Mira",
+      "Olive trench coat, dark jeans, black boots",
+      { preset: "photoreal_cinematic" },
+      { frontBackDiptych: true }
+    );
+    expect(prompt.toLowerCase()).toContain("two panels");
+    expect(prompt.toLowerCase()).toContain("left panel");
+    expect(prompt.toLowerCase()).toContain("right panel");
+    expect(prompt.toLowerCase()).not.toContain("not diptych");
   });
 });
 
@@ -66,8 +79,37 @@ describe("finalizeCharacterSheetPrompt", () => {
       "Blonde woman in a green dress",
       { preset: "photoreal_cinematic" }
     );
-    expect(prompt.toLowerCase()).toContain("casting reference photograph");
-    expect(prompt.toLowerCase()).toContain("not a turnaround sheet");
+    expect(prompt.toLowerCase()).toContain("single photograph");
+    expect(prompt.toLowerCase()).toContain("one person");
+  });
+
+  it("appends layout prefix when draft omits casting guards", () => {
+    const llmLike =
+      "Live-action casting reference photograph of a punk woman, single subject, full body head to toe, studded leather vest.";
+    const prompt = finalizeCharacterSheetPrompt(llmLike, {
+      preset: "photoreal_cinematic",
+    });
+    expect(prompt.toLowerCase()).toContain("single photograph");
+    expect(prompt.toLowerCase()).toContain("one pose");
+  });
+
+  it("strips turnaround layout words from user description for photoreal", () => {
+    const prompt = buildCharacterSheetPromptTemplate(
+      "Lisa",
+      "Punk fighter, character sheet, front view and back view, green pants",
+      { preset: "photoreal_cinematic" }
+    );
+    expect(prompt.toLowerCase()).not.toContain("front view");
+    expect(prompt.toLowerCase()).not.toContain("back view");
+    expect(prompt.toLowerCase()).not.toContain("character sheet");
+    expect(prompt.toLowerCase()).toContain("green pants");
+  });
+
+  it("puts triptych negatives first for CLIP token limit", () => {
+    const negative = buildCharacterSheetNegativePrompt({
+      preset: "photoreal_cinematic",
+    });
+    expect(negative.toLowerCase().indexOf("triptych")).toBeLessThan(20);
   });
 });
 
@@ -81,11 +123,16 @@ describe("buildCharacterSheetNegativePrompt", () => {
     expect(negative.toLowerCase()).toContain("feet out of frame");
   });
 
-  it("blocks turnaround and doll artifacts for photoreal casting", () => {
+  it("blocks turnaround, split layouts, and doll artifacts for photoreal casting", () => {
     const negative = buildCharacterSheetNegativePrompt({
       preset: "photoreal_cinematic",
     });
     expect(negative.toLowerCase()).toContain("turnaround sheet");
+    expect(negative.toLowerCase()).toContain("triptych");
+    expect(negative.toLowerCase()).toContain("split screen");
+    expect(negative.toLowerCase()).toContain("diptych");
+    expect(negative.toLowerCase()).toContain("two people");
+    expect(negative.toLowerCase()).toContain("generic model face");
     expect(negative.toLowerCase()).toContain("two heads");
     expect(negative.toLowerCase()).toContain("doll");
   });
@@ -106,6 +153,159 @@ describe("buildCharacterSheetPrompts", () => {
     expect(result.negativePrompt).toBe(
       buildCharacterSheetNegativePrompt({ preset: "animation_cartoon" })
     );
+  });
+});
+
+describe("buildCharacterSheetPromptTemplate anchored angles", () => {
+  it("uses rear-view prefix instead of front three-quarter for back angles", () => {
+    const prompt = buildCharacterSheetPromptTemplate(
+      "Lisa (Back full body)",
+      "We only see the back of their head, green pants, tramp stamp. Blonde punk fighter.",
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: true,
+        viewDescription:
+          "We only see the back of their head, green pants, tramp stamp",
+      }
+    );
+    expect(prompt.toLowerCase()).toContain("turned away from camera");
+    expect(prompt.toLowerCase()).toContain("face not visible");
+    expect(prompt.toLowerCase()).not.toContain("front three-quarter view");
+    expect(prompt.toLowerCase()).toContain("same wardrobe");
+  });
+
+  it("adds rear-view negatives and removes back-view penalties for anchored back angles", () => {
+    const negative = buildCharacterSheetNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: true,
+        viewDescription: "Back of head, facing away from camera",
+      }
+    );
+    expect(negative.toLowerCase()).toContain("looking at camera");
+    expect(negative.toLowerCase()).toContain("face visible");
+    expect(negative.toLowerCase()).not.toContain("deformed, back view");
+    expect(negative.toLowerCase()).not.toContain("deformed, rear view");
+  });
+
+  it("buildCharacterSheetPrompts applies anchored rear template without LLM", async () => {
+    const result = await buildCharacterSheetPrompts(
+      "Lisa (Back full body)",
+      "Back of head, green cargo pants. Blonde woman with red headband.",
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: true,
+        viewDescription: "Back of head, facing away from camera, tramp stamp",
+      }
+    );
+    expect(result.usedLlm).toBe(false);
+    expect(result.processedPrompt.toLowerCase()).toContain("turned away");
+    expect(result.processedPrompt.toLowerCase()).toContain("not a diptych");
+    expect(result.processedPrompt.toLowerCase()).not.toContain(
+      "front three-quarter view"
+    );
+    expect(result.processedPrompt.toLowerCase()).not.toContain("green-hazel eyes");
+  });
+
+  it("strips forward-facing face lines from rear view appearance text", async () => {
+    const { sanitizeRearViewAppearanceDesc } = await import(
+      "@/lib/services/prompt-preprocess"
+    );
+    const cleaned = sanitizeRearViewAppearanceDesc(
+      "Wide green-hazel eyes, neutral expression. Black studded leather vest, green cargo pants."
+    );
+    expect(cleaned.toLowerCase()).not.toContain("green-hazel eyes");
+    expect(cleaned.toLowerCase()).toContain("black studded leather vest");
+  });
+
+  it("dedupes view description from appearance block for anchored angles", () => {
+    const prompt = buildCharacterSheetPromptTemplate(
+      "Lisa (Back full body)",
+      "Back of head, green pants. Blonde punk fighter.",
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: true,
+        viewDescription: "Back of head, green pants",
+      }
+    );
+    expect(prompt.toLowerCase()).toMatch(/wardrobe and build: blonde punk fighter\./);
+  });
+
+  it("uses compact solo rear path without anchor language for prompt-only back angles", () => {
+    const prompt = buildCharacterSheetPromptTemplate(
+      "Lisa (Punk Back)",
+      "Nape exposed, studded vest, black leather pants. Mid-20s woman. Wide green-hazel eyes.",
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: false,
+        viewDescription:
+          "Messy blonde hair, nape exposed, studded vest between shoulder blades, black leather pants, boots",
+      }
+    );
+    expect(prompt.toLowerCase()).toContain("not diptych");
+    expect(prompt.toLowerCase()).toContain("16:9");
+    expect(prompt.toLowerCase()).not.toContain("vertical portrait");
+    expect(prompt.toLowerCase()).not.toContain("anchor reference");
+    expect(prompt.toLowerCase()).not.toContain("front-and-back comparison");
+    expect(prompt.toLowerCase()).not.toContain("green-hazel eyes");
+    expect(prompt.toLowerCase()).not.toContain("wardrobe:");
+  });
+
+  it("does not prepend front casting prefix to compact rear solo prompts", () => {
+    const draft = buildCharacterSheetPromptTemplate(
+      "Lisa (Punk Back)",
+      "Nape exposed, studded vest, black leather pants.",
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: false,
+        viewDescription:
+          "Messy blonde hair, nape exposed, studded vest between shoulder blades, black leather pants, boots",
+      }
+    );
+    const prompt = finalizeCharacterSheetPrompt(draft, {
+      preset: "photoreal_cinematic",
+    });
+    expect(prompt.toLowerCase()).not.toContain("front three-quarter view");
+    expect(prompt.toLowerCase()).toContain("back toward camera");
+    expect(prompt.toLowerCase()).not.toContain(
+      "single photograph, one person, one pose, one camera angle, full body head to toe, 16:9 widescreen, front three-quarter"
+    );
+  });
+
+  it("prepends extra rear anti-panel negatives for solo back angles", () => {
+    const negative = buildCharacterSheetNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      {
+        viewDescription: "Nape exposed, studded vest, black leather pants",
+      }
+    );
+    expect(negative.toLowerCase().indexOf("diptych")).toBeLessThan(10);
+    expect(negative.toLowerCase()).toContain("double portrait");
+  });
+
+  it("adds anchored anti-panel negatives for subsequent angles", () => {
+    const negative = buildCharacterSheetNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: true,
+        viewDescription: "Profile from the left",
+      }
+    );
+    expect(negative.toLowerCase()).toContain("double portrait");
+    expect(negative.toLowerCase()).toContain("front and back in one image");
+  });
+});
+
+describe("resolveCharacterAnchorReframeIntensity", () => {
+  it("uses scene profile for back and rear views", async () => {
+    const { resolveCharacterAnchorReframeIntensity } = await import(
+      "@/lib/anchor-reframe"
+    );
+    expect(
+      resolveCharacterAnchorReframeIntensity(
+        "Back of head, facing away from camera. Green pants."
+      )
+    ).toBe("scene");
   });
 });
 
@@ -380,15 +580,92 @@ describe("buildShotPlaceholderNegativePrompt", () => {
     expect(negative.toLowerCase()).toContain("standing upright");
   });
 
-  it("skips character-sheet background negatives when a location reference is used", async () => {
+  it("keeps character-sheet background negatives even when a location reference is used", async () => {
     const { buildShotPlaceholderNegativePrompt } = await import(
       "@/lib/services/prompt-preprocess"
     );
     const negative = buildShotPlaceholderNegativePrompt(
       { preset: "photoreal_cinematic" },
-      "Medium shot on neutral gray seamless backdrop",
+      "Medium shot of Mira under the platform light",
       { hasLocationReference: true }
     );
-    expect(negative.toLowerCase()).not.toContain("neutral gray backdrop");
+    expect(negative.toLowerCase()).toContain("neutral gray backdrop");
+    expect(negative.toLowerCase()).toContain("character sheet pose");
+  });
+
+  it("wraps scene edit prompts as an edit instruction and leaves negatives alone", async () => {
+    const {
+      applyShotReferenceModePromptExtras,
+      SHOT_SCENE_EDIT_INSTRUCTION_PREFIX,
+      SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX,
+    } = await import("@/lib/services/prompt-preprocess");
+    const result = applyShotReferenceModePromptExtras(
+      "Wide establishing view of the full environment. Lisa opening the deli door and stepping inside",
+      "blurry",
+      {
+        effectiveMode: "scene_edit",
+        useDualIpAdapter: false,
+        useCompositingPipeline: false,
+      }
+    );
+    expect(result.processedPrompt.startsWith(SHOT_SCENE_EDIT_INSTRUCTION_PREFIX)).toBe(
+      true
+    );
+    expect(result.processedPrompt).toContain(SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX);
+    expect(result.processedPrompt).toContain("opening the deli door");
+    // Establishing-view framing line invites empty scenery; stripped like integrate.
+    expect(result.processedPrompt).not.toContain("Wide establishing view");
+    // CFG 1.0 ignores negatives; no SDXL negative stack appended.
+    expect(result.negativePrompt).toBe("blurry");
+  });
+
+  it("adds integrate-in-scene suffix and negatives for integrate mode", async () => {
+    const { applyShotReferenceModePromptExtras, SHOT_INTEGRATE_IN_SCENE_SUFFIX } =
+      await import("@/lib/services/prompt-preprocess");
+    const result = applyShotReferenceModePromptExtras(
+      "Medium shot in the park",
+      "blurry",
+      {
+        effectiveMode: "integrate_in_scene",
+        useDualIpAdapter: false,
+        useCompositingPipeline: false,
+      }
+    );
+    expect(result.processedPrompt).toContain(SHOT_INTEGRATE_IN_SCENE_SUFFIX);
+    expect(result.processedPrompt).toContain("natural human scale");
+    expect(result.processedPrompt).toContain("not leaning on anything");
+    expect(result.negativePrompt).toContain("pasted cutout");
+    expect(result.negativePrompt).toContain("oversized subject");
+    expect(result.negativePrompt).toContain("leaning on empty air");
+  });
+
+  it("skips anti-lean extras when the shot prompt asks for a supported pose", async () => {
+    const { applyShotReferenceModePromptExtras } = await import(
+      "@/lib/services/prompt-preprocess"
+    );
+    const result = applyShotReferenceModePromptExtras(
+      "Lisa leaning against the deli doorway, smoking",
+      "blurry",
+      {
+        effectiveMode: "integrate_in_scene",
+        useDualIpAdapter: false,
+        useCompositingPipeline: false,
+      }
+    );
+    expect(result.processedPrompt).not.toContain("not leaning on anything");
+    expect(result.negativePrompt).not.toContain("leaning on empty air");
+    expect(result.negativePrompt).toContain("oversized subject");
+  });
+
+  it("detects supported pose intent for sitting and leaning prompts", async () => {
+    const { detectSupportedPoseIntent } = await import(
+      "@/lib/services/prompt-preprocess"
+    );
+    expect(detectSupportedPoseIntent("she leans on the counter")).toBe(true);
+    expect(detectSupportedPoseIntent("seated at a park bench")).toBe(true);
+    expect(detectSupportedPoseIntent("sitting on the curb")).toBe(true);
+    expect(detectSupportedPoseIntent("resting a hand on the railing")).toBe(true);
+    expect(detectSupportedPoseIntent("running through the rain")).toBe(false);
+    expect(detectSupportedPoseIntent("walking past the bakery")).toBe(false);
   });
 });

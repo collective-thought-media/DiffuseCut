@@ -9,6 +9,7 @@ import {
   shortCheckpointLabel,
 } from "@/lib/services/image-checkpoints";
 import { cn } from "@/lib/utils";
+import { parseApiResponse } from "@/lib/parse-api-response";
 
 const STACK_EXPANDED_STORAGE_KEY = "diffusecut-generation-stack-expanded";
 
@@ -132,11 +133,10 @@ export function ComfyuiGenerationStack({
       setError(null);
       try {
         const res = await fetch(`/api/projects/${projectId}/generation-stack`);
-        const data = await res.json();
-        if (!res.ok) {
-          throw new Error(data.error ?? "Failed to load generation stack");
-        }
-        const nextStack = data.stack as GenerationStack;
+        const data = await parseApiResponse<{ stack: GenerationStack; error?: string }>(
+          res
+        );
+        const nextStack = data.stack;
         applyStack(nextStack);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load stack");

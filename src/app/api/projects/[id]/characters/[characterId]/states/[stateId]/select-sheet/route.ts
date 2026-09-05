@@ -5,7 +5,7 @@ import {
   handleApiError,
   parseJson,
 } from "@/lib/api-helpers";
-import { selectCharacterSheetOption } from "@/lib/services/asset-generation-queue";
+import { selectCharacterSheetOption, getCharacterSheetBatchView } from "@/lib/services/asset-generation-queue";
 
 interface SelectSheetBody {
   optionId: string;
@@ -30,7 +30,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       body.optionId
     );
 
-    return jsonOk({ character });
+    const view = getCharacterSheetBatchView(characterId, stateId);
+
+    return jsonOk({ character, ...view });
   } catch (err) {
     return handleApiError(err);
   }

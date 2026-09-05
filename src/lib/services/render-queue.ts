@@ -16,7 +16,11 @@ import { hydrateProjectRenderSettings } from "@/lib/services/render-settings-res
 export async function enqueueRenderJobs(
   projectId: string,
   shotIds: string[],
-  templateId: string
+  templateId: string,
+  options?: {
+    /** Project-relative dialog audio slice per shot, for lip sync renders. */
+    lipSyncAudioByShotId?: Record<string, string>;
+  }
 ): Promise<RenderJob[]> {
   if (shotIds.length === 0) return [];
 
@@ -123,6 +127,7 @@ export async function enqueueRenderJobs(
       errorMessage: null,
       outputPath: null,
       payloadJson: null,
+      lipSyncAudioPath: options?.lipSyncAudioByShotId?.[shot.id] ?? null,
       createdAt: jobCreatedAt,
       completedAt: null,
     };

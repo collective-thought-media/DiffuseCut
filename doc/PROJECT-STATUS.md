@@ -334,6 +334,12 @@ Chronological themes from building and hardening the app:
 
 ---
 
+## E2E eval harness
+
+A representative full-user eval (isolated project, surface checklist, 1 to 2 LTX renders, final export, JSON/Markdown report) lives in [`doc/E2E-AGENT-PLAYBOOK.md`](./E2E-AGENT-PLAYBOOK.md). Run `npm run eval:journey` with the dev server and worker up; optional Grokbot creative packs via [`scripts/eval/grok-creative-director.md`](../scripts/eval/grok-creative-director.md). Reports: `{appData}/eval-runs/{runId}/`.
+
+---
+
 ## QA summary matrix
 
 Legend: **Done** = exercised and believed working · **Partial** = built but needs pass · **Untested** = not deliberately verified · **Gap** = known missing behavior

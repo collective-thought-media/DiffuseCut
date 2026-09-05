@@ -52,6 +52,61 @@ export function shotStartFrame(
     .reduce((sum, shot) => sum + shot.durationFrames, 0);
 }
 
+/**
+ * Trim-aware timeline math for finishing and export. The storyboard plans in
+ * full shot durations (helpers above); once trims are set on the finishing
+ * page, each shot only contributes its trimmed span to the timeline, matching
+ * the exported video exactly.
+ */
+export interface TrimmableShot {
+  durationFrames: number;
+  trimInFrames?: number | null;
+  trimOutFrames?: number | null;
+}
+
+/** Frames a shot contributes to the trimmed finishing/export timeline. */
+export function shotTimelineFrames(shot: TrimmableShot): number {
+  const trimIn = shot.trimInFrames ?? 0;
+  const trimOut = shot.trimOutFrames ?? shot.durationFrames;
+  return Math.max(1, trimOut - trimIn);
+}
+
+/** Total frames on the trimmed finishing/export timeline. */
+export function totalTimelineFrames(shots: TrimmableShot[]): number {
+  return shots.reduce((sum, shot) => sum + shotTimelineFrames(shot), 0);
+}
+
+/**
+ * Position on the trimmed timeline. frameInShot is relative to the trim
+ * window: 0 is the shot's trim-in point.
+ */
+export function frameAtTrimmedTimelinePosition(
+  shots: TrimmableShot[],
+  frame: number
+): { shotIndex: number; frameInShot: number } {
+  let acc = 0;
+  for (let i = 0; i < shots.length; i++) {
+    const dur = shotTimelineFrames(shots[i]);
+    if (frame < acc + dur) {
+      return { shotIndex: i, frameInShot: frame - acc };
+    }
+    acc += dur;
+  }
+  if (shots.length === 0) return { shotIndex: 0, frameInShot: 0 };
+  const last = shots.length - 1;
+  return { shotIndex: last, frameInShot: shotTimelineFrames(shots[last]) };
+}
+
+/** Start frame of a shot on the trimmed timeline. */
+export function trimmedShotStartFrame(
+  shots: TrimmableShot[],
+  shotIndex: number
+): number {
+  return shots
+    .slice(0, shotIndex)
+    .reduce((sum, shot) => sum + shotTimelineFrames(shot), 0);
+}
+
 const TIMELINE_GAP_PX = 6;
 const TIMELINE_MIN_CLIP_WIDTH = 48;
 
@@ -106,6 +161,49 @@ export function timelinePlayheadOffsetPx(
   );
   const shotDuration = Math.max(shots[shotIndex].durationFrames, 1);
   offset += (frameInShot / shotDuration) * clipWidth;
+
+  return offset;
+}
+
+/**
+ * Playhead pixel offset on the finishing clip strip. Clips render at their
+ * full (untrimmed) width with the trim window marked inside them, so a frame
+ * on the trimmed timeline maps to its pixel position inside the owning clip's
+ * trim window; trimmed-away regions are skipped.
+ */
+export function timelineTrimmedPlayheadOffsetPx(
+  shots: TrimmableShot[],
+  frame: number,
+  pixelsPerFrame: number,
+  gapPx = TIMELINE_GAP_PX,
+  minClipWidth = TIMELINE_MIN_CLIP_WIDTH
+): number {
+  if (shots.length === 0) return 0;
+
+  const { shotIndex, frameInShot } = frameAtTrimmedTimelinePosition(
+    shots,
+    frame
+  );
+  let offset = 0;
+
+  for (let i = 0; i < shotIndex; i++) {
+    offset +=
+      timelineClipWidthPx(
+        shots[i].durationFrames,
+        pixelsPerFrame,
+        minClipWidth
+      ) + gapPx;
+  }
+
+  const shot = shots[shotIndex];
+  const clipWidth = timelineClipWidthPx(
+    shot.durationFrames,
+    pixelsPerFrame,
+    minClipWidth
+  );
+  const trimIn = shot.trimInFrames ?? 0;
+  const duration = Math.max(1, shot.durationFrames);
+  offset += ((trimIn + frameInShot) / duration) * clipWidth;
 
   return offset;
 }

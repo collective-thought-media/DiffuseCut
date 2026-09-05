@@ -1,0 +1,164 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://diffusecut.dev/schemas/creative-pack.json",
+  "title": "DiffuseCut Creative Pack",
+  "description": "Portable story bundle for E2E eval harness and Grokbot creative director output.",
+  "type": "object",
+  "required": ["title", "logline", "plot", "characters", "locations", "shots"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1 },
+    "logline": { "type": "string", "minLength": 1 },
+    "plot": { "type": "string", "minLength": 1 },
+    "visualStylePreset": {
+      "type": "string",
+      "enum": [
+        "photoreal_cinematic",
+        "stylized_illustration",
+        "animation_cartoon",
+        "custom"
+      ],
+      "default": "photoreal_cinematic"
+    },
+    "visualStyleCustomSuffix": { "type": "string" },
+    "referenceAspectRatio": {
+      "type": "string",
+      "enum": ["16_9", "9_16", "1_1", "4_3"],
+      "default": "16_9"
+    },
+    "characters": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "state"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "state": {
+            "type": "object",
+            "required": ["name", "lookDescription"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "lookDescription": { "type": "string", "minLength": 1 },
+              "angles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "viewDescription": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "locations": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "required": ["name", "description", "state"],
+        "properties": {
+          "name": { "type": "string", "minLength": 1 },
+          "description": { "type": "string" },
+          "state": {
+            "type": "object",
+            "required": ["name", "lookDescription"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "lookDescription": { "type": "string", "minLength": 1 },
+              "angles": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["name"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "viewDescription": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "shots": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 8,
+      "items": {
+        "type": "object",
+        "required": ["title", "prompt", "motionPrompt"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "prompt": { "type": "string", "minLength": 1 },
+          "motionPrompt": { "type": "string", "minLength": 1 },
+          "characterIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Index into characters array for cast"
+          },
+          "locationIndex": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Index into locations array"
+          },
+          "stillReferenceMode": {
+            "type": "string",
+            "enum": [
+              "auto",
+              "scene_edit",
+              "integrate_in_scene",
+              "dual",
+              "composited",
+              "character",
+              "location",
+              "prompt_only"
+            ]
+          },
+          "renderDeep": {
+            "type": "boolean",
+            "description": "When true, include in full render + export path"
+          },
+          "generatePlaceholder": {
+            "type": "boolean",
+            "description": "When true, run placeholder still generation"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "finishing": {
+      "type": "object",
+      "properties": {
+        "overlayText": { "type": "string" },
+        "trimInFrames": { "type": "integer", "minimum": 0 },
+        "trimOutFrames": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "meta": {
+      "type": "object",
+      "properties": {
+        "author": { "type": "string" },
+        "runner": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": false
+}

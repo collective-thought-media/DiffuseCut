@@ -8,6 +8,7 @@ import {
 import { isKrea2StillTemplate } from "@/lib/db/builtin-template-ids";
 import type { WorkflowTemplate } from "@/lib/db/schema";
 import { getModels, healthCheck, isIpAdapterAvailable, listEndpoints } from "@/lib/services/comfyui-client";
+import { isCompositingPipelineAvailable } from "@/lib/services/compositing-pipeline";
 import {
   getDefaultCharacterSheetTemplateId,
   getDefaultComfyuiEndpoints,
@@ -268,6 +269,7 @@ export async function getGenerationStack(
     workflowTemplateName: template.name,
     comfyuiReachable: await healthCheck(endpointUrl),
     ipAdapterAvailable: await isIpAdapterAvailable(endpointUrl),
+    compositingAvailable: await isCompositingPipelineAvailable(endpointUrl),
     configuredCheckpoint,
     effectiveCheckpoint,
     needsCheckpointSelection,

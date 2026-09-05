@@ -32,6 +32,33 @@ export function resolveAnchorReframeIntensity(
   return "subtle";
 }
 
+/** Back, rear, or facing-away poses opposite a typical front anchor. */
+export function detectCharacterRearView(description: string): boolean {
+  const lower = description.toLowerCase();
+  return /back of (the |their )?(head|neck)|from behind|rear view|back view|turned away|facing away|back to camera|back turned|behind the (subject|character)|only see the back|face not visible|no face visible|not facing camera|back of head|shoulders to camera|camera behind|subject turned away|facing away from camera|full body back|back full body|from the back|view from behind|nape exposed|between the shoulder blades|lower back tattoo|tramp stamp|skull patch.*shoulder blades|heels on the ground.*boots|wallet chain.*belt loop/.test(
+    lower
+  );
+}
+
+/** IP-Adapter reframe strength for anchored character angles. */
+export function resolveCharacterAnchorReframeIntensity(
+  anchoredDescription: string
+): AnchorReframeIntensity {
+  const viewDesc = extractAnchoredViewDescription(anchoredDescription);
+  if (detectCharacterRearView(viewDesc)) {
+    return "scene";
+  }
+  const lower = viewDesc.toLowerCase();
+  if (
+    /profile|side view|90 degree|from the side|left profile|right profile|three-quarter from behind/.test(
+      lower
+    )
+  ) {
+    return "extreme";
+  }
+  return resolveAnchorReframeIntensity(viewDesc);
+}
+
 /** IP-Adapter reframe strength for anchored location angles. */
 export function resolveLocationAnchorReframeIntensity(
   anchoredDescription: string

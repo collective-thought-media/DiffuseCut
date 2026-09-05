@@ -62,7 +62,7 @@ describe("resolve-sfx-generation-prompt", () => {
     });
 
     expect(resolved.fromShot).toBe(true);
-    expect(resolved.strikeModelPrompt).toMatch(/lightning bolt strike/i);
+    expect(resolved.strikeModelPrompt).toMatch(/lightning crack|electric zap/i);
     expect(resolved.bedModelPrompt).toMatch(/rain|wind/i);
     expect(resolved.brief).toMatch(/lightning bolt strike/i);
     expect(resolved.brief).toContain("On screen:");

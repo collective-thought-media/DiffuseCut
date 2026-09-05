@@ -28,10 +28,43 @@ Generation bias the user should control belongs in **settings they can read and 
 | Layer | Where | Purpose |
 |-------|--------|---------|
 | Project default | Render settings, **Default extra negative prompt (still images)** | Optional baseline for the whole project |
+| Per character state | Character Sheet Generator, **Extra negative prompt (this character sheet)** | Optional terms for one state's sheet batch |
 | Per shot | Storyboard generation, **Extra negative prompt (this shot)** | Override or add terms for one frame |
 | Preview | Prompt preview before queueing | Shows merged positive and negative text sent to ComfyUI |
 
-Merging is explicit: base negatives from prompt building, then project extras, then shot extras. Nothing silent and scene-specific should reappear after the user clears their fields.
+Merging is explicit: base negatives from prompt building, then project extras, then per-entity extras (character sheet or shot). Nothing silent and scene-specific should reappear after the user clears their fields.
+
+## Suggested extra negatives (copy-paste presets)
+
+These are optional starting points. Paste into the field, tune for your character or shot, and use prompt preview before queueing. Do not negative traits you want in the positive prompt (for example, do not add `blonde hair` if blonde hair belongs in **Character identity**).
+
+### Photo-real character sheet (casting portrait)
+
+Photo-real projects (**Look: Photo-real cinematic**) already merge these terms into the built-in character sheet negative before your extras. You do not need to paste them unless you want to reinforce or extend the list.
+
+Use **Extra negative prompt (this character sheet)** for shot-specific tweaks only. Do not negative traits you want in the positive prompt (for example, do not add `blonde hair` if blonde hair belongs in **Character identity**).
+
+Full optional preset (overlaps baked-in defaults; paste only if you want extra reinforcement):
+
+```
+different person, another woman, face swap, inconsistent identity, generic model face, stock photo model, beauty campaign, soft glam makeup, clean polished look, sweet innocent expression, symmetrical doll face, influencer portrait, split screen, diptych, two panels, side by side, comparison sheet, multiple subjects
+```
+
+Terms that most often push toward a realistic casting face (use alone or mix in):
+
+```
+generic model face, stock photo model, beauty campaign, soft glam makeup, symmetrical doll face, influencer portrait
+```
+
+Layout-only subset when identity is fine but the canvas splits into two panels:
+
+```
+split screen, diptych, two panels, side by side, comparison sheet, multiple subjects
+```
+
+This preset improves realism and batch consistency. It does not hard-lock the same face across character states; each state is still independent txt2img until identity-anchored generation ships.
+
+**Layout note:** Photo-real character sheets use a single casting portrait in the positive prompt (one person, one angle). Animation and stylized presets intentionally use a four-view turnaround in the positive prompt; only photo-real gets the split-panel and multi-subject negatives above.
 
 ## What may still live in code (narrow exceptions)
 
@@ -57,12 +90,27 @@ Filmmakers use the same pipeline for different looks: gray seamless stages, warm
 
 User control keeps DiffuseCut adaptable: swap checkpoint or Krea stack, tune IP-Adapter, add a line to the negative field, regenerate. No redeploy, no archaeology in `prompt-preprocess.ts`, no mystery beige.
 
+## Storyboard reference modes (dual, composited, integrate)
+
+**Auto / dual** runs one diffusion pass with character and location IP-Adapter. Location influence is weaker (typical location weight around 0.28). Good default when you want a single fast pass.
+
+**Integrate in scene** (opt-in, requires both character and location references) encodes the saved location angle as an img2img latent, partial denoise (default 0.42), and character IP-Adapter. One pass paints the subject into the environment. No cutout paste. Best for narrative storyboard stills where the character should feel inside the set.
+
+**Composited** (opt-in, requires both character and location references) locks the saved location angle as an img2img plate and applies character IP-Adapter for identity and wardrobe. Your shot prompt still drives pose and framing.
+
+When ComfyUI has compositing nodes installed (`ImageCompositeMasked`, `MaskComposite`, `VAEEncode`, and related mask nodes), Composited mode runs a two-stage pipeline: character isolate on a neutral backdrop (location words stripped from the prompt), then rough paste onto the saved location plate followed by a partial img2img integration pass (default denoise 0.48). Without those nodes, Composited falls back to the single location-plate workflow above.
+
+Dual remains the default in Auto when both references exist. Choose **Integrate in scene** for narrative boards where depth and lighting should match the plate. Choose **Composited** when pixel fidelity to the saved plate matters more than dimensional realism (presenter frames, layout-locked thumbs).
+
+See also: `doc/INTEGRATE-IN-SCENE-MODE-PLAN.md`, `doc/COMPOSITED-SHOT-PIPELINE.md`.
+
 ## Related implementation
 
 - `src/lib/services/image-generation-overrides.ts` — merge helper for user negatives
 - `src/lib/shot-render-overrides.ts` — per-shot `stillNegativePrompt`
 - `RenderSettings.imageDefaultNegative` — project-wide still-image extra
-- `src/components/sheets/SheetGenerationControls.tsx` — shot-level UI
+- `src/components/sheets/SheetGenerationControls.tsx` — character sheet and shot extra-negative UI
+- `src/components/sheets/CharacterSheetGenerator.tsx` — per-state character sheet generation
 - `src/components/render/RenderSettingsPanel.tsx` — project-level UI
 
 When removing a bad hardcoded policy, delete the constant and wire control to the user instead of replacing one hidden list with another.

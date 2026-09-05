@@ -57,6 +57,23 @@ export const characterStates = sqliteTable("character_states", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+export const characterAngles = sqliteTable("character_angles", {
+  id: text("id").primaryKey(),
+  characterStateId: text("character_state_id")
+    .notNull()
+    .references(() => characterStates.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  viewDescription: text("view_description").notNull().default(""),
+  referencePath: text("reference_path"),
+  referenceKind: text("reference_kind", { enum: ["image", "video"] }),
+  referenceSource: text("reference_source", {
+    enum: ["upload", "url", "external_api", "comfyui"],
+  }),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const locations = sqliteTable("locations", {
   id: text("id").primaryKey(),
   projectId: text("project_id")
@@ -207,7 +224,13 @@ export const assetGenerationBatches = sqliteTable("asset_generation_batches", {
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
   entityType: text("entity_type", {
-    enum: ["character", "character_state", "location_angle", "shot"],
+    enum: [
+      "character",
+      "character_state",
+      "character_angle",
+      "location_angle",
+      "shot",
+    ],
   }).notNull(),
   entityId: text("entity_id").notNull(),
   workflowTemplateId: text("workflow_template_id")
@@ -258,6 +281,9 @@ export const assetGenerationOptions = sqliteTable("asset_generation_options", {
   errorMessage: text("error_message"),
   createdAt: integer("created_at").notNull(),
   completedAt: integer("completed_at"),
+  pipelineStage: text("pipeline_stage"),
+  pipelineGroupId: text("pipeline_group_id"),
+  dependsOnOptionId: text("depends_on_option_id"),
 });
 
 export const comfyuiModelCache = sqliteTable("comfyui_model_cache", {
@@ -298,6 +324,11 @@ export const renderJobs = sqliteTable("render_jobs", {
   errorMessage: text("error_message"),
   outputPath: text("output_path"),
   payloadJson: text("payload_json"),
+  /**
+   * Project-relative path of a per-shot dialog audio slice for lip sync
+   * renders (audio-conditioned LTX). Null for normal renders.
+   */
+  lipSyncAudioPath: text("lip_sync_audio_path"),
   createdAt: integer("created_at").notNull(),
   completedAt: integer("completed_at"),
 });
@@ -327,6 +358,8 @@ export const exportJobs = sqliteTable("export_jobs", {
     .notNull()
     .default("queued"),
   outputPath: text("output_path"),
+  /** JSON: probed { width, height, durationSeconds, overlayCount, audioSource }. */
+  outputMetaJson: text("output_meta_json"),
   settingsJson: text("settings_json").notNull().default("{}"),
   errorMessage: text("error_message"),
   progress: real("progress").notNull().default(0),
@@ -346,6 +379,7 @@ export const appSettings = sqliteTable("app_settings", {
 export type Project = typeof projects.$inferSelect;
 export type Character = typeof characters.$inferSelect;
 export type CharacterState = typeof characterStates.$inferSelect;
+export type CharacterAngle = typeof characterAngles.$inferSelect;
 export type Location = typeof locations.$inferSelect;
 export type LocationState = typeof locationStates.$inferSelect;
 export type LocationAngle = typeof locationAngles.$inferSelect;

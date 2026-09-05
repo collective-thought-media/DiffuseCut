@@ -399,6 +399,89 @@ describe("buildPortraitPayload reference sizing", () => {
     expect(workflow["13"].inputs.weight).toBe(0.48);
     expect(workflow["14"].inputs.weight).toBe(0.55);
   });
+
+  it("injects location plate and character refs without resizing latent for location_plate", () => {
+    const locationPlateTemplate: WorkflowTemplate = {
+      ...staleTemplate,
+      bindingsJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.bindingsJson),
+        referenceImageNodeId: "10",
+        referenceImageInputKey: "image",
+        locationPlateImageNodeId: "11",
+        locationPlateImageInputKey: "image",
+        characterIpAdapterNodeId: "14",
+        referenceImageUsage: "location_plate",
+        controls: [
+          ...(JSON.parse(staleTemplate.bindingsJson).controls ?? []),
+          {
+            id: "sampler",
+            label: "Sampler",
+            type: "sampler",
+            nodeId: "3",
+            inputs: { denoise: "denoise" },
+          },
+        ],
+      }),
+      workflowJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.workflowJson),
+        "10": {
+          class_type: "LoadImage",
+          inputs: { image: "character.png" },
+        },
+        "11": {
+          class_type: "LoadImage",
+          inputs: { image: "location.png" },
+        },
+        "14": {
+          class_type: "IPAdapterAdvanced",
+          inputs: {
+            model: ["4", 0],
+            ipadapter: ["12", 0],
+            clip_vision: ["15", 0],
+            image: ["10", 0],
+            weight: 0.62,
+            end_at: 0.82,
+            weight_type: "linear",
+          },
+        },
+        "12": {
+          class_type: "IPAdapterModelLoader",
+          inputs: { ipadapter_file: "plus.sdxl.vit.h.safetensors" },
+        },
+        "15": {
+          class_type: "CLIPVisionLoader",
+          inputs: {
+            clip_name: "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors",
+          },
+        },
+        "16": {
+          class_type: "VAEEncode",
+          inputs: { pixels: ["11", 0], vae: ["4", 2] },
+        },
+      }),
+    };
+
+    const { workflow } = buildPortraitPayload(
+      locationPlateTemplate,
+      JSON.parse(locationPlateTemplate.bindingsJson),
+      { referenceAspectRatio: "16_9" },
+      {
+        prompt: "Lisa outside the deli",
+        negativePrompt: "bad",
+        seed: 42,
+        referenceImage: "uploaded-character.png",
+        secondaryReferenceImage: "uploaded-location-plate.png",
+      },
+      { locationPlateDenoise: 0.52 }
+    );
+
+    expect(workflow["10"].inputs.image).toBe("uploaded-character.png");
+    expect(workflow["11"].inputs.image).toBe("uploaded-location-plate.png");
+    expect(workflow["5"].inputs.width).toBe(1024);
+    expect(workflow["5"].inputs.height).toBe(768);
+    expect(workflow["14"].inputs.weight).toBe(0.62);
+    expect(workflow["3"].inputs.denoise).toBe(0.52);
+  });
 });
 
 describe("buildWorkflowPayload shot prompts", () => {

@@ -1,7 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CharacterState } from "@/lib/db/schema";
+import type { CharacterAngle } from "@/lib/db/schema";
+import type { CharacterStatePreview } from "@/lib/character-preview";
+import {
+  buildAnchoredCharacterAngleReferenceDescription,
+  buildCharacterAngleReferenceDescription,
+  resolveCharacterAnchorAngleName,
+  resolveCharacterAnchorReferencePath,
+  resolveCharacterFrontAngleId,
+  resolveCharacterBackAngleId,
+} from "@/lib/character-preview";
 import { CharacterSheetGenerator } from "@/components/sheets/CharacterSheetGenerator";
 import { ReferenceMediaControls } from "@/components/sheets/ReferenceMediaControls";
 import { useDebouncedSave, type DebouncedSaveContext } from "@/lib/hooks/useDebouncedSave";
@@ -14,6 +23,7 @@ import {
   Card,
   Input,
   Label,
+  NestedEntityCard,
   Textarea,
   Badge,
 } from "@/components/ui/button";
@@ -26,6 +36,10 @@ interface CharacterStatesPanelProps {
   visualStyleJson?: string | null;
 }
 
+function characterAngleAnchorId(angleId: string): string {
+  return `character-angle-${angleId}`;
+}
+
 export function CharacterStatesPanel({
   projectId,
   characterId,
@@ -33,7 +47,7 @@ export function CharacterStatesPanel({
   characterDescription,
   visualStyleJson,
 }: CharacterStatesPanelProps) {
-  const [states, setStates] = useState<CharacterState[]>([]);
+  const [states, setStates] = useState<CharacterStatePreview[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -77,7 +91,7 @@ export function CharacterStatesPanel({
         lookDescription: string;
         timelineNote: string;
       }>,
-      ctx: { isLatest: () => boolean }
+      ctx: DebouncedSaveContext
     ) => {
       const res = await fetch(
         `/api/projects/${projectId}/characters/${characterId}/states/${stateId}`,
@@ -91,7 +105,45 @@ export function CharacterStatesPanel({
       if (!res.ok) throw new Error(data.error ?? "Failed to save state");
       if (!ctx.isLatest()) return;
       setStates((prev) =>
-        prev.map((state) => (state.id === stateId ? data.state : state))
+        prev.map((state) =>
+          state.id === stateId
+            ? { ...state, ...data.state, angles: state.angles }
+            : state
+        )
+      );
+    },
+    [projectId, characterId]
+  );
+
+  const saveAngle = useCallback(
+    async (
+      stateId: string,
+      angleId: string,
+      patch: Partial<{ name: string; viewDescription: string }>,
+      ctx: DebouncedSaveContext
+    ) => {
+      const res = await fetch(
+        `/api/projects/${projectId}/characters/${characterId}/states/${stateId}/angles/${angleId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(patch),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to save angle");
+      if (!ctx.isLatest()) return;
+      setStates((prev) =>
+        prev.map((state) =>
+          state.id === stateId
+            ? {
+                ...state,
+                angles: state.angles.map((angle) =>
+                  angle.id === angleId ? data.angle : angle
+                ),
+              }
+            : state
+        )
       );
     },
     [projectId, characterId]
@@ -121,6 +173,43 @@ export function CharacterStatesPanel({
     }
   }
 
+  async function handleAddAngle(stateId: string) {
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/characters/${characterId}/states/${stateId}/angles`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "New angle",
+            viewDescription: "",
+          }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to create angle");
+      await loadStates({ background: hasLoadedRef.current });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create angle");
+    }
+  }
+
+  async function handleDeleteAngle(stateId: string, angleId: string) {
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/characters/${characterId}/states/${stateId}/angles/${angleId}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Failed to delete angle");
+      await loadStates({ background: hasLoadedRef.current });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to delete angle");
+    }
+  }
+
   if (loading && !hasLoadedRef.current) {
     return <PageLoadingSkeleton />;
   }
@@ -134,11 +223,11 @@ export function CharacterStatesPanel({
         }
       >
       <header className="mb-8">
-        <h2 className="text-lg font-semibold">Visual States</h2>
+        <h2 className="text-lg font-semibold">Visual States and Angles</h2>
         <p className="mt-2 text-sm text-muted-foreground">
           One character can have multiple looks across the film. Generate a
-          reference sheet for each state, then pick which state appears in each
-          shot on the storyboard.
+          reference sheet for each camera angle within each state, then pick
+          which state appears in each shot on the storyboard.
         </p>
       </header>
 
@@ -177,6 +266,11 @@ export function CharacterStatesPanel({
           state={state}
           visualStyleJson={visualStyleJson}
           onSave={(patch, ctx) => saveState(state.id, patch, ctx)}
+          onSaveAngle={(angleId, patch, ctx) =>
+            saveAngle(state.id, angleId, patch, ctx)
+          }
+          onAddAngle={() => void handleAddAngle(state.id)}
+          onDeleteAngle={(angleId) => void handleDeleteAngle(state.id, angleId)}
           onReferenceSelected={() => loadStates({ background: true })}
         />
       ))}
@@ -193,13 +287,16 @@ function CharacterStateCard({
   state,
   visualStyleJson,
   onSave,
+  onSaveAngle,
+  onAddAngle,
+  onDeleteAngle,
   onReferenceSelected,
 }: {
   projectId: string;
   characterId: string;
   characterName: string;
   characterDescription: string;
-  state: CharacterState;
+  state: CharacterStatePreview;
   visualStyleJson?: string | null;
   onSave: (
     patch: Partial<{
@@ -209,6 +306,13 @@ function CharacterStateCard({
     }>,
     ctx: DebouncedSaveContext
   ) => Promise<void>;
+  onSaveAngle: (
+    angleId: string,
+    patch: Partial<{ name: string; viewDescription: string }>,
+    ctx: DebouncedSaveContext
+  ) => Promise<void>;
+  onAddAngle: () => void;
+  onDeleteAngle: (angleId: string) => void;
   onReferenceSelected: () => void | Promise<void>;
 }) {
   const fieldSource = useMemo(
@@ -222,17 +326,6 @@ function CharacterStateCard({
   const { fields, bind } = useSyncedEditableFields(fieldSource, state.id);
 
   const { schedule, saving, saved } = useDebouncedSave(onSave);
-
-  const sheetDescription = [
-    characterDescription.trim(),
-    fields.lookDescription.trim(),
-  ]
-    .filter(Boolean)
-    .join(". ");
-
-  const previewSrc = state.referencePath
-    ? mediaUrl(projectId, state.referencePath, { version: state.updatedAt })
-    : null;
 
   return (
     <Card>
@@ -274,14 +367,207 @@ function CharacterStateCard({
           </div>
         </div>
 
+        <div className="space-y-4">
+          <div>
+            <Label>Angles in this state</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Each angle is a pose or view you can generate and reference separately.
+            </p>
+          </div>
+
+          {state.angles.length > 0 ? (
+            <nav aria-label="Angles in this state">
+              <ul className="space-y-2">
+                {state.angles.map((angle) => (
+                  <li key={angle.id}>
+                    <a
+                      href={`#${characterAngleAnchorId(angle.id)}`}
+                      className="inline-flex items-center gap-2 text-sm text-primary hover:underline"
+                    >
+                      <span>{angle.name}</span>
+                      {angle.referencePath && (
+                        <span className="text-xs text-muted-foreground">
+                          (reference saved)
+                        </span>
+                      )}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+          ) : (
+            <p className="text-xs text-muted-foreground">No angles yet.</p>
+          )}
+
+          <Button type="button" variant="outline" size="sm" onClick={onAddAngle}>
+            Add angle
+          </Button>
+        </div>
+      </div>
+
+      {state.angles.length > 0 && (
+        <div className="mt-8 space-y-6 border-t border-neutral-800 pt-8">
+          {state.angles.map((angle) => (
+            <CharacterAngleSection
+              key={angle.id}
+              anchorId={characterAngleAnchorId(angle.id)}
+              projectId={projectId}
+              characterId={characterId}
+              characterName={characterName}
+              characterDescription={characterDescription}
+              state={state}
+              angle={angle}
+              visualStyleJson={visualStyleJson}
+              onSave={(patch, ctx) => onSaveAngle(angle.id, patch, ctx)}
+              onDelete={() => onDeleteAngle(angle.id)}
+              onReferenceSelected={onReferenceSelected}
+            />
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function CharacterAngleSection({
+  anchorId,
+  projectId,
+  characterId,
+  characterName,
+  characterDescription,
+  state,
+  angle,
+  visualStyleJson,
+  onSave,
+  onDelete,
+  onReferenceSelected,
+}: {
+  anchorId: string;
+  projectId: string;
+  characterId: string;
+  characterName: string;
+  characterDescription: string;
+  state: CharacterStatePreview;
+  angle: CharacterAngle;
+  visualStyleJson?: string | null;
+  onSave: (
+    patch: Partial<{ name: string; viewDescription: string }>,
+    ctx: DebouncedSaveContext
+  ) => Promise<void>;
+  onDelete: () => void;
+  onReferenceSelected: () => void | Promise<void>;
+}) {
+  const fieldSource = useMemo(
+    () => ({
+      name: angle.name,
+      viewDescription: angle.viewDescription,
+    }),
+    [angle.id, angle.name, angle.viewDescription]
+  );
+  const { fields, bind } = useSyncedEditableFields(fieldSource, angle.id);
+  const [deleting, setDeleting] = useState(false);
+
+  const { schedule, flush, saving, saved } = useDebouncedSave(onSave);
+
+  const liveAngle = useMemo(
+    () => ({
+      ...angle,
+      name: fields.name,
+      viewDescription: fields.viewDescription,
+    }),
+    [angle, fields.name, fields.viewDescription]
+  );
+
+  const sheetDescription = buildCharacterAngleReferenceDescription(
+    characterDescription,
+    state,
+    liveAngle
+  );
+
+  const previewSrc = angle.referencePath
+    ? mediaUrl(projectId, angle.referencePath, { version: angle.updatedAt })
+    : null;
+
+  const anchorReferencePath = resolveCharacterAnchorReferencePath(state, angle.id);
+  const anchorAngleName = resolveCharacterAnchorAngleName(state, angle.id);
+
+  const batchReferenceDescription = anchorReferencePath
+    ? buildAnchoredCharacterAngleReferenceDescription(
+        characterDescription,
+        state,
+        liveAngle
+      )
+    : sheetDescription;
+
+  const frontAngleId = resolveCharacterFrontAngleId(state, angle.id);
+  const backAngleId = resolveCharacterBackAngleId(state, angle.id);
+  const splitPairAngles =
+    frontAngleId && backAngleId
+      ? { frontAngleId, backAngleId }
+      : null;
+
+  function handleDeleteAngle() {
+    if (
+      !confirm(
+        `Delete "${angle.name}"? Its reference image and generation history will be removed.`
+      )
+    ) {
+      return;
+    }
+    setDeleting(true);
+    Promise.resolve(onDelete()).finally(() => setDeleting(false));
+  }
+
+  return (
+    <NestedEntityCard id={anchorId} className="scroll-mt-6">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="entity-card-subheader mb-0">{fields.name}</h4>
+        <div className="flex flex-wrap items-center gap-2">
+          {saving ? (
+            <Badge variant="warning">Saving…</Badge>
+          ) : saved ? (
+            <Badge variant="success">Saved</Badge>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleDeleteAngle}
+            disabled={deleting}
+          >
+            {deleting ? "Deleting…" : "Delete angle"}
+          </Button>
+        </div>
+      </header>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor={`char-angle-name-${angle.id}`}>Angle name</Label>
+            <Input
+              id={`char-angle-name-${angle.id}`}
+              {...bind("name", (next) => schedule(next))}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`char-angle-view-${angle.id}`}>View description</Label>
+            <Textarea
+              id={`char-angle-view-${angle.id}`}
+              {...bind("viewDescription", (next) => schedule(next))}
+              placeholder="Pose and framing: front full body, three-quarter portrait, profile close-up, etc."
+              className="min-h-[88px]"
+            />
+          </div>
+        </div>
+
         <div className="space-y-2">
-          <Label>Reference for this state</Label>
+          <Label>Reference for this angle</Label>
           {previewSrc ? (
             <div className="aspect-video w-full overflow-hidden rounded-lg border border-neutral-800 bg-neutral-950">
               <img
                 src={previewSrc}
-                alt={`${state.name} reference`}
-                key={state.updatedAt ?? state.id}
+                alt={`${angle.name} reference`}
+                key={angle.updatedAt ?? angle.id}
                 className="ui-image-enter h-full w-full object-contain"
               />
             </div>
@@ -293,8 +579,8 @@ function CharacterStateCard({
             </div>
           )}
           <ReferenceMediaControls
-            apiBase={`/api/projects/${projectId}/characters/${characterId}/states/${state.id}/reference`}
-            hasReference={Boolean(state.referencePath)}
+            apiBase={`/api/projects/${projectId}/characters/${characterId}/states/${state.id}/angles/${angle.id}/reference`}
+            hasReference={Boolean(angle.referencePath)}
             onUpdated={onReferenceSelected}
           />
         </div>
@@ -304,12 +590,24 @@ function CharacterStateCard({
         projectId={projectId}
         characterId={characterId}
         stateId={state.id}
-        characterName={characterName}
+        angleId={angle.id}
+        characterName={`${characterName} (${fields.name})`}
         sheetDescription={sheetDescription}
+        batchReferenceDescription={batchReferenceDescription}
+        angleViewDescription={fields.viewDescription}
+        onBeforeGenerate={async () => {
+          await flush({
+            name: fields.name,
+            viewDescription: fields.viewDescription,
+          });
+        }}
         visualStyleJson={visualStyleJson}
-        hasReference={Boolean(state.referencePath)}
+        hasReference={Boolean(angle.referencePath)}
+        usesFrontAnchor={Boolean(anchorReferencePath)}
+        anchorAngleName={anchorAngleName}
+        splitPairAngles={splitPairAngles}
         onReferenceSelected={onReferenceSelected}
       />
-    </Card>
+    </NestedEntityCard>
   );
 }

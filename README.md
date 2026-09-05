@@ -14,6 +14,8 @@ Local-first pre-production and generation pipeline for AI filmmakers. Storyboard
 | SDXL checkpoints on ComfyUI | Character & location sheets | No |
 | IP-Adapter nodes + weights | Anchored location angles (recommended) | No |
 | LTX 2.3 nodes + models | Default shot video workflow | No |
+| Qwen Image Edit 2511 + Lightning LoRA | Scene edit shot mode and instruction edits (optional) | No |
+| ComfyUI-Impact-Pack + Impact-Subpack | Face detail pass on shot stills (optional) | No |
 | ACE-Step 1.5 on ComfyUI | Finishing score generation (recommended) | No |
 | Epidemic Sound upload or ElevenLabs | Finishing musical score (optional) | No |
 
@@ -68,6 +70,11 @@ Configure the URL in **Settings** or per-project **Render machines** (supports m
 | `npm run doctor` | CLI dependency checklist |
 | `npm run build` | Production build |
 | `npm run typecheck` | TypeScript check |
+| `npm run eval:journey` | Representative full-user E2E eval (see `doc/E2E-AGENT-PLAYBOOK.md`) |
+
+## E2E eval
+
+For a frontier-agent or Grokbot-driven end-to-end pass (create project, touch every major surface, render 1 to 2 shots, export final video), see [`doc/E2E-AGENT-PLAYBOOK.md`](doc/E2E-AGENT-PLAYBOOK.md). Run `npm run eval:journey` after `npm run dev` and `npm run doctor`. Reports are written under your app data folder in `eval-runs/`.
 
 ## Data locations
 

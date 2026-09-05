@@ -21,11 +21,18 @@ export function FinishingDeskTabs({
   ];
 
   return (
-    <div className="flex gap-1 border-b border-neutral-800">
+    <div
+      role="tablist"
+      aria-label="Finishing desk"
+      className="flex gap-1 border-b border-neutral-800"
+    >
       {tabs.map((tab) => (
         <button
           key={tab.id}
           type="button"
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          data-state={activeTab === tab.id ? "active" : "inactive"}
           className={cn(
             "rounded-t-md px-3 py-2 text-sm transition",
             activeTab === tab.id

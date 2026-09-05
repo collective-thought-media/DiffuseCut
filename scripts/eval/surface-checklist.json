@@ -1,0 +1,187 @@
+{
+  "version": 1,
+  "description": "Representative user surface coverage for DiffuseCut E2E eval. Derived from doc/PROJECT-STATUS.md.",
+  "surfaces": [
+    {
+      "id": "global.projects",
+      "category": "global",
+      "label": "Projects home: create and list",
+      "route": "/",
+      "method": "playwright"
+    },
+    {
+      "id": "global.setup",
+      "category": "global",
+      "label": "Setup: system status and re-check",
+      "route": "/setup",
+      "method": "playwright"
+    },
+    {
+      "id": "global.settings",
+      "category": "global",
+      "label": "Settings: panels and diagnostic copy",
+      "route": "/settings",
+      "method": "playwright"
+    },
+    {
+      "id": "project.dashboard",
+      "category": "project",
+      "label": "Dashboard: logline, plot, visual style, aspect ratio",
+      "route": "/projects/{projectId}",
+      "method": "api"
+    },
+    {
+      "id": "project.characters.list",
+      "category": "project",
+      "label": "Characters: list and detail navigation",
+      "route": "/projects/{projectId}/characters",
+      "method": "playwright"
+    },
+    {
+      "id": "project.characters.create",
+      "category": "project",
+      "label": "Characters: create with states and angles",
+      "route": "/api/projects/{projectId}/characters",
+      "method": "api"
+    },
+    {
+      "id": "project.characters.generate",
+      "category": "project",
+      "label": "Characters: sheet batch generate and select",
+      "route": "/api/projects/{projectId}/characters/.../generate-sheets",
+      "method": "api",
+      "requiresComfyUI": true
+    },
+    {
+      "id": "project.locations.create",
+      "category": "project",
+      "label": "Locations: create with states and angles",
+      "route": "/api/projects/{projectId}/locations",
+      "method": "api"
+    },
+    {
+      "id": "project.locations.generate",
+      "category": "project",
+      "label": "Locations: establishing reference generate and select",
+      "route": "/api/projects/{projectId}/locations/.../generate-sheets",
+      "method": "api",
+      "requiresComfyUI": true
+    },
+    {
+      "id": "project.storyboard.shots",
+      "category": "project",
+      "label": "Storyboard: create shots, cast, location refs",
+      "route": "/api/projects/{projectId}/shots",
+      "method": "api"
+    },
+    {
+      "id": "project.storyboard.reorder",
+      "category": "project",
+      "label": "Storyboard: reorder shots",
+      "route": "/api/projects/{projectId}/shots/reorder",
+      "method": "api"
+    },
+    {
+      "id": "project.storyboard.placeholder",
+      "category": "project",
+      "label": "Storyboard: placeholder still generate and select",
+      "route": "/api/projects/{projectId}/shots/.../generate-placeholders",
+      "method": "api",
+      "requiresComfyUI": true
+    },
+    {
+      "id": "project.storyboard.integrate",
+      "category": "project",
+      "label": "Storyboard: integrate in scene still mode",
+      "route": "/api/projects/{projectId}/shots/{shotId}",
+      "method": "api",
+      "requiresComfyUI": true
+    },
+    {
+      "id": "project.render.settings",
+      "category": "project",
+      "label": "Render: settings hydrate and binding validation",
+      "route": "/api/projects/{projectId}/render-settings",
+      "method": "api"
+    },
+    {
+      "id": "project.render.queue",
+      "category": "project",
+      "label": "Render: queue selected shots",
+      "route": "/api/render-jobs",
+      "method": "api",
+      "requiresComfyUI": true
+    },
+    {
+      "id": "project.render.page",
+      "category": "project",
+      "label": "Render page: template picker and job list",
+      "route": "/projects/{projectId}/render",
+      "method": "playwright"
+    },
+    {
+      "id": "project.finishing.trim",
+      "category": "project",
+      "label": "Finishing: trim in/out on timeline",
+      "route": "/api/projects/{projectId}/shots/{shotId}",
+      "method": "api"
+    },
+    {
+      "id": "project.finishing.overlays",
+      "category": "project",
+      "label": "Finishing: text overlays tab",
+      "route": "/api/projects/{projectId}/overlays",
+      "method": "api"
+    },
+    {
+      "id": "project.finishing.tabs",
+      "category": "project",
+      "label": "Finishing: score and dialog desk tabs",
+      "route": "/projects/{projectId}/finishing",
+      "method": "playwright"
+    },
+    {
+      "id": "project.export.queue",
+      "category": "project",
+      "label": "Export: final video encode",
+      "route": "/api/export",
+      "method": "api",
+      "requiresComfyUI": false
+    },
+    {
+      "id": "project.export.page",
+      "category": "project",
+      "label": "Export page: encoder panel",
+      "route": "/projects/{projectId}/export",
+      "method": "playwright"
+    },
+    {
+      "id": "project.settings.storage",
+      "category": "project",
+      "label": "Project settings: storage breakdown and orphans",
+      "route": "/api/projects/{projectId}/storage",
+      "method": "api"
+    },
+    {
+      "id": "project.generation-stack",
+      "category": "project",
+      "label": "Generation stack: ComfyUI, IP-Adapter, compositing probes",
+      "route": "/api/projects/{projectId}/generation-stack",
+      "method": "api"
+    }
+  ],
+  "knownGaps": [
+    {
+      "id": "text-overlays-not-exported",
+      "label": "Text overlays preview in Finishing but are not burned into FFmpeg export"
+    },
+    {
+      "id": "export-requires-rendered-shots",
+      "label": "Export is blocked until at least one shot has a rendered videoPath"
+    },
+    {
+      "id": "diptych-panel-split-in-progress",
+      "label": "Front+back diptych split, per-panel crop, and 16:9 canvas expand is in progress. Not required for eval pass. Use full single-panel select-sheet only."
+    }
+  ]
+}

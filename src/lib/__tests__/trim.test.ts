@@ -20,9 +20,9 @@ describe("validateTrim", () => {
 });
 
 describe("trimPreviewFrameInShot", () => {
-  it("returns trim edges within shot bounds", () => {
-    expect(trimPreviewFrameInShot(72, 6, 60, "in")).toBe(6);
-    expect(trimPreviewFrameInShot(72, 6, 60, "out")).toBe(59);
+  it("returns trim-relative edges on the trimmed timeline", () => {
+    expect(trimPreviewFrameInShot(72, 6, 60, "in")).toBe(0);
+    expect(trimPreviewFrameInShot(72, 6, 60, "out")).toBe(53);
   });
 });
 

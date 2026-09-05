@@ -1,0 +1,179 @@
+{
+  "3": {
+    "class_type": "KSampler",
+    "inputs": {
+      "seed": 0,
+      "steps": 24,
+      "cfg": 7.5,
+      "sampler_name": "euler",
+      "scheduler": "normal",
+      "denoise": 0.48,
+      "model": ["14", 0],
+      "positive": ["6", 0],
+      "negative": ["7", 0],
+      "latent_image": ["26", 0]
+    }
+  },
+  "4": {
+    "class_type": "CheckpointLoaderSimple",
+    "inputs": {
+      "ckpt_name": "v1-5-pruned-emaonly.safetensors"
+    }
+  },
+  "6": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "storyboard still",
+      "clip": ["4", 1]
+    }
+  },
+  "7": {
+    "class_type": "CLIPTextEncode",
+    "inputs": {
+      "text": "blurry, low quality",
+      "clip": ["4", 1]
+    }
+  },
+  "8": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": ["3", 0],
+      "vae": ["4", 2]
+    }
+  },
+  "9": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "DiffuseCutShotComposite",
+      "images": ["8", 0]
+    }
+  },
+  "10": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "DiffuseCutCharacterReference.png"
+    }
+  },
+  "11": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "DiffuseCutLocationPlate.png"
+    }
+  },
+  "18": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "DiffuseCutCharacterIsolate.png"
+    }
+  },
+  "12": {
+    "class_type": "IPAdapterModelLoader",
+    "inputs": {
+      "ipadapter_file": "plus.sdxl.vit.h.safetensors"
+    }
+  },
+  "15": {
+    "class_type": "CLIPVisionLoader",
+    "inputs": {
+      "clip_name": "CLIP-ViT-H-14-laion2B-s32B-b79K.safetensors"
+    }
+  },
+  "14": {
+    "class_type": "IPAdapterAdvanced",
+    "inputs": {
+      "model": ["4", 0],
+      "ipadapter": ["12", 0],
+      "clip_vision": ["15", 0],
+      "image": ["10", 0],
+      "weight": 0.58,
+      "weight_type": "linear",
+      "combine_embeds": "concat",
+      "start_at": 0,
+      "end_at": 0.78,
+      "embeds_scaling": "V only"
+    }
+  },
+  "21": {
+    "class_type": "ImageBlur",
+    "inputs": {
+      "image": ["11", 0],
+      "blur_radius": 16,
+      "sigma": 2.0
+    }
+  },
+  "22": {
+    "class_type": "ImageScale",
+    "inputs": {
+      "image": ["18", 0],
+      "upscale_method": "lanczos",
+      "width": 920,
+      "height": 820,
+      "crop": "center"
+    }
+  },
+  "40": {
+    "class_type": "RemBGSession+",
+    "inputs": {
+      "model": "u2net_human_seg: human segmentation",
+      "providers": "CPU"
+    }
+  },
+  "41": {
+    "class_type": "ImageRemoveBackground+",
+    "inputs": {
+      "rembg_session": ["40", 0],
+      "image": ["22", 0]
+    }
+  },
+  "31": {
+    "class_type": "MaskBlur+",
+    "inputs": {
+      "mask": ["41", 1],
+      "amount": 8,
+      "device": "auto"
+    }
+  },
+  "25": {
+    "class_type": "GrowMask",
+    "inputs": {
+      "mask": ["31", 0],
+      "expand": 4,
+      "tapered_corners": true
+    }
+  },
+  "43": {
+    "class_type": "ImageRemoveAlpha+",
+    "inputs": {
+      "image": ["41", 0]
+    }
+  },
+  "42": {
+    "class_type": "ImageColorMatch+",
+    "inputs": {
+      "image": ["43", 0],
+      "reference": ["11", 0],
+      "color_space": "LAB",
+      "factor": 0.78,
+      "device": "auto",
+      "batch_size": 0
+    }
+  },
+  "20": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": ["21", 0],
+      "source": ["42", 0],
+      "mask": ["25", 0],
+      "x": 212,
+      "y": 20,
+      "resize_source": false
+    }
+  },
+  "26": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["20", 0],
+      "vae": ["4", 2]
+    }
+  }
+}

@@ -34,6 +34,12 @@ DiffuseCut wraps the character name and description into a turnaround sheet prom
 
 The default negative prompt excludes watermarks, text, single-angle outputs, and low quality artifacts.
 
+Photo-real projects use **casting portrait** layout (single full-body subject on the project **16:9** reference canvas, default 1344×768). Built-in negatives block triptychs, split-screen panels, contact sheets, multiple unrelated people, generic model faces, and turnaround-sheet artifacts. Animation and stylized presets use a four-view turnaround in the positive prompt on purpose.
+
+Optional **Extra negative prompt (this character sheet)** on each state adds terms on top of those defaults. See [`doc/USER-CONTROLLED-PROMPTS.md`](../../doc/USER-CONTROLLED-PROMPTS.md) for copy-paste extras if you need more reinforcement.
+
+Split **Character identity** (face, build, signature features) from each state's **Look description** (outfit only). Both are merged into the sheet prompt before generation.
+
 ## Workflow format
 
 Export your workflow in **ComfyUI API format** (not the UI graph export). The workflow JSON should be a flat object keyed by node id strings.

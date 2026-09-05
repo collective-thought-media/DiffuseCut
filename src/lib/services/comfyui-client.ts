@@ -68,13 +68,20 @@ export const COMFYUI_CHARACTER_REFERENCE_FILENAME =
   "DiffuseCutCharacterReference.png";
 export const COMFYUI_LOCATION_REFERENCE_FILENAME =
   "DiffuseCutLocationReference.png";
+export const COMFYUI_LOCATION_PLATE_FILENAME = "DiffuseCutLocationPlate.png";
+export const COMFYUI_CHARACTER_ISOLATE_FILENAME =
+  "DiffuseCutCharacterIsolate.png";
+export const COMFYUI_FACE_REFINE_SOURCE_FILENAME =
+  "DiffuseCutFaceRefineSource.png";
+export const COMFYUI_IMAGE_EDIT_SOURCE_FILENAME =
+  "DiffuseCutImageEditSource.png";
 
 export async function uploadMedia(
   baseUrl: string,
   filePath: string,
   options?: {
     overwrite?: boolean;
-    kind?: "image" | "video";
+    kind?: "image" | "video" | "audio";
     uploadFileName?: string;
   }
 ): Promise<{ name: string; subfolder: string; type: string }> {
@@ -84,7 +91,7 @@ export async function uploadMedia(
   const form = new FormData();
   form.append("image", blob, fileName);
   form.append("overwrite", options?.overwrite ? "true" : "false");
-  if (options?.kind === "video") {
+  if (options?.kind === "video" || options?.kind === "audio") {
     form.append("type", "input");
   }
 
@@ -201,6 +208,54 @@ export async function uploadLocationReferenceImage(
     filePath,
     COMFYUI_LOCATION_REFERENCE_FILENAME,
     "location"
+  );
+}
+
+export async function uploadLocationPlateImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_LOCATION_PLATE_FILENAME,
+    "location plate"
+  );
+}
+
+export async function uploadCharacterIsolateImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_CHARACTER_ISOLATE_FILENAME,
+    "character isolate"
+  );
+}
+
+export async function uploadFaceRefineSourceImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_FACE_REFINE_SOURCE_FILENAME,
+    "face refine source"
+  );
+}
+
+export async function uploadImageEditSourceImage(
+  baseUrl: string,
+  filePath: string
+): Promise<string> {
+  return uploadReferenceImageWithFilename(
+    baseUrl,
+    filePath,
+    COMFYUI_IMAGE_EDIT_SOURCE_FILENAME,
+    "image edit source"
   );
 }
 

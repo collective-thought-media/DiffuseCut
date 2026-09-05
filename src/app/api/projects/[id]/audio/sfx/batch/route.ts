@@ -7,7 +7,7 @@ import {
   parseJson,
 } from "@/lib/api-helpers";
 import { getDb, schema } from "@/lib/db";
-import { totalProjectFrames } from "@/lib/timing/frames";
+import { totalTimelineFrames } from "@/lib/timing/frames";
 import {
   createSfxTracksForShots,
   generateSfxTrackAudio,
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     }
 
     const fps = project.defaultFps ?? 24;
-    const totalFrames = totalProjectFrames(shots);
+    const totalFrames = totalTimelineFrames(shots);
 
     let tracks = listProjectSfxTracks(projectId);
 

@@ -3,6 +3,7 @@ import path from "path";
 import { and, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb, schema } from "@/lib/db";
+import { HttpError } from "@/lib/api-helpers";
 import type {
   AssetGenerationBatch,
   AssetGenerationOption,
@@ -20,10 +21,18 @@ import {
 import { buildShotPlaceholderDescription, buildShotPlaceholderContext, resolveShotVirtualBackdrop } from "@/lib/services/shot-prompt";
 import {
   buildShotPlaceholderPrompts,
-  SHOT_DUAL_IPADAPTER_LAYOUT_SUFFIX,
+  applyShotReferenceModePromptExtras,
+  SHOT_IMAGE_EDIT_INSTRUCTION_SUFFIX,
 } from "@/lib/services/prompt-preprocess";
+import { BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID } from "@/lib/db/builtin-template-ids";
 import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
-import { parseShotRenderOverrides } from "@/lib/shot-render-overrides";
+import {
+  parseShotRenderOverrides,
+  SHOT_SUBJECT_POSITION_ANCHORS,
+  SHOT_SUBJECT_SCALE_FRACTIONS,
+} from "@/lib/shot-render-overrides";
+import { detectIntegrateFramingIntent } from "@/lib/integrate-subject-mask";
+import { SHOT_IDENTITY_STRENGTH_PRESETS } from "@/lib/ip-adapter-profiles";
 import {
   buildShotWardrobeLock,
 } from "@/lib/services/shot-placeholder-options";
@@ -40,6 +49,10 @@ import {
 } from "@/lib/services/settings";
 import { listEndpoints } from "@/lib/services/comfyui-client";
 import {
+  isCompositingPipelineAvailable,
+  isFaceRefineAvailable,
+} from "@/lib/services/compositing-pipeline";
+import {
   resolveCharacterSheetTemplateId,
 } from "@/lib/services/asset-generation-queue";
 import type { RenderSettings } from "@/types";
@@ -50,6 +63,7 @@ import {
   updateAssetBatch,
   updateAssetOption,
   archiveAssetBatch,
+  archiveBatchAfterReferenceSelection,
   listRetainedBatchesForEntity,
 } from "@/lib/services/asset-generation-queue";
 
@@ -73,8 +87,15 @@ export async function resolveShotPlaceholderTemplateId(
     endpointUrl?: string;
     stillReferenceMode?: ShotStillReferenceMode;
     virtualBackdrop?: boolean;
+    compositingPipelineAvailable?: boolean;
   }
 ): Promise<string> {
+  const compositingPipelineAvailable =
+    options?.compositingPipelineAvailable ??
+    (options?.endpointUrl
+      ? await isCompositingPipelineAvailable(options.endpointUrl)
+      : false);
+
   const plan = resolveShotStillReferencePlan(
     {
       characterPath: options?.characterReferencePath ?? null,
@@ -84,8 +105,17 @@ export async function resolveShotPlaceholderTemplateId(
       locationAngleName: options?.locationAngleName ?? null,
     },
     options?.stillReferenceMode ?? "auto",
-    { virtualBackdrop: options?.virtualBackdrop }
+    {
+      virtualBackdrop: options?.virtualBackdrop,
+      compositingPipelineAvailable,
+    }
   );
+
+  // Scene edit runs on Qwen Image Edit, not IP-Adapter; the worker asserts
+  // its node classes at generation time, so don't gate it on IP-Adapter here.
+  if (plan.workflowTemplateId && plan.effectiveMode === "scene_edit") {
+    return plan.workflowTemplateId;
+  }
 
   if (
     plan.workflowTemplateId &&
@@ -329,8 +359,9 @@ export async function enqueueShotPlaceholderBatch(
 
   const priorBatch = getActiveBatchForShot(shotId);
   if (priorBatch && !options?.replace) {
-    throw new Error(
-      "A shot image batch is already in progress. Discard it first or regenerate."
+    throw new HttpError(
+      "A shot image batch is already in progress. Discard it first or regenerate.",
+      409
     );
   }
 
@@ -354,6 +385,9 @@ export async function enqueueShotPlaceholderBatch(
   const shotOverrides = parseShotRenderOverrides(shot.renderOverridesJson);
   const stillReferenceMode = shotOverrides.stillReferenceMode ?? "auto";
   const virtualBackdrop = resolveShotVirtualBackdrop(shotId);
+  const compositingPipelineAvailable = await isCompositingPipelineAvailable(
+    endpointUrl
+  );
   const referencePlan = resolveShotStillReferencePlan(
     {
       characterPath: referencePaths.characterPath,
@@ -363,8 +397,58 @@ export async function enqueueShotPlaceholderBatch(
       locationAngleName: referencePaths.locationAngleName,
     },
     stillReferenceMode,
-    { virtualBackdrop }
+    { virtualBackdrop, compositingPipelineAvailable }
   );
+
+  // Per-shot character likeness. "balanced" keeps the mode default (integrate
+  // in scene ships a softer 0.55/0.7 profile so the casting sheet does not set
+  // subject scale); low and high send explicit IP-Adapter overrides. Only
+  // applied to modes where the character reference drives a single IP-Adapter
+  // node (integrate-in-scene location plate and character-only), so dual-chain
+  // tuning stays intact.
+  const identityStrength = shotOverrides.identityStrength;
+  if (
+    identityStrength &&
+    identityStrength !== "balanced" &&
+    SHOT_IDENTITY_STRENGTH_PRESETS[identityStrength] &&
+    (referencePlan.effectiveMode === "integrate_in_scene" ||
+      referencePlan.effectiveMode === "character")
+  ) {
+    const preset = SHOT_IDENTITY_STRENGTH_PRESETS[identityStrength];
+    referencePlan.generationOptions.ipAdapterWeight = preset.weight;
+    referencePlan.generationOptions.ipAdapterEndAt = preset.endAt;
+  }
+
+  // Integrate in scene: per-shot subject scale and position presets drive the
+  // inpaint mask geometry (this is the explicit scale control, unlike prompt
+  // language the model can ignore).
+  if (referencePlan.effectiveMode === "integrate_in_scene") {
+    const subjectScale = shotOverrides.subjectScale;
+    if (subjectScale && SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale] != null) {
+      referencePlan.generationOptions.integrateSubjectHeightFraction =
+        SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale];
+    } else {
+      // No explicit size preset: honor framing language in the shot prompt
+      // (medium shot, close-up). Otherwise the model paints the large framing
+      // the prompt asks for and the small default mask box crops the head and
+      // legs mid-frame.
+      const framing = detectIntegrateFramingIntent(shot.prompt ?? "");
+      if (framing) {
+        referencePlan.generationOptions.integrateSubjectHeightFraction =
+          framing.heightFraction;
+        referencePlan.generationOptions.integrateSubjectGroundY =
+          framing.groundY;
+      }
+    }
+    const subjectPosition = shotOverrides.subjectPosition;
+    if (
+      subjectPosition &&
+      SHOT_SUBJECT_POSITION_ANCHORS[subjectPosition] != null
+    ) {
+      referencePlan.generationOptions.integrateSubjectAnchorX =
+        SHOT_SUBJECT_POSITION_ANCHORS[subjectPosition];
+    }
+  }
 
   const templateId = await resolveShotPlaceholderTemplateId(projectId, {
     referencePath: referencePaths.primaryPath,
@@ -376,6 +460,7 @@ export async function enqueueShotPlaceholderBatch(
     endpointUrl,
     stillReferenceMode,
     virtualBackdrop,
+    compositingPipelineAvailable,
   });
 
   const template = db
@@ -413,7 +498,6 @@ export async function enqueueShotPlaceholderBatch(
   const wardrobeLock = referencePlan.characterPath
     ? buildShotWardrobeLock(cast)
     : null;
-  const usesDualIpAdapter = referencePlan.useDualIpAdapter;
   const { processedPrompt, negativePrompt } = await buildShotPlaceholderPrompts(
     shotLabel,
     shotPrompt,
@@ -424,24 +508,35 @@ export async function enqueueShotPlaceholderBatch(
       hasLocationReference: referencePlan.hasLocationReferenceForPrompt,
     }
   );
-  const dualSuffixParts: string[] = [];
-  if (usesDualIpAdapter) {
-    dualSuffixParts.push(SHOT_DUAL_IPADAPTER_LAYOUT_SUFFIX);
-  }
   let finalProcessedPrompt = processedPrompt;
-  for (const part of dualSuffixParts) {
-    if (!finalProcessedPrompt.includes(part)) {
-      finalProcessedPrompt = `${finalProcessedPrompt}. ${part}`;
-    }
-  }
+  const promptExtras = applyShotReferenceModePromptExtras(
+    processedPrompt,
+    negativePrompt,
+    referencePlan
+  );
+  finalProcessedPrompt = promptExtras.processedPrompt;
   const renderSettingsParsed = JSON.parse(
     project.renderSettingsJson || "{}"
   ) as RenderSettings;
-  const finalNegativePrompt = mergeImageNegativePrompt(
-    negativePrompt,
+  let finalNegativePrompt = mergeImageNegativePrompt(
+    promptExtras.negativePrompt,
     renderSettingsParsed.imageDefaultNegative,
     shotOverrides.stillNegativePrompt
   );
+
+  // Face detail pass: opt-in per shot, needs a character reference for
+  // likeness and the Impact Pack nodes on the render host. Chained as a
+  // dependent option so it runs on each finished still automatically.
+  const faceRefineRequested =
+    shotOverrides.faceDetail === "refine" &&
+    Boolean(referencePlan.characterPath);
+  const faceRefineEnabled =
+    faceRefineRequested && (await isFaceRefineAvailable(endpointUrl));
+  if (faceRefineRequested && !faceRefineEnabled) {
+    console.warn(
+      "[shots] Face detail pass requested but ComfyUI is missing Impact Pack nodes; generating without it"
+    );
+  }
 
   const ts = Date.now();
   const batchId = nanoid();
@@ -465,6 +560,230 @@ export async function enqueueShotPlaceholderBatch(
 
   const candidateDir = path.join(
     resolveProjectRoot(project),
+    "storyboard",
+    "shots",
+    shotId,
+    "candidates",
+    batchId
+  );
+  fs.mkdirSync(candidateDir, { recursive: true });
+
+  for (let i = 0; i < count; i++) {
+    if (referencePlan.useCompositingPipeline) {
+      const pipelineGroupId = nanoid();
+      const characterOptionId = nanoid();
+      const compositeOptionId = nanoid();
+
+      db.insert(schema.assetGenerationOptions)
+        .values({
+          id: characterOptionId,
+          batchId,
+          variantIndex: i,
+          seed: randomSeed(),
+          status: "queued",
+          pipelineStage: "character",
+          pipelineGroupId,
+          createdAt: ts,
+        })
+        .run();
+
+      db.insert(schema.assetGenerationOptions)
+        .values({
+          id: compositeOptionId,
+          batchId,
+          variantIndex: i,
+          seed: randomSeed(),
+          status: "queued",
+          pipelineStage: "composite",
+          pipelineGroupId,
+          dependsOnOptionId: characterOptionId,
+          createdAt: ts,
+        })
+        .run();
+
+      if (faceRefineEnabled) {
+        db.insert(schema.assetGenerationOptions)
+          .values({
+            id: nanoid(),
+            batchId,
+            variantIndex: i,
+            seed: randomSeed(),
+            status: "queued",
+            pipelineStage: "face_refine",
+            pipelineGroupId,
+            dependsOnOptionId: compositeOptionId,
+            createdAt: ts,
+          })
+          .run();
+      }
+      continue;
+    }
+
+    if (faceRefineEnabled) {
+      // Two-stage: base render, then a face detail pass on its output. Only
+      // the refined result is selectable.
+      const pipelineGroupId = nanoid();
+      const baseOptionId = nanoid();
+
+      db.insert(schema.assetGenerationOptions)
+        .values({
+          id: baseOptionId,
+          batchId,
+          variantIndex: i,
+          seed: randomSeed(),
+          status: "queued",
+          pipelineStage: "base",
+          pipelineGroupId,
+          createdAt: ts,
+        })
+        .run();
+
+      db.insert(schema.assetGenerationOptions)
+        .values({
+          id: nanoid(),
+          batchId,
+          variantIndex: i,
+          seed: randomSeed(),
+          status: "queued",
+          pipelineStage: "face_refine",
+          pipelineGroupId,
+          dependsOnOptionId: baseOptionId,
+          createdAt: ts,
+        })
+        .run();
+      continue;
+    }
+
+    db.insert(schema.assetGenerationOptions)
+      .values({
+        id: nanoid(),
+        batchId,
+        variantIndex: i,
+        seed: randomSeed(),
+        status: "queued",
+        createdAt: ts,
+      })
+      .run();
+  }
+
+  if (priorBatch) {
+    supersedeShotPlaceholderBatch(projectId, shotId, priorBatch);
+  }
+
+  return db
+    .select()
+    .from(schema.assetGenerationBatches)
+    .where(eq(schema.assetGenerationBatches.id, batchId))
+    .get()!;
+}
+
+/**
+ * Instruction-based edit of a finished still (Qwen Image Edit): fix sign
+ * text, remove an object, adjust lighting. Creates a new pack whose source is
+ * the selected candidate image.
+ */
+export async function enqueueShotImageEditBatch(
+  projectId: string,
+  shotId: string,
+  sourceOptionId: string,
+  instruction: string,
+  sampleCount: number,
+  options?: { replace?: boolean }
+): Promise<AssetGenerationBatch> {
+  await assertDependency("comfyui");
+
+  const trimmedInstruction = instruction.trim();
+  if (!trimmedInstruction) {
+    throw new HttpError("Describe the edit to make", 400);
+  }
+
+  const count = Math.min(4, Math.max(1, sampleCount));
+  const db = getDb();
+
+  const sourceOption = db
+    .select()
+    .from(schema.assetGenerationOptions)
+    .where(eq(schema.assetGenerationOptions.id, sourceOptionId))
+    .get();
+  if (
+    !sourceOption ||
+    sourceOption.status !== "completed" ||
+    !sourceOption.outputPath
+  ) {
+    throw new HttpError("Source image is not ready to edit", 400);
+  }
+
+  const sourceBatch = db
+    .select()
+    .from(schema.assetGenerationBatches)
+    .where(eq(schema.assetGenerationBatches.id, sourceOption.batchId))
+    .get();
+  if (
+    !sourceBatch ||
+    sourceBatch.projectId !== projectId ||
+    sourceBatch.entityType !== "shot" ||
+    sourceBatch.entityId !== shotId
+  ) {
+    throw new HttpError("Source image does not belong to this shot", 400);
+  }
+
+  const priorBatch = getActiveBatchForShot(shotId);
+  if (priorBatch && !options?.replace) {
+    throw new HttpError(
+      "A shot image batch is already in progress. Discard it first or regenerate.",
+      409
+    );
+  }
+
+  const project = db
+    .select()
+    .from(schema.projects)
+    .where(eq(schema.projects.id, projectId))
+    .get()!;
+  const projectRoot = resolveProjectRoot(project);
+  const sourceAbs = resolveMediaPath(projectRoot, sourceOption.outputPath);
+  if (!fs.existsSync(sourceAbs)) {
+    throw new HttpError("Source image file missing on disk", 400);
+  }
+
+  const appEndpoints = await getDefaultComfyuiEndpoints();
+  const endpoints = resolveComfyuiEndpoints(
+    project.comfyuiEndpointsJson,
+    appEndpoints
+  );
+  const endpointUrl = await listEndpoints(endpoints);
+  if (!endpointUrl) {
+    throw new Error("No reachable ComfyUI endpoint configured");
+  }
+
+  const ts = Date.now();
+  const batchId = nanoid();
+  const processedPrompt = `${trimmedInstruction}${
+    trimmedInstruction.endsWith(".") ? "" : "."
+  } ${SHOT_IMAGE_EDIT_INSTRUCTION_SUFFIX}`;
+
+  db.insert(schema.assetGenerationBatches)
+    .values({
+      id: batchId,
+      projectId,
+      entityType: "shot",
+      entityId: shotId,
+      workflowTemplateId: BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
+      comfyuiEndpointUrl: endpointUrl,
+      status: "queued",
+      sampleCount: count,
+      rawPrompt: trimmedInstruction,
+      processedPrompt,
+      negativePrompt: "",
+      generationOptionsJson: JSON.stringify({
+        imageEditSourcePath: sourceOption.outputPath,
+      }),
+      createdAt: ts,
+    })
+    .run();
+
+  const candidateDir = path.join(
+    projectRoot,
     "storyboard",
     "shots",
     shotId,
@@ -568,23 +887,7 @@ export async function selectShotPlaceholderOption(
     .where(eq(schema.shots.id, shotId))
     .get()!;
 
-  const siblingOptions = db
-    .select()
-    .from(schema.assetGenerationOptions)
-    .where(eq(schema.assetGenerationOptions.batchId, batch.id))
-    .all();
-
-  for (const sibling of siblingOptions) {
-    updateAssetOption(sibling.id, {
-      selected: sibling.id === optionId,
-    });
-  }
-
-  updateAssetBatch(batch.id, {
-    status: "awaiting_selection",
-    completedAt: null,
-    errorMessage: null,
-  });
+  archiveBatchAfterReferenceSelection(batch.id, optionId);
 
   return updated;
 }

@@ -31,7 +31,7 @@
   "6": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "character reference sheet",
+      "text": "single photograph, one person",
       "clip": ["4", 1]
     }
   },

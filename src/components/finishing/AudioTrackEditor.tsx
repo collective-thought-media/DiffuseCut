@@ -13,6 +13,10 @@ import {
   type AudioTrackSpanMode,
 } from "@/lib/finishing/audio-track-timing";
 import {
+  shotTimelineFrames,
+  trimmedShotStartFrame,
+} from "@/lib/timing/frames";
+import {
   Button,
   Card,
   Input,
@@ -54,6 +58,9 @@ const VARIANT_CONFIG = {
     presetRestLabel: "Score from playhead to end",
     presetCustomLabel: "Custom track",
     generateError: "Describe the score or sound in the brief field first.",
+    uploadLabel: "Upload score file",
+    footerNote:
+      "Upload your own score file, or generate with local or remote ACE-Step in",
   },
   dialog: {
     kind: "voiceover" as TrackKind,
@@ -70,6 +77,9 @@ const VARIANT_CONFIG = {
     presetRestLabel: "Dialog from playhead to end",
     presetCustomLabel: "Custom track",
     generateError: "Describe the dialog or voice in the brief field first.",
+    uploadLabel: "Upload voice over file",
+    footerNote:
+      "Upload your own voice over or dialog recording, or generate a voice tone bed from the brief in",
   },
 } as const;
 
@@ -100,7 +110,33 @@ export function AudioTrackEditor({
   const visibleTracks = tracks.filter((track) => track.kind === config.kind);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lipSyncBusy, setLipSyncBusy] = useState(false);
+  const [lipSyncMessage, setLipSyncMessage] = useState<string | null>(null);
+  const [lipSyncTarget, setLipSyncTarget] = useState<string>("");
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+
+  const dialogCoveredShots = useMemo(() => {
+    if (variant !== "dialog") return [];
+    const readyTracks = tracks.filter(
+      (track) =>
+        track.kind === "voiceover" &&
+        track.filePath &&
+        !track.filePath.includes("pending")
+    );
+    if (readyTracks.length === 0) return [];
+    return shots.filter((shot, index) => {
+      const shotStart = trimmedShotStartFrame(shots, index);
+      const span = shotTimelineFrames(shot);
+      return readyTracks.some((track) => {
+        const timing = resolveTrackTiming(track, shots, totalFrames);
+        return (
+          Math.min(shotStart + span, timing.endFrame) -
+            Math.max(shotStart, timing.startFrame) >=
+          1
+        );
+      });
+    });
+  }, [variant, tracks, shots, totalFrames]);
 
   const totalSeconds = (totalFrames / fps).toFixed(2);
 
@@ -267,6 +303,32 @@ export function AudioTrackEditor({
       setError(err instanceof Error ? err.message : "Delete failed");
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function handleLipSyncRenders() {
+    setError(null);
+    setLipSyncMessage(null);
+    setLipSyncBusy(true);
+    try {
+      const target = lipSyncTarget || dialogCoveredShots[0]?.id || "";
+      const res = await fetch(`/api/projects/${projectId}/lip-sync-renders`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          target === "__all__" ? {} : { shotIds: [target] }
+        ),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Lip sync render failed");
+      const count = data.jobs?.length ?? 0;
+      setLipSyncMessage(
+        `Queued ${count} lip sync ${count === 1 ? "clip" : "clips"}. Watch progress on the storyboard or render queue, then come back here to preview.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Lip sync render failed");
+    } finally {
+      setLipSyncBusy(false);
     }
   }
 
@@ -653,7 +715,7 @@ export function AudioTrackEditor({
                   disabled={busyId === track.id}
                   onClick={() => fileInputRefs.current[track.id]?.click()}
                 >
-                  {hasFile ? "Replace upload" : "Upload score file"}
+                  {hasFile ? "Replace upload" : config.uploadLabel}
                 </Button>
                 <Button
                   size="sm"
@@ -669,8 +731,52 @@ export function AudioTrackEditor({
         })
       )}
 
+      {variant === "dialog" && (
+        <Card className="mb-0 space-y-3 p-4">
+          <p className="text-sm font-medium">Lip sync</p>
+          <p className="text-xs text-muted-foreground">
+            Re-render every shot covered by a dialog track using the
+            audio-conditioned LTX workflow. Each clip gets only the portion of
+            the dialog that plays during it, plus speech direction in the
+            prompt, so mouths match the words. Works best when the speaker
+            faces the camera in a medium shot or closer. In wide shots the face
+            is too small for visible lip movement. Renders replace the shot
+            videos when they finish.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              className="w-auto min-w-[220px]"
+              value={lipSyncTarget || dialogCoveredShots[0]?.id || ""}
+              onChange={(e) => setLipSyncTarget(e.target.value)}
+              disabled={dialogCoveredShots.length === 0}
+            >
+              {dialogCoveredShots.map((shot, index) => (
+                <option key={shot.id} value={shot.id}>
+                  {shot.title?.trim() || `Shot ${index + 1}`}
+                </option>
+              ))}
+              {dialogCoveredShots.length > 1 && (
+                <option value="__all__">
+                  All covered shots ({dialogCoveredShots.length})
+                </option>
+              )}
+            </Select>
+            <Button
+              size="sm"
+              disabled={lipSyncBusy || dialogCoveredShots.length === 0}
+              onClick={() => void handleLipSyncRenders()}
+            >
+              {lipSyncBusy ? "Queuing lip sync render…" : "Render lip sync"}
+            </Button>
+          </div>
+          {lipSyncMessage && (
+            <p className="text-xs text-emerald-400">{lipSyncMessage}</p>
+          )}
+        </Card>
+      )}
+
       <p className="text-xs text-muted-foreground">
-        Upload your own score file, generate with local or remote ACE-Step in{" "}
+        {config.footerNote}{" "}
         <Link href="/settings" className="text-primary hover:underline">
           Settings
         </Link>

@@ -6,6 +6,9 @@ export type DependencyId =
   | "comfyui"
   | "comfyui_checkpoints"
   | "comfyui_ipadapter"
+  | "comfyui_compositing"
+  | "comfyui_qwen_edit"
+  | "comfyui_face_refine"
   | "comfyui_ltx_i2v"
   | "comfyui_minimax_i2v"
   | "comfyui_ace_step"
@@ -50,8 +53,46 @@ export interface WorkflowBindings {
   /** Per-node IP-Adapter tuning in dual-reference workflows. */
   characterIpAdapterNodeId?: string;
   locationIpAdapterNodeId?: string;
+  /** Location plate for composited shots (img2img latent from saved angle). */
+  locationPlateImageNodeId?: string;
+  locationPlateImageInputKey?: string;
+  /** Gaussian blur on location plate before composite. */
+  backgroundBlurNodeId?: string;
+  backgroundBlurRadiusInputKey?: string;
+  backgroundBlurSigmaInputKey?: string;
+  /** Scale character isolate before compositing. */
+  characterScaleNodeId?: string;
+  characterScaleWidthInputKey?: string;
+  characterScaleHeightInputKey?: string;
+  /** Foreground paste layer from the character isolate stage. */
+  characterIsolateImageNodeId?: string;
+  characterIsolateImageInputKey?: string;
+  /** Place scaled character on blurred plate. */
+  compositeNodeId?: string;
+  compositeXInputKey?: string;
+  compositeYInputKey?: string;
+  /** Soften subject mask edges before paste (MaskBlur+). */
+  maskBlurNodeId?: string;
+  maskBlurAmountInputKey?: string;
+  /** Match cutout color to location plate before paste (ImageColorMatch+). */
+  colorMatchNodeId?: string;
+  colorMatchFactorInputKey?: string;
+  /** Integrate in scene: full-frame empty SolidMask (sized to the plate). */
+  subjectMaskFrameNodeId?: string;
+  /** Integrate in scene: subject-region SolidMask (box that gets denoised). */
+  subjectMaskBoxNodeId?: string;
+  /** Integrate in scene: MaskComposite placing the box on the frame. */
+  subjectMaskCompositeNodeId?: string;
+  /** Integrate in scene: FeatherMask softening the box edges. */
+  subjectMaskFeatherNodeId?: string;
   /** img2img encodes the reference into the latent; ipadapter keeps txt2img composition freedom. */
-  referenceImageUsage?: "img2img" | "ipadapter";
+  referenceImageUsage?:
+    | "img2img"
+    | "ipadapter"
+    | "location_plate"
+    | "composite_inpaint"
+    | "scene_edit"
+    | "face_refine";
   referenceVideoNodeId?: string;
   referenceVideoInputKey?: string;
   seedNodeId?: string;
@@ -67,6 +108,12 @@ export interface WorkflowBindings {
   conditioningFpsInputKey?: string;
   audioLatentFpsNodeId?: string;
   audioLatentFpsInputKey?: string;
+  /** LoadAudio node for audio-conditioned video (lip sync) workflows. */
+  audioInputNodeId?: string;
+  audioInputInputKey?: string;
+  /** TrimAudioDuration node: clamps the conditioning audio to clip length. */
+  audioTrimDurationNodeId?: string;
+  audioTrimDurationInputKey?: string;
   durationSecondsNodeId?: string;
   durationSecondsInputKey?: string;
   outputFilenameNodeId?: string;
@@ -74,6 +121,13 @@ export interface WorkflowBindings {
   latentVideoNodeId?: string;
   latentVideoWidthInputKey?: string;
   latentVideoHeightInputKey?: string;
+  /**
+   * Max latent area in pixels (width x height). Render dimensions above the
+   * budget are scaled down proportionally (multiples of 16). LTX 2.3 audio
+   * conditioning only engages near its training resolution (~1280x720), so
+   * the lip sync template caps at 921600 regardless of project render size.
+   */
+  latentVideoAreaBudget?: number;
   outputNodeIds?: string[];
   controls?: WorkflowControl[];
 }
@@ -153,13 +207,54 @@ export interface LocationReferenceGenerationOptions {
   ipAdapterWeight?: number;
   /** Override IP-Adapter end_at (0.2 to 0.85). */
   ipAdapterEndAt?: number;
+  /**
+   * Override IP-Adapter weight type. "style transfer" carries appearance
+   * without the reference image's pose/composition (integrate in scene).
+   */
+  ipAdapterWeightType?: "linear" | "style transfer";
+  /**
+   * Integrate in scene: subject feet line as a fraction of plate height.
+   * Above 1 means feet below the frame (medium shot / close-up framing).
+   */
+  integrateSubjectGroundY?: number;
   /** Shot batch: virtual seamless backdrop (dual IP-Adapter backdrop chain). */
   virtualBackdrop?: boolean;
+  /**
+   * Instruction edit batch: project-relative path of the finished still being
+   * edited (uploaded to ComfyUI as the edit source).
+   */
+  imageEditSourcePath?: string;
   /** Shot batch: user-selected reference routing (stored on enqueue). */
   stillReferenceMode?: ShotStillReferenceMode;
   /** Shot batch: which single reference image IP-Adapter uses. */
   referenceFocus?: "character" | "location";
+  /** Partial denoise when initializing from location plate (Phase 1 composited). */
+  locationPlateDenoise?: number;
+  /** Integrate in scene: subject mask height as a fraction of frame height. */
+  integrateSubjectHeightFraction?: number;
+  /** Integrate in scene: horizontal center of the subject mask (0 to 1). */
+  integrateSubjectAnchorX?: number;
+  /** Seam blend denoise for composite inpaint (Phase 3). */
+  compositeInpaintDenoise?: number;
+  /** Background defocus strength for composite stage. */
+  compositeBackgroundBlurRadius?: number;
+  compositeBackgroundBlurSigma?: number;
+  /** Foreground subject size and placement on the plate (pixels). */
+  compositeCharacterWidth?: number;
+  compositeCharacterHeight?: number;
+  compositeCharacterX?: number;
+  compositeCharacterY?: number;
+  /** MaskBlur+ amount before paste in composite stage. */
+  compositeMaskBlurAmount?: number;
+  /** ImageColorMatch+ factor (0 to 1) before paste. */
+  compositeColorMatchFactor?: number;
+  /** Run character isolate then composite inpaint when ComfyUI nodes are available. */
+  useCompositingPipeline?: boolean;
+  /** Character sheet: generate intentional front+back diptych for paired angle split. */
+  frontBackDiptych?: boolean;
 }
+
+export type AssetPipelineStage = "character" | "composite";
 
 export interface GenerationStack {
   endpointUrl: string;
@@ -186,6 +281,7 @@ export interface GenerationStack {
     scheduler?: string;
   };
   ipAdapterAvailable: boolean;
+  compositingAvailable: boolean;
 }
 
 export type MediaKind = "image" | "video";

@@ -8,6 +8,8 @@ import { getDb, schema } from "@/lib/db";
 
 import { buildCharacterSheetPrompts } from "@/lib/services/prompt-preprocess";
 
+import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
+
 import { parseVisualStyle } from "@/lib/services/visual-style";
 
 
@@ -56,13 +58,30 @@ export async function GET(req: NextRequest) {
 
 
 
+    const extraNegativePrompt =
+      req.nextUrl.searchParams.get("extraNegativePrompt")?.trim() || undefined;
+    const anchorMode =
+      req.nextUrl.searchParams.get("anchorMode") === "true";
+    const viewDescription =
+      req.nextUrl.searchParams.get("viewDescription")?.trim() || undefined;
+
     const { processedPrompt, negativePrompt, usedLlm } =
+      await buildCharacterSheetPrompts(name, description, visualStyle, {
+        anchorMode: anchorMode || undefined,
+        viewDescription,
+      });
 
-      await buildCharacterSheetPrompts(name, description, visualStyle);
+    const negativeWithExtra = mergeImageNegativePrompt(
+      negativePrompt,
+      extraNegativePrompt
+    );
 
-
-
-    return jsonOk({ processedPrompt, negativePrompt, usedLlm, visualStyle });
+    return jsonOk({
+      processedPrompt,
+      negativePrompt: negativeWithExtra,
+      usedLlm,
+      visualStyle,
+    });
 
   } catch (err) {
 

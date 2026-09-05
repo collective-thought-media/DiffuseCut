@@ -21,7 +21,7 @@ import {
   resolveShotStillReferencePlan,
   type ShotStillReferenceMode,
 } from "@/lib/services/shot-still-reference-mode";
-import { parseShotRenderOverrides, mergeShotRenderOverrides, serializeShotRenderOverrides } from "@/lib/shot-render-overrides";
+import { parseShotRenderOverrides, mergeShotRenderOverrides, serializeShotRenderOverrides, type ShotFaceDetail, type ShotIdentityStrength, type ShotSubjectPosition, type ShotSubjectScale } from "@/lib/shot-render-overrides";
 import { ShotStillReferenceControls } from "@/components/storyboard/ShotStillReferenceControls";
 import {
   frameAtTimelinePosition,
@@ -150,6 +150,13 @@ export default function StoryboardPage({ params }: PageProps) {
         referenceMediaLabel: null as string | null,
         referenceDetail: null as string | null,
         stillReferenceMode: "auto" as ShotStillReferenceMode,
+        identityStrength: "balanced" as ShotIdentityStrength,
+        showIdentityStrength: false,
+        subjectScale: "medium" as ShotSubjectScale,
+        subjectPosition: "center" as ShotSubjectPosition,
+        showSubjectControls: false,
+        faceDetail: "off" as ShotFaceDetail,
+        showFaceDetail: false,
         availableReferenceModes: [] as ShotStillReferenceMode[],
         characterName: null as string | null,
         locationLabel: null as string | null,
@@ -177,10 +184,21 @@ export default function StoryboardPage({ params }: PageProps) {
     });
 
     const castSplit = resolveShotCastReferenceSplit(castEntries);
-    const stillReferenceMode =
-      parseShotRenderOverrides(selectedShot.renderOverridesJson)
-        .stillReferenceMode ?? "auto";
+    const shotOverrides = parseShotRenderOverrides(
+      selectedShot.renderOverridesJson
+    );
+    const stillReferenceMode = shotOverrides.stillReferenceMode ?? "auto";
+    const identityStrength = shotOverrides.identityStrength ?? "balanced";
+    const subjectScale = shotOverrides.subjectScale ?? "medium";
+    const subjectPosition = shotOverrides.subjectPosition ?? "center";
+    const faceDetail = shotOverrides.faceDetail ?? "off";
     const plan = resolveShotStillReferencePlan(refs, stillReferenceMode);
+    const showIdentityStrength =
+      plan.effectiveMode === "integrate_in_scene" ||
+      plan.effectiveMode === "character";
+    const showSubjectControls = plan.effectiveMode === "integrate_in_scene";
+    const showFaceDetail =
+      Boolean(refs.characterPath) && plan.effectiveMode !== "prompt_only";
     const locationLabel = [refs.locationStateName, refs.locationAngleName]
       .filter(Boolean)
       .join(", ");
@@ -193,6 +211,13 @@ export default function StoryboardPage({ params }: PageProps) {
         referenceMediaLabel: null,
         referenceDetail: null,
         stillReferenceMode,
+        identityStrength,
+        showIdentityStrength,
+        subjectScale,
+        subjectPosition,
+        showSubjectControls,
+        faceDetail,
+        showFaceDetail,
         availableReferenceModes: listAvailableShotStillReferenceModes(refs),
         characterName: refs.characterName,
         locationLabel: locationLabel || null,
@@ -223,6 +248,14 @@ export default function StoryboardPage({ params }: PageProps) {
           `Cast (${castEntries.map((entry) => entry.character.name).join(", ")}): look descriptions in the prompt only unless character reference mode is selected.`
         );
       }
+    } else if (plan.effectiveMode === "integrate_in_scene") {
+      detailParts.push(
+        `Integrate in scene: ${refs.characterName ?? "Character"} painted into ${locationLabel || "location"} via location-plate img2img. One diffusion pass, no cutout paste.`
+      );
+    } else if (plan.effectiveMode === "composited") {
+      detailParts.push(
+        `Composited: ${refs.characterName ?? "Character"} on ${locationLabel || "location"}. Location plate locks set layout; character reference locks identity and wardrobe.`
+      );
     } else if (plan.effectiveMode === "prompt_only") {
       detailParts.push(
         "Prompt only: no reference image is sent to ComfyUI for this shot."
@@ -252,6 +285,13 @@ export default function StoryboardPage({ params }: PageProps) {
       referenceMediaLabel: plan.label ?? refs.primaryLabel,
       referenceDetail: detailParts.length > 0 ? detailParts.join(" ") : null,
       stillReferenceMode,
+      identityStrength,
+      showIdentityStrength,
+      subjectScale,
+      subjectPosition,
+      showSubjectControls,
+      faceDetail,
+      showFaceDetail,
       availableReferenceModes: listAvailableShotStillReferenceModes(refs),
       characterName: refs.characterName,
       locationLabel: locationLabel || null,
@@ -466,6 +506,11 @@ export default function StoryboardPage({ params }: PageProps) {
           hasPlaceholder={Boolean(selectedShot.placeholderPath)}
           renderOverridesJson={selectedShot.renderOverridesJson}
           hasLocationReference={Boolean(selectedShot.locationId)}
+          hasCharacterReference={Boolean(
+            shotReferenceMeta.usesCharacterReference ||
+              shotReferenceMeta.availableReferenceModes.includes("character")
+          )}
+          stillReferenceMode={shotReferenceMeta.stillReferenceMode}
           onRenderOverridesChange={(renderOverridesJson) => {
             setShots((prev) =>
               prev.map((s) =>
@@ -610,11 +655,82 @@ export default function StoryboardPage({ params }: PageProps) {
               availableModes={shotReferenceMeta.availableReferenceModes}
               characterName={shotReferenceMeta.characterName}
               locationLabel={shotReferenceMeta.locationLabel}
+              identityStrength={shotReferenceMeta.identityStrength}
+              showIdentityStrength={shotReferenceMeta.showIdentityStrength}
+              subjectScale={shotReferenceMeta.subjectScale}
+              subjectPosition={shotReferenceMeta.subjectPosition}
+              showSubjectControls={shotReferenceMeta.showSubjectControls}
+              faceDetail={shotReferenceMeta.faceDetail}
+              showFaceDetail={shotReferenceMeta.showFaceDetail}
+              onFaceDetailChange={(faceDetail) => {
+                const next = serializeShotRenderOverrides(
+                  mergeShotRenderOverrides(
+                    parseShotRenderOverrides(selectedShot.renderOverridesJson),
+                    { faceDetail }
+                  )
+                );
+                setShots((prev) =>
+                  prev.map((s) =>
+                    s.id === selectedShotId
+                      ? { ...s, renderOverridesJson: next }
+                      : s
+                  )
+                );
+                schedule({ renderOverridesJson: next });
+              }}
+              onSubjectScaleChange={(subjectScale) => {
+                const next = serializeShotRenderOverrides(
+                  mergeShotRenderOverrides(
+                    parseShotRenderOverrides(selectedShot.renderOverridesJson),
+                    { subjectScale }
+                  )
+                );
+                setShots((prev) =>
+                  prev.map((s) =>
+                    s.id === selectedShotId
+                      ? { ...s, renderOverridesJson: next }
+                      : s
+                  )
+                );
+                schedule({ renderOverridesJson: next });
+              }}
+              onSubjectPositionChange={(subjectPosition) => {
+                const next = serializeShotRenderOverrides(
+                  mergeShotRenderOverrides(
+                    parseShotRenderOverrides(selectedShot.renderOverridesJson),
+                    { subjectPosition }
+                  )
+                );
+                setShots((prev) =>
+                  prev.map((s) =>
+                    s.id === selectedShotId
+                      ? { ...s, renderOverridesJson: next }
+                      : s
+                  )
+                );
+                schedule({ renderOverridesJson: next });
+              }}
               onChange={(stillReferenceMode) => {
                 const next = serializeShotRenderOverrides(
                   mergeShotRenderOverrides(
                     parseShotRenderOverrides(selectedShot.renderOverridesJson),
                     { stillReferenceMode }
+                  )
+                );
+                setShots((prev) =>
+                  prev.map((s) =>
+                    s.id === selectedShotId
+                      ? { ...s, renderOverridesJson: next }
+                      : s
+                  )
+                );
+                schedule({ renderOverridesJson: next });
+              }}
+              onIdentityStrengthChange={(identityStrength) => {
+                const next = serializeShotRenderOverrides(
+                  mergeShotRenderOverrides(
+                    parseShotRenderOverrides(selectedShot.renderOverridesJson),
+                    { identityStrength }
                   )
                 );
                 setShots((prev) =>

@@ -1,11 +1,13 @@
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import type { Shot } from "@/lib/db/schema";
 import { listLocationStates } from "@/lib/services/location-states";
 import {
   getShotCharacterCast,
+  listCharacterAngles,
   resolveCharacterStateForCast,
 } from "@/lib/services/character-states";
+import { resolveCharacterStateCoverPath } from "@/lib/character-preview";
 import {
   resolveShotCharacterReferenceFromCast,
   resolveShotLocationReferenceFromStates,
@@ -109,6 +111,39 @@ export function resolveShotReferencePath(shotId: string): string | null {
     .get();
   if (!shot) return null;
   return resolveShotReferencePaths(shot).primaryPath;
+}
+
+/**
+ * Canonical face reference for a shot's face detail pass: the first (default)
+ * state of the shot's cast, typically the studio casting portrait, so one
+ * face drives likeness across every outfit, state, and scene. Returns null
+ * when no cast member has a default-state image; callers fall back to the
+ * state-resolved character reference.
+ */
+export function resolveShotCanonicalFacePathForBatch(batch: {
+  entityType: string;
+  entityId: string;
+}): string | null {
+  if (batch.entityType !== "shot") return null;
+  const db = getDb();
+  for (const row of getShotCharacterCast(batch.entityId)) {
+    const defaultState = db
+      .select()
+      .from(schema.characterStates)
+      .where(eq(schema.characterStates.characterId, row.characterId))
+      .orderBy(
+        asc(schema.characterStates.sortOrder),
+        asc(schema.characterStates.createdAt)
+      )
+      .get();
+    if (!defaultState) continue;
+    const coverPath = resolveCharacterStateCoverPath({
+      ...defaultState,
+      angles: listCharacterAngles(defaultState.id),
+    });
+    if (coverPath) return coverPath;
+  }
+  return null;
 }
 
 export function resolveShotReferencePathForBatch(batch: {

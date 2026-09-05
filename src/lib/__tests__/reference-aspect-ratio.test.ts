@@ -3,6 +3,7 @@ import {
   DEFAULT_REFERENCE_ASPECT_RATIO,
   parseReferenceAspectRatio,
   resolveCharacterSheetReferenceDimensions,
+  resolveFrontBackDiptychDimensions,
   resolveReferenceAspectRatio,
 } from "@/lib/services/reference-aspect-ratio";
 import { DEFAULT_VISUAL_STYLE } from "@/lib/services/visual-style";
@@ -29,5 +30,13 @@ describe("reference aspect ratio", () => {
       "16_9"
     );
     expect(dims).toEqual({ width: 1344, height: 768 });
+  });
+
+  it("doubles width for front+back diptych canvas", () => {
+    const dims = resolveFrontBackDiptychDimensions(
+      DEFAULT_VISUAL_STYLE,
+      "16_9"
+    );
+    expect(dims).toEqual({ width: 2688, height: 768 });
   });
 });

@@ -2,10 +2,12 @@ import fs from "fs";
 import path from "path";
 import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
-import type { CharacterState, LocationAngle } from "@/lib/db/schema";
+import type { CharacterAngle, CharacterState, LocationAngle } from "@/lib/db/schema";
 import { resolveProjectRoot } from "@/lib/paths/project-paths";
 import {
+  getCharacterAngle,
   getCharacterState,
+  listCharacterStates,
   syncCharacterReferenceFromState,
 } from "@/lib/services/character-states";
 import {
@@ -156,6 +158,111 @@ export function clearLocationAngleReference(
   );
   if (stateWithAngles) {
     syncLocationReferenceFromState(locationId, stateWithAngles, projectRoot);
+  }
+
+  return updated;
+}
+
+export async function applyCharacterAngleReferenceMedia(
+  projectId: string,
+  characterId: string,
+  stateId: string,
+  angleId: string,
+  buffer: Buffer,
+  fileName: string,
+  source: SheetReferenceMediaSource = "upload"
+): Promise<{ angle: CharacterAngle; relativePath: string; kind: "image" | "video" }> {
+  const angle = getCharacterAngle(projectId, characterId, stateId, angleId);
+  if (!angle) throw new Error("Character angle not found");
+
+  const db = getDb();
+  const project = db
+    .select()
+    .from(schema.projects)
+    .where(eq(schema.projects.id, projectId))
+    .get();
+  if (!project) throw new Error("Project not found");
+
+  const projectRoot = resolveProjectRoot(project);
+  const relativeDir = `characters/${characterId}/states/${stateId}/angles/${angleId}`;
+  removeReferenceFile(projectRoot, angle.referencePath);
+
+  const { relativePath, kind } = writeReferenceFile(
+    projectRoot,
+    relativeDir,
+    buffer,
+    fileName
+  );
+
+  const ts = nowMs();
+  db.update(schema.characterAngles)
+    .set({
+      referencePath: relativePath,
+      referenceKind: kind,
+      referenceSource: source,
+      updatedAt: ts,
+    })
+    .where(eq(schema.characterAngles.id, angleId))
+    .run();
+
+  const updated = db
+    .select()
+    .from(schema.characterAngles)
+    .where(eq(schema.characterAngles.id, angleId))
+    .get()!;
+
+  const stateWithAngles = listCharacterStates(characterId).find(
+    (item) => item.id === stateId
+  );
+  if (stateWithAngles) {
+    syncCharacterReferenceFromState(characterId, stateWithAngles, projectRoot);
+  }
+
+  return { angle: updated, relativePath, kind };
+}
+
+export function clearCharacterAngleReference(
+  projectId: string,
+  characterId: string,
+  stateId: string,
+  angleId: string
+): CharacterAngle {
+  const angle = getCharacterAngle(projectId, characterId, stateId, angleId);
+  if (!angle) throw new Error("Character angle not found");
+
+  const db = getDb();
+  const project = db
+    .select()
+    .from(schema.projects)
+    .where(eq(schema.projects.id, projectId))
+    .get();
+  if (!project) throw new Error("Project not found");
+
+  const projectRoot = resolveProjectRoot(project);
+  removeReferenceFile(projectRoot, angle.referencePath);
+
+  const ts = nowMs();
+  db.update(schema.characterAngles)
+    .set({
+      referencePath: null,
+      referenceKind: null,
+      referenceSource: null,
+      updatedAt: ts,
+    })
+    .where(eq(schema.characterAngles.id, angleId))
+    .run();
+
+  const updated = db
+    .select()
+    .from(schema.characterAngles)
+    .where(eq(schema.characterAngles.id, angleId))
+    .get()!;
+
+  const stateWithAngles = listCharacterStates(characterId).find(
+    (item) => item.id === stateId
+  );
+  if (stateWithAngles) {
+    syncCharacterReferenceFromState(characterId, stateWithAngles, projectRoot);
   }
 
   return updated;

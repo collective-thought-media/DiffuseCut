@@ -2,6 +2,17 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { DependencyMissingError } from "@/types";
 
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly extra?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 export function jsonOk<T>(data: T, status = 200) {
   return NextResponse.json(data, { status });
 }
@@ -11,6 +22,9 @@ export function jsonError(message: string, status = 400, extra?: object) {
 }
 
 export function handleApiError(err: unknown) {
+  if (err instanceof HttpError) {
+    return jsonError(err.message, err.status, err.extra);
+  }
   if (err instanceof DependencyMissingError) {
     return jsonError(err.message, 503, {
       dependencyId: err.dependencyId,

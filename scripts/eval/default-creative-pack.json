@@ -1,0 +1,113 @@
+{
+  "title": "Last Train Home",
+  "logline": "Two strangers share a rain-soaked platform when the midnight express is delayed.",
+  "plot": "Mira waits under a flickering platform light with her guitar case. Jonas arrives breathless, checking a pocket watch. They trade wary glances until distant thunder rolls. Mira offers shelter under her umbrella. Jonas admits he missed the last connection to see someone who may not wait. When the train finally arrives, they choose different doors, but Mira leaves a ticket stub on the bench.",
+  "visualStylePreset": "photoreal_cinematic",
+  "referenceAspectRatio": "16_9",
+  "characters": [
+    {
+      "name": "Mira",
+      "description": "Late twenties musician, tired but alert.",
+      "state": {
+        "name": "Platform wait",
+        "lookDescription": "Olive trench coat over a charcoal turtleneck, dark jeans, scuffed black boots, short curly hair, small silver hoop earrings, canvas guitar case with faded stickers",
+        "angles": [
+          {
+            "name": "Front full body",
+            "viewDescription": "Full body front three-quarter, head to toe, casting reference framing"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Jonas",
+      "description": "Early thirties commuter, anxious energy.",
+      "state": {
+        "name": "Platform wait",
+        "lookDescription": "Navy peacoat, white shirt, loosened tie, grey wool trousers, brown leather brogues, neat side part, brass pocket watch on a chain",
+        "angles": [
+          {
+            "name": "Front full body",
+            "viewDescription": "Full body front three-quarter, head to toe, casting reference framing"
+          }
+        ]
+      }
+    }
+  ],
+  "locations": [
+    {
+      "name": "Riverside Station Platform",
+      "description": "Small regional train platform at night in light rain.",
+      "state": {
+        "name": "Night rain",
+        "lookDescription": "Wet concrete platform, yellow safety line, iron canopy with dripping edges, distant city glow, mist in the air, empty bench, timetable board with soft backlight",
+        "angles": [
+          {
+            "name": "Establishing wide",
+            "viewDescription": "Wide establishing view of the full platform and tracks"
+          },
+          {
+            "name": "Bench close",
+            "viewDescription": "Low angle toward the empty bench under the canopy, tracks visible beyond"
+          }
+        ]
+      }
+    }
+  ],
+  "shots": [
+    {
+      "title": "Platform wide",
+      "prompt": "Wide shot of the rain-soaked train platform at night, empty bench under the canopy, distant city lights",
+      "motionPrompt": "Slow push in along the wet platform, rain streaks in the light",
+      "locationIndex": 0,
+      "generatePlaceholder": false,
+      "renderDeep": false
+    },
+    {
+      "title": "Mira under the light",
+      "prompt": "Mira standing alone under the platform light, medium shot, guitar case at her side, rain around her",
+      "motionPrompt": "Subtle handheld drift, Mira shifts weight and looks down the track",
+      "characterIndex": 0,
+      "locationIndex": 0,
+      "generatePlaceholder": true,
+      "renderDeep": true
+    },
+    {
+      "title": "Jonas arrives",
+      "prompt": "Jonas hurrying onto the platform, medium shot, checking his pocket watch, rain on his coat",
+      "motionPrompt": "Jonas walks into frame and slows, breath visible in the cold air",
+      "characterIndex": 1,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": true,
+      "renderDeep": true
+    },
+    {
+      "title": "Shared umbrella",
+      "prompt": "Mira and Jonas under one umbrella near the bench, two-shot, wary but soft expressions",
+      "motionPrompt": "Gentle sway, rain falling beyond the canopy edge",
+      "characterIndex": 0,
+      "locationIndex": 0,
+      "generatePlaceholder": false,
+      "renderDeep": false
+    },
+    {
+      "title": "Train arrives",
+      "prompt": "Headlights of an approaching train through rain mist, low angle from platform edge",
+      "motionPrompt": "Train light grows brighter, platform vibrates slightly",
+      "locationIndex": 0,
+      "generatePlaceholder": false,
+      "renderDeep": false
+    }
+  ],
+  "finishing": {
+    "overlayText": "Last Train Home",
+    "trimInFrames": 4,
+    "trimOutFrames": null
+  },
+  "meta": {
+    "author": "DiffuseCut default eval pack",
+    "runner": "harness",
+    "notes": "Original IP-free story for representative E2E eval."
+  }
+}

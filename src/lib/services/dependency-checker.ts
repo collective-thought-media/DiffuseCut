@@ -27,12 +27,16 @@ import {
   IP_ADAPTER_NODE_CLASSES,
   LTX_I2V_NODE_CLASSES,
   MINIMAX_I2V_NODE_CLASSES,
+  QWEN_IMAGE_EDIT_NODE_CLASSES,
+  missingQwenImageEditModels,
   hasModelMatching,
   hasSdxlPlusIpAdapterModel,
   hasSdxlPlusIpAdapterPresetFilename,
   missingNodeClasses,
   type ComfyModelFolders,
 } from "@/lib/services/comfyui-workflow-requirements";
+import { COMPOSITING_NODE_CLASSES } from "@/lib/compositing-defaults";
+import { FACE_REFINE_NODE_CLASSES } from "@/lib/services/compositing-pipeline";
 import type { DependencyStatus, DependencyStatusValue } from "@/types";
 
 const execFileAsync = promisify(execFile);
@@ -98,6 +102,7 @@ async function loadComfyModelFolders(baseUrl: string): Promise<ComfyModelFolders
     vae,
     diffusionModels,
     textEncoders,
+    loras,
   ] = await Promise.all([
     getModels(baseUrl, "checkpoints"),
     getModels(baseUrl, "ipadapter").catch(() => [] as string[]),
@@ -106,6 +111,7 @@ async function loadComfyModelFolders(baseUrl: string): Promise<ComfyModelFolders
     getModels(baseUrl, "vae").catch(() => [] as string[]),
     getModels(baseUrl, "diffusion_models").catch(() => [] as string[]),
     getModels(baseUrl, "text_encoders").catch(() => [] as string[]),
+    getModels(baseUrl, "loras").catch(() => [] as string[]),
   ]);
 
   return {
@@ -116,6 +122,7 @@ async function loadComfyModelFolders(baseUrl: string): Promise<ComfyModelFolders
     vae,
     diffusionModels,
     textEncoders,
+    loras,
   };
 }
 
@@ -331,6 +338,104 @@ function hasMinimaxI2vStack(
   return { ready: issues.length === 0, issues };
 }
 
+function checkComfyuiCompositing(
+  objectInfo: Record<string, unknown>,
+  lastCheckedAt: number
+): DependencyStatus {
+  const missingNodes = missingNodeClasses(objectInfo, [
+    ...COMPOSITING_NODE_CLASSES,
+  ]);
+  const ready = missingNodes.length === 0;
+
+  return {
+    id: "comfyui_compositing",
+    label: "Compositing nodes (optional)",
+    status: ready ? "ok" : "info",
+    optional: !ready,
+    requiredFor: ["render"],
+    message: ready
+      ? "Compositing ready for multi-stage shot compositing"
+      : `ComfyUI nodes not installed: ${missingNodes.join(", ")}`,
+    installHint: ready
+      ? ""
+      : "Optional. Without compositing nodes, Composited mode falls back to location-plate img2img. Install ComfyUI Essentials (RemBGSession+, ImageRemoveBackground+, MaskBlur+, ImageColorMatch+) and ensure ImageCompositeMasked is available.",
+    lastCheckedAt,
+  };
+}
+
+function checkComfyuiQwenEdit(
+  objectInfo: Record<string, unknown>,
+  models: ComfyModelFolders,
+  lastCheckedAt: number
+): DependencyStatus {
+  const missingNodes = missingNodeClasses(objectInfo, [
+    ...QWEN_IMAGE_EDIT_NODE_CLASSES,
+  ]);
+  const issues: string[] = [];
+  if (missingNodes.length > 0) {
+    issues.push(
+      `ComfyUI nodes not installed: ${missingNodes.join(", ")}. Update ComfyUI to a build with Qwen Image Edit support.`
+    );
+  }
+  issues.push(...missingQwenImageEditModels(models));
+  const ready = issues.length === 0;
+
+  return {
+    id: "comfyui_qwen_edit",
+    label: "Qwen Image Edit (Scene edit + instruction edits, optional)",
+    status: ready ? "ok" : "info",
+    optional: !ready,
+    requiredFor: ["render"],
+    message: ready
+      ? "Qwen Image Edit stack detected for Scene edit and instruction edits"
+      : issues.join("; "),
+    installHint: ready
+      ? ""
+      : "Optional. Without it, the Scene edit shot mode and Edit with instruction are unavailable; other modes still work. Use the 2511 fp8mixed build: unscaled fp8_e4m3fn builds silently output noise on current ComfyUI.",
+    docsUrl:
+      "https://huggingface.co/Comfy-Org/Qwen-Image-Edit_ComfyUI",
+    lastCheckedAt,
+  };
+}
+
+function checkComfyuiFaceRefine(
+  objectInfo: Record<string, unknown>,
+  models: ComfyModelFolders,
+  lastCheckedAt: number
+): DependencyStatus {
+  const missingNodes = missingNodeClasses(objectInfo, [
+    ...FACE_REFINE_NODE_CLASSES,
+  ]);
+  const hasFaceIpAdapter = models.ipadapter.some((name) => {
+    const lower = name.toLowerCase();
+    return lower.includes("plus-face") && lower.includes("sdxl");
+  });
+
+  const issues: string[] = [];
+  if (missingNodes.length > 0) {
+    issues.push(`ComfyUI nodes not installed: ${missingNodes.join(", ")}`);
+  }
+  const ready = issues.length === 0;
+
+  return {
+    id: "comfyui_face_refine",
+    label: "Face detail pass (Impact Pack, optional)",
+    status: ready ? "ok" : "info",
+    optional: !ready,
+    requiredFor: ["render"],
+    message: ready
+      ? hasFaceIpAdapter
+        ? "Face detail pass ready (plus-face IP-Adapter detected)"
+        : "Face detail pass ready (using generic plus IP-Adapter; add ip-adapter-plus-face_sdxl_vit-h.safetensors for stronger likeness)"
+      : issues.join("; "),
+    installHint: ready
+      ? ""
+      : "Optional. Without it, the Face detail setting is skipped and shots render normally. Install ComfyUI-Impact-Pack and ComfyUI-Impact-Subpack (provides FaceDetailer and UltralyticsDetectorProvider with the bbox/face_yolov8m.pt detector).",
+    docsUrl: "https://github.com/ltdrdata/ComfyUI-Impact-Pack",
+    lastCheckedAt,
+  };
+}
+
 function checkComfyuiMinimaxI2v(
   objectInfo: Record<string, unknown>,
   models: ComfyModelFolders,
@@ -498,6 +603,24 @@ async function checkComfyuiWorkflowDeps(
         ["render"],
         url
       ),
+      comfyUnreachableStatus(
+        "comfyui_compositing",
+        "Compositing nodes (optional)",
+        ["render"],
+        url
+      ),
+      comfyUnreachableStatus(
+        "comfyui_qwen_edit",
+        "Qwen Image Edit (Scene edit + instruction edits, optional)",
+        ["render"],
+        url
+      ),
+      comfyUnreachableStatus(
+        "comfyui_face_refine",
+        "Face detail pass (Impact Pack, optional)",
+        ["render"],
+        url
+      ),
     ];
   }
 
@@ -513,6 +636,9 @@ async function checkComfyuiWorkflowDeps(
       checkComfyuiIpAdapter(objectInfo, models, lastCheckedAt),
       checkComfyuiLtxI2v(objectInfo, models, lastCheckedAt),
       checkComfyuiMinimaxI2v(objectInfo, models, lastCheckedAt),
+      checkComfyuiCompositing(objectInfo, lastCheckedAt),
+      checkComfyuiQwenEdit(objectInfo, models, lastCheckedAt),
+      checkComfyuiFaceRefine(objectInfo, models, lastCheckedAt),
     ];
   } catch (err) {
     const message =
@@ -554,6 +680,24 @@ async function checkComfyuiWorkflowDeps(
       fallback(
         "comfyui_minimax_i2v",
         "MiniMax H3 image-to-video (optional)",
+        ["render"],
+        true
+      ),
+      fallback(
+        "comfyui_compositing",
+        "Compositing nodes (optional)",
+        ["render"],
+        true
+      ),
+      fallback(
+        "comfyui_qwen_edit",
+        "Qwen Image Edit (Scene edit + instruction edits, optional)",
+        ["render"],
+        true
+      ),
+      fallback(
+        "comfyui_face_refine",
+        "Face detail pass (Impact Pack, optional)",
         ["render"],
         true
       ),

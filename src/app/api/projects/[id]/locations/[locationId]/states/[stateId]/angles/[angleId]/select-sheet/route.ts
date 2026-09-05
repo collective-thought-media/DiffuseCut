@@ -5,7 +5,7 @@ import {
   handleApiError,
   parseJson,
 } from "@/lib/api-helpers";
-import { selectLocationReferenceOption } from "@/lib/services/location-asset-generation";
+import { selectLocationReferenceOption, getLocationReferenceBatchView } from "@/lib/services/location-asset-generation";
 
 interface SelectBody {
   optionId: string;
@@ -36,7 +36,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       body.optionId
     );
 
-    return jsonOk({ location });
+    const view = getLocationReferenceBatchView(angleId);
+
+    return jsonOk({ location, ...view });
   } catch (err) {
     return handleApiError(err);
   }

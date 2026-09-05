@@ -4,6 +4,7 @@ import { and, asc, eq } from "drizzle-orm";
 import type { AudioTrack, Project, Shot } from "@/lib/db/schema";
 import { getDb, schema } from "@/lib/db";
 import { applySpanModeToTrack } from "@/lib/finishing/audio-track-timing";
+import { shotTimelineFrames } from "@/lib/timing/frames";
 import { resolveProjectRoot } from "@/lib/paths/project-paths";
 import { generateSfxAudioFile } from "@/lib/services/sfx-audio-generation";
 import { resolveSfxGenerationPrompt } from "@/lib/services/resolve-sfx-generation-prompt";
@@ -140,7 +141,7 @@ export async function generateSfxTrackAudio(options: {
 
   const shot = options.shots.find((s) => s.id === options.track.targetShotId);
   const durationSeconds = shot
-    ? Math.max(0.5, shot.durationFrames / options.fps)
+    ? Math.max(0.5, shotTimelineFrames(shot) / options.fps)
     : Math.max(
         0.5,
         (options.track.durationFrames ?? options.fps * 2) / options.fps

@@ -1,5 +1,67 @@
 import type { ShotStillReferenceMode } from "@/lib/services/shot-still-reference-mode";
 
+/** How strongly the character reference locks identity in shot stills. */
+export type ShotIdentityStrength = "low" | "balanced" | "high";
+
+/** How the shot's rendered audio track is treated at export time. */
+export type ShotAudioPolicy = "keep" | "mute";
+
+/**
+ * Resolve the effective audio policy for a shot. When no explicit policy is
+ * set (Auto), the shot's rendered audio is kept only while the project has no
+ * finishing audio tracks; once a score, dialog, or SFX track exists, the
+ * model-invented clip audio is muted so it never mixes under the soundtrack.
+ */
+export function resolveShotAudioPolicy(
+  policy: ShotAudioPolicy | undefined,
+  hasTimelineAudioTracks: boolean
+): ShotAudioPolicy {
+  if (policy === "keep" || policy === "mute") return policy;
+  return hasTimelineAudioTracks ? "mute" : "keep";
+}
+
+/** Subject size in frame for Integrate in scene (drives the inpaint mask). */
+export type ShotSubjectScale = "small" | "medium" | "large";
+
+/** Horizontal placement of the subject for Integrate in scene. */
+export type ShotSubjectPosition = "left" | "center" | "right";
+
+/** Post pass that repaints the character's face at higher detail. */
+export type ShotFaceDetail = "refine" | "off";
+
+export const SHOT_IDENTITY_STRENGTH_VALUES: ShotIdentityStrength[] = [
+  "low",
+  "balanced",
+  "high",
+];
+
+export const SHOT_SUBJECT_SCALE_VALUES: ShotSubjectScale[] = [
+  "small",
+  "medium",
+  "large",
+];
+
+export const SHOT_SUBJECT_POSITION_VALUES: ShotSubjectPosition[] = [
+  "left",
+  "center",
+  "right",
+];
+
+/** Mask height as a fraction of frame height per subject scale preset. */
+export const SHOT_SUBJECT_SCALE_FRACTIONS: Record<ShotSubjectScale, number> = {
+  small: 0.38,
+  medium: 0.55,
+  large: 0.72,
+};
+
+/** Mask horizontal center as a fraction of frame width per position preset. */
+export const SHOT_SUBJECT_POSITION_ANCHORS: Record<ShotSubjectPosition, number> =
+  {
+    left: 0.3,
+    center: 0.5,
+    right: 0.7,
+  };
+
 export interface ShotRenderOverrides {
   /** Extra negatives for video render workflow. */
   negativePrompt?: string;
@@ -7,6 +69,35 @@ export interface ShotRenderOverrides {
   stillNegativePrompt?: string;
   /** Which visual reference to send for storyboard still generation. */
   stillReferenceMode?: ShotStillReferenceMode;
+  /** Character reference influence on shot stills (default balanced). */
+  identityStrength?: ShotIdentityStrength;
+  /** Integrate in scene: how large the subject renders in frame. */
+  subjectScale?: ShotSubjectScale;
+  /** Integrate in scene: where the subject sits horizontally. */
+  subjectPosition?: ShotSubjectPosition;
+  /**
+   * Keep or mute this shot's rendered audio in the export. Unset means Auto:
+   * keep when the project has no finishing audio tracks, mute once any score,
+   * dialog, or SFX track exists.
+   */
+  audioPolicy?: ShotAudioPolicy;
+  /** Face detail pass after still generation (default off). */
+  faceDetail?: ShotFaceDetail;
+}
+
+const ENUM_OVERRIDE_KEYS = [
+  "stillReferenceMode",
+  "identityStrength",
+  "subjectScale",
+  "subjectPosition",
+  "audioPolicy",
+  "faceDetail",
+] as const;
+
+type EnumOverrideKey = (typeof ENUM_OVERRIDE_KEYS)[number];
+
+function isEnumOverrideKey(key: keyof ShotRenderOverrides): key is EnumOverrideKey {
+  return (ENUM_OVERRIDE_KEYS as readonly string[]).includes(key);
 }
 export function parseShotRenderOverrides(
   json: string | null | undefined
@@ -25,14 +116,14 @@ export function mergeShotRenderOverrides(
 ): ShotRenderOverrides {
   const next: ShotRenderOverrides = { ...existing };
   for (const [key, value] of Object.entries(patch) as Array<
-    [keyof ShotRenderOverrides, string | ShotStillReferenceMode | undefined]
+    [keyof ShotRenderOverrides, string | undefined]
   >) {
     if (value === undefined) continue;
-    if (key === "stillReferenceMode") {
+    if (isEnumOverrideKey(key)) {
       if (!value) {
-        delete next.stillReferenceMode;
+        delete next[key];
       } else {
-        next.stillReferenceMode = value as ShotStillReferenceMode;
+        (next as Record<EnumOverrideKey, string>)[key] = value;
       }
       continue;
     }
@@ -50,10 +141,10 @@ export function serializeShotRenderOverrides(
 ): string | null {
   const cleaned: ShotRenderOverrides = {};
   for (const [key, value] of Object.entries(overrides) as Array<
-    [keyof ShotRenderOverrides, string | ShotStillReferenceMode | undefined]
+    [keyof ShotRenderOverrides, string | undefined]
   >) {
-    if (key === "stillReferenceMode") {
-      if (value) cleaned.stillReferenceMode = value as ShotStillReferenceMode;
+    if (isEnumOverrideKey(key)) {
+      if (value) (cleaned as Record<EnumOverrideKey, string>)[key] = value;
       continue;
     }
     if (typeof value === "string" && value.trim().length > 0) {

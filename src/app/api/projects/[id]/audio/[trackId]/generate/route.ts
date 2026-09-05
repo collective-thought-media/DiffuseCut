@@ -9,7 +9,7 @@ import {
 } from "@/lib/api-helpers";
 import { getDb, schema } from "@/lib/db";
 import { resolveTrackTiming } from "@/lib/finishing/audio-track-timing";
-import { totalProjectFrames } from "@/lib/timing/frames";
+import { totalTimelineFrames } from "@/lib/timing/frames";
 import { resolveProjectRoot } from "@/lib/paths/project-paths";
 import { generateScoreAudioFile } from "@/lib/services/audio-score-generation";
 import { generateSfxAudioFile } from "@/lib/services/sfx-audio-generation";
@@ -51,7 +51,7 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
       .orderBy(asc(schema.shots.sortOrder))
       .all();
 
-    const totalFrames = totalProjectFrames(shots);
+    const totalFrames = totalTimelineFrames(shots);
     const fps = project.defaultFps ?? 24;
     const timing = resolveTrackTiming(track, shots, totalFrames);
     const durationSeconds = timing.durationFrames / fps;

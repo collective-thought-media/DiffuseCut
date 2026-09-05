@@ -50,6 +50,10 @@ function buildUserMessage(input: {
     return `Location: ${input.name}\nDraft prompt:\n${input.templatePrompt.trim()}`;
   }
 
+  if (input.mode === "character_sheet" && input.templatePrompt?.trim()) {
+    return `Character: ${input.name}\nDraft prompt:\n${input.templatePrompt.trim()}`;
+  }
+
   return `Character name: ${input.name}\nDescription: ${input.userDescription}`;
 }
 

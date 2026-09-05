@@ -82,11 +82,20 @@ export function getReferenceAspectRatioLabel(
   return `${def.label} (${def.width}×${def.height})`;
 }
 
-/** Character sheet canvas matches the project reference aspect ratio preset. */
+/** Character sheet canvas matches the project reference aspect ratio preset (default 16:9). */
 export function resolveCharacterSheetReferenceDimensions(
   _style: VisualStyle,
   projectPreset?: ReferenceAspectRatioPreset | null
 ): { width: number; height: number } {
   const def = resolveReferenceAspectRatio(projectPreset);
   return { width: def.width, height: def.height };
+}
+
+/** Front+back diptych canvas: double width so each half matches the single-panel preset (e.g. 2688×768 → two 1344×768 panels). */
+export function resolveFrontBackDiptychDimensions(
+  style: VisualStyle,
+  projectPreset?: ReferenceAspectRatioPreset | null
+): { width: number; height: number } {
+  const single = resolveCharacterSheetReferenceDimensions(style, projectPreset);
+  return { width: single.width * 2, height: single.height };
 }

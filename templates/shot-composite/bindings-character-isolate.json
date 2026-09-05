@@ -1,0 +1,34 @@
+{
+  "promptNodeId": "6",
+  "promptInputKey": "text",
+  "negativePromptNodeId": "7",
+  "negativePromptInputKey": "text",
+  "seedNodeId": "3",
+  "seedInputKey": "seed",
+  "referenceImageNodeId": "10",
+  "referenceImageInputKey": "image",
+  "characterIpAdapterNodeId": "13",
+  "referenceImageUsage": "ipadapter",
+  "outputNodeIds": ["9"],
+  "controls": [
+    {
+      "id": "checkpoint",
+      "label": "Checkpoint",
+      "type": "checkpoint",
+      "nodeId": "4",
+      "inputKey": "ckpt_name"
+    },
+    {
+      "id": "sampler",
+      "label": "Sampler",
+      "type": "sampler",
+      "nodeId": "3",
+      "inputs": {
+        "steps": "steps",
+        "cfg": "cfg",
+        "sampler_name": "sampler_name",
+        "scheduler": "scheduler"
+      }
+    }
+  ]
+}

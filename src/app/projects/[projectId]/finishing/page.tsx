@@ -17,9 +17,19 @@ import {
 import type { TrimUpdateOptions } from "@/components/export/TrimEditor";
 import { Badge, Card } from "@/components/ui/button";
 import { clampTrim, trimPreviewFrameInShot } from "@/lib/finishing/trim";
+import {
+  mergeShotRenderOverrides,
+  parseShotRenderOverrides,
+  serializeShotRenderOverrides,
+  type ShotAudioPolicy,
+} from "@/lib/shot-render-overrides";
 import { globalFrameFromVideoTime } from "@/lib/finishing/video-sync";
 import { shotUsesRenderedVideo } from "@/lib/finishing/shot-preview-media";
-import { frameAtTimelinePosition, shotStartFrame } from "@/lib/timing/frames";
+import {
+  frameAtTrimmedTimelinePosition,
+  totalTimelineFrames,
+  trimmedShotStartFrame,
+} from "@/lib/timing/frames";
 
 type PageProps = { params: Promise<{ projectId: string }> };
 
@@ -43,10 +53,7 @@ export default function FinishingPage({ params }: PageProps) {
     Map<string, ReturnType<typeof setTimeout>>
   >(new Map());
 
-  const totalFrames = useMemo(
-    () => shots.reduce((sum, s) => sum + s.durationFrames, 0),
-    [shots]
-  );
+  const totalFrames = useMemo(() => totalTimelineFrames(shots), [shots]);
 
   const renderedCount = useMemo(
     () => shots.filter((s) => Boolean(s.videoPath)).length,
@@ -108,14 +115,14 @@ export default function FinishingPage({ params }: PageProps) {
 
   useEffect(() => {
     if (!playing || shots.length === 0) return;
-    const { shotIndex } = frameAtTimelinePosition(shots, currentFrame);
+    const { shotIndex } = frameAtTrimmedTimelinePosition(shots, currentFrame);
     const shot = shots[shotIndex];
     if (shot && shot.id !== selectedShotId) {
       setSelectedShotId(shot.id);
     }
   }, [playing, currentFrame, shots, selectedShotId]);
 
-  const playShotIndex = frameAtTimelinePosition(
+  const playShotIndex = frameAtTrimmedTimelinePosition(
     shots,
     currentFrame
   ).shotIndex;
@@ -206,8 +213,21 @@ export default function FinishingPage({ params }: PageProps) {
             clamped.trimOutFrames,
             options.previewEdge
           );
+          // Start frames before this shot are unaffected by its own trim, but
+          // use the updated trim values for the shot itself.
+          const updatedShots = shots.map((entry) =>
+            entry.id === shotId
+              ? {
+                  ...entry,
+                  trimInFrames: clamped.trimInFrames,
+                  trimOutFrames: clamped.trimOutFrames,
+                }
+              : entry
+          );
           setPlaying(false);
-          setCurrentFrame(shotStartFrame(shots, shotIndex) + frameInShot);
+          setCurrentFrame(
+            trimmedShotStartFrame(updatedShots, shotIndex) + frameInShot
+          );
           setSelectedShotId(shotId);
         }
       }
@@ -231,6 +251,36 @@ export default function FinishingPage({ params }: PageProps) {
           trimSaveTimersRef.current.delete(shotId);
         }, 300)
       );
+    },
+    [projectId, shots]
+  );
+
+  const handleUpdateAudioPolicy = useCallback(
+    (shotId: string, policy: ShotAudioPolicy | "") => {
+      const shot = shots.find((entry) => entry.id === shotId);
+      if (!shot) return;
+
+      // Empty string means Auto: clear the explicit override.
+      const next = serializeShotRenderOverrides(
+        mergeShotRenderOverrides(
+          parseShotRenderOverrides(shot.renderOverridesJson),
+          { audioPolicy: (policy || "") as ShotAudioPolicy }
+        )
+      );
+
+      setShots((prev) =>
+        prev.map((entry) =>
+          entry.id === shotId ? { ...entry, renderOverridesJson: next } : entry
+        )
+      );
+
+      void fetch(`/api/projects/${projectId}/shots/${shotId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ renderOverridesJson: next }),
+      }).catch(() => {
+        setError("Failed to save shot audio setting");
+      });
     },
     [projectId, shots]
   );
@@ -264,7 +314,7 @@ export default function FinishingPage({ params }: PageProps) {
       setCurrentFrame(0);
       return;
     }
-    setCurrentFrame(shotStartFrame(shots, nextIndex));
+    setCurrentFrame(trimmedShotStartFrame(shots, nextIndex));
   }
 
   function handleSelectShotFromTrim(shotId: string) {
@@ -319,6 +369,7 @@ export default function FinishingPage({ params }: PageProps) {
           showAllTrimShots={showAllTrimShots}
           onToggleShowAllTrim={() => setShowAllTrimShots((value) => !value)}
           onUpdateTrim={handleUpdateTrim}
+          onUpdateAudioPolicy={handleUpdateAudioPolicy}
           onSelectShotFromTrim={handleSelectShotFromTrim}
           onSelectShot={setSelectedShotId}
           onReorder={(ids) => void handleReorder(ids)}
@@ -336,7 +387,10 @@ export default function FinishingPage({ params }: PageProps) {
               Math.min(frame, Math.max(totalFrames - 1, 0))
             );
             setCurrentFrame(clamped);
-            const { shotIndex } = frameAtTimelinePosition(shots, clamped);
+            const { shotIndex } = frameAtTrimmedTimelinePosition(
+              shots,
+              clamped
+            );
             const shot = shots[shotIndex];
             if (shot) setSelectedShotId(shot.id);
           }}

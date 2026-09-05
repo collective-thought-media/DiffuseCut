@@ -1,0 +1,15 @@
+{
+  "promptNodeId": "6",
+  "promptInputKey": "prompt",
+  "negativePromptNodeId": "7",
+  "negativePromptInputKey": "prompt",
+  "seedNodeId": "3",
+  "seedInputKey": "seed",
+  "referenceImageNodeId": "10",
+  "referenceImageInputKey": "image",
+  "locationPlateImageNodeId": "11",
+  "locationPlateImageInputKey": "image",
+  "referenceImageUsage": "scene_edit",
+  "outputNodeIds": ["9"],
+  "controls": []
+}

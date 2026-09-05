@@ -17,13 +17,15 @@ import {
 } from "@dnd-kit/sortable";
 import type { AudioTrack, Shot } from "@/lib/db/schema";
 import {
-  frameAtTimelinePosition,
-  shotStartFrame,
-  timelinePlayheadOffsetPx,
+  frameAtTrimmedTimelinePosition,
+  timelineTrimmedPlayheadOffsetPx,
   timelineTrackTranslatePx,
+  totalTimelineFrames,
+  trimmedShotStartFrame,
 } from "@/lib/timing/frames";
 import { TrimShotClip } from "@/components/finishing/TrimShotClip";
 import { TrimEditor, type TrimUpdateOptions } from "@/components/export/TrimEditor";
+import type { ShotAudioPolicy } from "@/lib/shot-render-overrides";
 import { TransportControls } from "@/components/storyboard/TransportControls";
 import { FinishingPreview } from "./FinishingPreview";
 import type { TextOverlayDraft } from "@/components/export/OverlayEditor";
@@ -52,6 +54,7 @@ interface FinishingTimelineProps {
     trimOutFrames: number | null,
     options?: TrimUpdateOptions
   ) => void;
+  onUpdateAudioPolicy?: (shotId: string, policy: ShotAudioPolicy | "") => void;
   onSelectShotFromTrim: (shotId: string, frameInShot: number) => void;
 }
 
@@ -76,6 +79,7 @@ export function FinishingTimeline({
   showAllTrimShots,
   onToggleShowAllTrim,
   onUpdateTrim,
+  onUpdateAudioPolicy,
   onSelectShotFromTrim,
 }: FinishingTimelineProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -103,10 +107,11 @@ export function FinishingTimeline({
     return () => observer.disconnect();
   }, []);
 
-  const totalFrames = shots.reduce((sum, s) => sum + s.durationFrames, 0);
+  const totalFrames = totalTimelineFrames(shots);
   const activeShotId =
-    shots[frameAtTimelinePosition(shots, currentFrame).shotIndex]?.id ?? null;
-  const playheadLeft = timelinePlayheadOffsetPx(
+    shots[frameAtTrimmedTimelinePosition(shots, currentFrame).shotIndex]?.id ??
+    null;
+  const playheadLeft = timelineTrimmedPlayheadOffsetPx(
     shots,
     currentFrame,
     PIXELS_PER_FRAME
@@ -192,7 +197,7 @@ export function FinishingTimeline({
                         selected={selectedShotId === shot.id}
                         active={activeShotId === shot.id}
                         onSelect={() => {
-                          onSeek(shotStartFrame(shots, index));
+                          onSeek(trimmedShotStartFrame(shots, index));
                           onSelectShot(shot.id);
                         }}
                         onUpdateTrim={(trimIn, trimOut, previewEdge) =>
@@ -219,11 +224,12 @@ export function FinishingTimeline({
         onSelectShot={(shotId, frameInShot) => {
           const index = shots.findIndex((shot) => shot.id === shotId);
           if (index < 0) return;
-          onSeek(shotStartFrame(shots, index) + frameInShot);
+          onSeek(trimmedShotStartFrame(shots, index) + frameInShot);
           onSelectShot(shotId);
           onSelectShotFromTrim(shotId, frameInShot);
         }}
         onUpdateTrim={onUpdateTrim}
+        onUpdateAudioPolicy={onUpdateAudioPolicy}
       />
     </div>
   );

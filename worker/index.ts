@@ -13,9 +13,11 @@ import {
   checkAllDependencies,
   formatDependencySummary,
 } from "@/lib/services/dependency-checker";
+import { resolveComfyNodeLabel } from "@/lib/asset-generation-status";
 import {
   CLIP_VISION_SDXL_FILENAME,
   resolveSdxlPlusIpAdapterFilename,
+  resolveSdxlPlusFaceIpAdapterFilename,
 } from "@/lib/services/comfyui-workflow-requirements";
 import {
   downloadOutput,
@@ -27,11 +29,19 @@ import {
   uploadAnchorReferenceImage,
   uploadCharacterReferenceImage,
   uploadLocationReferenceImage,
+  uploadLocationPlateImage,
+  uploadCharacterIsolateImage,
+  uploadFaceRefineSourceImage,
+  uploadImageEditSourceImage,
   uploadMedia,
   assertComfyuiNodeClasses,
   getModels,
 } from "@/lib/services/comfyui-client";
-import { resolveShotReferencePathForBatch, resolveShotDualReferencePathsForBatch } from "@/lib/services/shot-reference";
+import {
+  resolveShotReferencePathForBatch,
+  resolveShotDualReferencePathsForBatch,
+  resolveShotCanonicalFacePathForBatch,
+} from "@/lib/services/shot-reference";
 import {
   shouldUseMacroDetailLatent,
   SHOT_MACRO_LATENT_HEIGHT,
@@ -53,10 +63,20 @@ import {
   updateAssetOption,
   refreshBatchStatus,
   getCandidateOutputPath,
+  getPipelineIsolateOutputPath,
   resolveBatchContext,
 } from "@/lib/services/asset-generation-queue";
+import {
+  buildCharacterIsolateNegative,
+  buildCharacterIsolatePrompt,
+  buildFaceRefinePrompt,
+  pipelineStageStatusLabel,
+  resolveAssetOptionTemplateId,
+} from "@/lib/services/shot-pipeline";
+import { COMPOSITING_NODE_CLASSES } from "@/lib/services/compositing-pipeline";
 import { buildPortraitPayload } from "@/lib/services/workflow-builder";
 import {
+  resolveCharacterAnchorReframeIntensity,
   resolveLocationAnchorReframeIntensity,
   extractAnchoredViewDescription,
 } from "@/lib/anchor-reframe";
@@ -66,10 +86,22 @@ import {
   resolveLocationAnchorReferencePathForBatch,
 } from "@/lib/services/location-asset-generation";
 import {
+  resolveCharacterAnchorReferencePathForBatch,
+} from "@/lib/services/character-asset-generation";
+import {
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
   BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID,
+  BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID,
+  BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
 } from "@/lib/db/seed-builtin-templates";
+import { computeIntegrateSubjectMaskBox } from "@/lib/integrate-subject-mask";
+import { readImageDimensions } from "@/lib/services/image-dimensions";
 import { runExport, type ExportSettings } from "@/lib/services/ffmpeg-export";
 import { formatComfyuiError } from "@/lib/services/comfyui-errors";
 import {
@@ -82,10 +114,15 @@ import {
   shortCheckpointLabel,
 } from "@/lib/services/image-checkpoints";
 import { hydrateProjectRenderSettings } from "@/lib/services/render-settings-resolver";
+import {
+  buildLipSyncShotPrompt,
+  getLipSyncDialogText,
+} from "@/lib/services/lip-sync";
 import { buildShotCharacterLookSuffix, resolveCharacterStateForCast } from "@/lib/services/character-states";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import {
   resolveCharacterSheetReferenceDimensions,
+  resolveFrontBackDiptychDimensions,
   type ReferenceAspectRatioPreset,
 } from "@/lib/services/reference-aspect-ratio";
 import type { RenderSettings } from "@/types";
@@ -95,10 +132,21 @@ const LOCATION_ANCHOR_TEMPLATE_IDS = new Set([
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
   BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID,
+  BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID,
+  BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
 ]);
 const activeBridges = new Map<string, ComfyUIWsBridge>();
 const activeAssetBridges = new Map<string, ComfyUIWsBridge>();
-type BatchAnchorUploads = { primary?: string; secondary?: string };
+type BatchAnchorUploads = {
+  primary?: string;
+  secondary?: string;
+  isolate?: string;
+};
 const anchorUploadByBatch = new Map<string, BatchAnchorUploads>();
 
 function parseBatchGenerationOptions(
@@ -114,6 +162,212 @@ function parseBatchGenerationOptions(
 
 function now(): number {
   return Date.now();
+}
+
+async function resolveShotOptionReferenceImages(
+  batch: typeof schema.assetGenerationBatches.$inferSelect,
+  option: AssetGenerationOption,
+  projectRoot: string
+): Promise<BatchAnchorUploads> {
+  const { characterPath, locationPath } =
+    resolveShotDualReferencePathsForBatch(batch);
+
+  if (option.pipelineStage === "character") {
+    const uploads: BatchAnchorUploads = {};
+    if (characterPath) {
+      const characterAbs = resolveMediaPath(projectRoot, characterPath);
+      if (fs.existsSync(characterAbs)) {
+        uploads.primary = await uploadCharacterReferenceImage(
+          batch.comfyuiEndpointUrl,
+          characterAbs
+        );
+      }
+    }
+    if (uploads.primary) {
+      anchorUploadByBatch.set(`${batch.id}:${option.id}`, uploads);
+    }
+    return uploads;
+  }
+
+  if (option.pipelineStage === "face_refine") {
+    // Face detail pass: the source image is the finished render from the
+    // stage this option depends on; the character reference drives the face
+    // IP-Adapter for likeness. Prefer the character's default-state portrait
+    // (the casting look) over the per-state reference so the same face anchors
+    // every outfit and scene.
+    const uploads: BatchAnchorUploads = {};
+    const facePath =
+      resolveShotCanonicalFacePathForBatch(batch) ?? characterPath;
+    if (facePath) {
+      const characterAbs = resolveMediaPath(projectRoot, facePath);
+      if (fs.existsSync(characterAbs)) {
+        uploads.primary = await uploadCharacterReferenceImage(
+          batch.comfyuiEndpointUrl,
+          characterAbs
+        );
+      }
+    }
+    if (option.dependsOnOptionId) {
+      const db = getDb();
+      const dependency = db
+        .select()
+        .from(schema.assetGenerationOptions)
+        .where(eq(schema.assetGenerationOptions.id, option.dependsOnOptionId))
+        .get();
+      if (dependency?.outputPath) {
+        const sourceAbs = resolveMediaPath(projectRoot, dependency.outputPath);
+        if (fs.existsSync(sourceAbs)) {
+          uploads.isolate = await uploadFaceRefineSourceImage(
+            batch.comfyuiEndpointUrl,
+            sourceAbs
+          );
+        }
+      }
+    }
+    if (uploads.primary || uploads.isolate) {
+      anchorUploadByBatch.set(`${batch.id}:${option.id}`, uploads);
+    }
+    return uploads;
+  }
+
+  if (option.pipelineStage === "composite") {
+    const uploads: BatchAnchorUploads = {};
+    if (characterPath) {
+      const characterAbs = resolveMediaPath(projectRoot, characterPath);
+      if (fs.existsSync(characterAbs)) {
+        uploads.primary = await uploadCharacterReferenceImage(
+          batch.comfyuiEndpointUrl,
+          characterAbs
+        );
+      }
+    }
+    if (locationPath) {
+      const locationAbs = resolveMediaPath(projectRoot, locationPath);
+      if (fs.existsSync(locationAbs)) {
+        uploads.secondary = await uploadLocationPlateImage(
+          batch.comfyuiEndpointUrl,
+          locationAbs
+        );
+      }
+    }
+    if (option.dependsOnOptionId) {
+      const db = getDb();
+      const dependency = db
+        .select()
+        .from(schema.assetGenerationOptions)
+        .where(eq(schema.assetGenerationOptions.id, option.dependsOnOptionId))
+        .get();
+      if (dependency?.outputPath) {
+        const isolateAbs = resolveMediaPath(projectRoot, dependency.outputPath);
+        if (fs.existsSync(isolateAbs)) {
+          uploads.isolate = await uploadCharacterIsolateImage(
+            batch.comfyuiEndpointUrl,
+            isolateAbs
+          );
+        }
+      }
+    }
+    if (uploads.primary || uploads.secondary || uploads.isolate) {
+      anchorUploadByBatch.set(`${batch.id}:${option.id}`, uploads);
+    }
+    return uploads;
+  }
+
+  if (batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID) {
+    const uploads: BatchAnchorUploads = {};
+    if (characterPath) {
+      const characterAbs = resolveMediaPath(projectRoot, characterPath);
+      if (fs.existsSync(characterAbs)) {
+        uploads.primary = await uploadCharacterReferenceImage(
+          batch.comfyuiEndpointUrl,
+          characterAbs
+        );
+      }
+    }
+    if (locationPath) {
+      const locationAbs = resolveMediaPath(projectRoot, locationPath);
+      if (fs.existsSync(locationAbs)) {
+        uploads.secondary = await uploadLocationReferenceImage(
+          batch.comfyuiEndpointUrl,
+          locationAbs
+        );
+      }
+    }
+    if (uploads.primary || uploads.secondary) {
+      anchorUploadByBatch.set(batch.id, uploads);
+    }
+    return uploads;
+  }
+
+  if (batch.workflowTemplateId === BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID) {
+    // Instruction edit: the only input is the finished still being edited,
+    // referenced by relative path in the batch generation options.
+    const uploads: BatchAnchorUploads = {};
+    const options = parseBatchGenerationOptions(batch.generationOptionsJson);
+    if (options.imageEditSourcePath) {
+      const sourceAbs = resolveMediaPath(
+        projectRoot,
+        options.imageEditSourcePath
+      );
+      if (fs.existsSync(sourceAbs)) {
+        uploads.secondary = await uploadImageEditSourceImage(
+          batch.comfyuiEndpointUrl,
+          sourceAbs
+        );
+      }
+    }
+    if (uploads.secondary) {
+      anchorUploadByBatch.set(batch.id, uploads);
+    }
+    return uploads;
+  }
+
+  if (
+    batch.workflowTemplateId === BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID ||
+    batch.workflowTemplateId ===
+      BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID ||
+    batch.workflowTemplateId === BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID
+  ) {
+    const uploads: BatchAnchorUploads = {};
+    if (characterPath) {
+      const characterAbs = resolveMediaPath(projectRoot, characterPath);
+      if (fs.existsSync(characterAbs)) {
+        uploads.primary = await uploadCharacterReferenceImage(
+          batch.comfyuiEndpointUrl,
+          characterAbs
+        );
+      }
+    }
+    if (locationPath) {
+      const locationAbs = resolveMediaPath(projectRoot, locationPath);
+      if (fs.existsSync(locationAbs)) {
+        uploads.secondary = await uploadLocationPlateImage(
+          batch.comfyuiEndpointUrl,
+          locationAbs
+        );
+      }
+    }
+    if (uploads.primary || uploads.secondary) {
+      anchorUploadByBatch.set(batch.id, uploads);
+    }
+    return uploads;
+  }
+
+  const anchorRelative = resolveShotReferencePathForBatch(batch);
+  const uploads: BatchAnchorUploads = {};
+  if (anchorRelative) {
+    const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
+    if (fs.existsSync(anchorAbs)) {
+      uploads.primary = await uploadAnchorReferenceImage(
+        batch.comfyuiEndpointUrl,
+        anchorAbs
+      );
+    }
+  }
+  if (uploads.primary) {
+    anchorUploadByBatch.set(batch.id, uploads);
+  }
+  return uploads;
 }
 
 async function resolveBatchAnchorReferenceImages(
@@ -136,38 +390,17 @@ async function resolveBatchAnchorReferenceImages(
         );
       }
     }
-  } else if (batch.entityType === "shot") {
-    if (batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID) {
-      const { characterPath, locationPath } =
-        resolveShotDualReferencePathsForBatch(batch);
-      if (characterPath) {
-        const characterAbs = resolveMediaPath(projectRoot, characterPath);
-        if (fs.existsSync(characterAbs)) {
-          uploads.primary = await uploadCharacterReferenceImage(
-            batch.comfyuiEndpointUrl,
-            characterAbs
-          );
-        }
-      }
-      if (locationPath) {
-        const locationAbs = resolveMediaPath(projectRoot, locationPath);
-        if (fs.existsSync(locationAbs)) {
-          uploads.secondary = await uploadLocationReferenceImage(
-            batch.comfyuiEndpointUrl,
-            locationAbs
-          );
-        }
-      }
-    } else {
-      const anchorRelative = resolveShotReferencePathForBatch(batch);
-      if (anchorRelative) {
-        const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
-        if (fs.existsSync(anchorAbs)) {
-          uploads.primary = await uploadAnchorReferenceImage(
-            batch.comfyuiEndpointUrl,
-            anchorAbs
-          );
-        }
+  }
+
+  if (batch.entityType === "character_angle") {
+    const anchorRelative = resolveCharacterAnchorReferencePathForBatch(batch);
+    if (anchorRelative) {
+      const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
+      if (fs.existsSync(anchorAbs)) {
+        uploads.primary = await uploadAnchorReferenceImage(
+          batch.comfyuiEndpointUrl,
+          anchorAbs
+        );
       }
     }
   }
@@ -330,6 +563,22 @@ async function collectUploadedRefs(
     }
   }
 
+  if (job.lipSyncAudioPath) {
+    const absolute = resolveMediaPath(projectRoot, job.lipSyncAudioPath);
+    if (!fs.existsSync(absolute)) {
+      throw new Error(
+        `Lip sync audio file missing: ${job.lipSyncAudioPath}. Re-queue the lip sync render from the Dialog tab.`
+      );
+    }
+    // Unique per-job filename so a queued job never picks up a stale upload.
+    const uploaded = await uploadMedia(job.comfyuiEndpointUrl, absolute, {
+      kind: "audio",
+      uploadFileName: `DiffuseCutLipSync-${job.id}.wav`,
+      overwrite: true,
+    });
+    refs.audio = uploaded.name;
+  }
+
   return refs;
 }
 
@@ -372,12 +621,16 @@ async function startRenderJob(job: RenderJob): Promise<void> {
 
     const visualStyle = parseVisualStyle(project.visualStyleJson);
     const lookSuffix = buildShotCharacterLookSuffix(job.shotId);
-    const styledShot = {
-      ...shot,
-      prompt: lookSuffix
-        ? `${shot.prompt.trim()}, ${lookSuffix}`.trim()
-        : shot.prompt,
-    };
+    let jobPrompt = lookSuffix
+      ? `${shot.prompt.trim()}, ${lookSuffix}`.trim()
+      : shot.prompt;
+    if (job.lipSyncAudioPath) {
+      jobPrompt = buildLipSyncShotPrompt(
+        jobPrompt,
+        getLipSyncDialogText(job.projectId, job.shotId)
+      );
+    }
+    const styledShot = { ...shot, prompt: jobPrompt };
     const { renderSettings: resolvedSettings } =
       await hydrateProjectRenderSettings(job.projectId, {
         template,
@@ -678,7 +931,7 @@ async function processExportJobs(): Promise<void> {
 
   try {
     const settings = JSON.parse(job.settingsJson || "{}") as ExportSettings;
-    const outputPath = await runExport(
+    const result = await runExport(
       job.projectId,
       { ...settings, exportJobId: job.id },
       (update) => {
@@ -696,7 +949,8 @@ async function processExportJobs(): Promise<void> {
     updateExportJob(job.id, {
       status: "completed",
       progress: 1,
-      outputPath,
+      outputPath: result.outputPath,
+      outputMetaJson: JSON.stringify(result.meta),
       progressMessage: "Export complete",
       completedAt: ts,
       errorMessage: null,
@@ -723,6 +977,31 @@ function failAssetOption(option: AssetGenerationOption, message: string): void {
     lastHeartbeatAt: ts,
   });
 
+  // Cascade the failure to queued stages that depend on this output (e.g. a
+  // face detail pass waiting on its base render); otherwise they never run and
+  // the batch never resolves.
+  const db = getDb();
+  const pending = [option.id];
+  while (pending.length > 0) {
+    const parentId = pending.pop()!;
+    const dependents = db
+      .select()
+      .from(schema.assetGenerationOptions)
+      .where(eq(schema.assetGenerationOptions.dependsOnOptionId, parentId))
+      .all();
+    for (const dependent of dependents) {
+      if (dependent.status !== "queued") continue;
+      updateAssetOption(dependent.id, {
+        status: "failed",
+        errorMessage: "Earlier pipeline stage failed",
+        statusMessage: "Failed",
+        completedAt: ts,
+        lastHeartbeatAt: ts,
+      });
+      pending.push(dependent.id);
+    }
+  }
+
   activeAssetBridges.get(option.id)?.disconnect();
   activeAssetBridges.delete(option.id);
   refreshBatchStatus(option.batchId);
@@ -746,14 +1025,18 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     return;
   }
 
+  const pipelineLabel = pipelineStageStatusLabel(option.pipelineStage);
   updateAssetOption(option.id, {
     status: "running",
     statusMessage:
-      batchBeforeStart?.entityType === "location_angle"
+      pipelineLabel ??
+      (batchBeforeStart?.entityType === "location_angle"
         ? "Starting location reference generation"
-        : batchBeforeStart?.entityType === "shot"
-          ? "Starting shot image generation"
-          : "Starting character sheet generation",
+        : batchBeforeStart?.entityType === "character_angle"
+          ? "Starting character reference generation"
+          : batchBeforeStart?.entityType === "shot"
+            ? "Starting shot image generation"
+            : "Starting character sheet generation"),
     lastHeartbeatAt: ts,
     progress: 0,
   });
@@ -766,13 +1049,6 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       .from(schema.assetGenerationBatches)
       .where(eq(schema.assetGenerationBatches.id, option.batchId))
       .get();
-    const template = batch
-      ? db
-          .select()
-          .from(schema.workflowTemplates)
-          .where(eq(schema.workflowTemplates.id, batch.workflowTemplateId))
-          .get()
-      : null;
     const project = batch
       ? db
           .select()
@@ -781,8 +1057,19 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
           .get()
       : null;
 
-    if (!batch || !template || !project) {
-      throw new Error("Missing batch, template, or project for asset option");
+    if (!batch || !project) {
+      throw new Error("Missing batch or project for asset option");
+    }
+
+    const workflowTemplateId = resolveAssetOptionTemplateId(batch, option);
+    const template = db
+      .select()
+      .from(schema.workflowTemplates)
+      .where(eq(schema.workflowTemplates.id, workflowTemplateId))
+      .get();
+
+    if (!template) {
+      throw new Error("Missing workflow template for asset option");
     }
 
     const { renderSettings: baseRenderSettings } =
@@ -793,7 +1080,7 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       );
 
     let resolvedSettings = baseRenderSettings;
-    if (LOCATION_ANCHOR_TEMPLATE_IDS.has(batch.workflowTemplateId)) {
+    if (LOCATION_ANCHOR_TEMPLATE_IDS.has(workflowTemplateId)) {
       const checkpoints = await getModels(batch.comfyuiEndpointUrl, "checkpoints");
       const ipCheckpoint = resolveCheckpointForIpAdapter(
         baseRenderSettings.checkpoint,
@@ -814,44 +1101,90 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     const projectRoot = resolveProjectRoot(project);
     let referenceImage: string | undefined;
     let secondaryReferenceImage: string | undefined;
+    let characterIsolateImage: string | undefined;
 
-    const needsAnchorImage = LOCATION_ANCHOR_TEMPLATE_IDS.has(
-      batch.workflowTemplateId
-    );
+    const needsAnchorImage = LOCATION_ANCHOR_TEMPLATE_IDS.has(workflowTemplateId);
 
-    if (
-      (batch.entityType === "location_angle" ||
-        batch.entityType === "shot") &&
-      needsAnchorImage
-    ) {
+    if (batch.entityType === "location_angle" && needsAnchorImage) {
       const uploads = await resolveBatchAnchorReferenceImages(batch, projectRoot);
       referenceImage = uploads.primary;
       secondaryReferenceImage = uploads.secondary;
       if (referenceImage || secondaryReferenceImage) {
+        const usingIpAdapter =
+          workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
+        updateAssetOption(option.id, {
+          statusMessage: usingIpAdapter
+            ? "Using establishing reference via IP-Adapter"
+            : "Using establishing reference for img2img",
+          lastHeartbeatAt: now(),
+        });
+      }
+    } else if (batch.entityType === "character_angle" && needsAnchorImage) {
+      const uploads = await resolveBatchAnchorReferenceImages(batch, projectRoot);
+      referenceImage = uploads.primary;
+      secondaryReferenceImage = uploads.secondary;
+      if (referenceImage || secondaryReferenceImage) {
+        const usingIpAdapter =
+          workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
+        updateAssetOption(option.id, {
+          statusMessage: usingIpAdapter
+            ? "Using front reference via IP-Adapter"
+            : "Using front reference for img2img",
+          lastHeartbeatAt: now(),
+        });
+      }
+    } else if (batch.entityType === "shot" && needsAnchorImage) {
+      const uploads = await resolveShotOptionReferenceImages(
+        batch,
+        option,
+        projectRoot
+      );
+      referenceImage = uploads.primary;
+      secondaryReferenceImage = uploads.secondary;
+      characterIsolateImage = uploads.isolate;
+      if (referenceImage || secondaryReferenceImage) {
+        const batchGenerationOptions = parseBatchGenerationOptions(
+          batch.generationOptionsJson
+        );
         const usingDualIpAdapter =
-          batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID;
+          workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID;
+        const usingLocationPlate =
+          workflowTemplateId === BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID;
+        const usingSceneIntegrate =
+          workflowTemplateId ===
+          BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID;
+        const usingCompositeInpaint =
+          workflowTemplateId === BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID;
         const usingIpAdapter =
           usingDualIpAdapter ||
-          batch.workflowTemplateId ===
-            BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
+          usingLocationPlate ||
+          usingSceneIntegrate ||
+          option.pipelineStage === "character" ||
+          workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
         updateAssetOption(option.id, {
           statusMessage:
-            batch.entityType === "shot"
-              ? usingDualIpAdapter
-                ? "Using character and location references via dual IP-Adapter"
-                : usingIpAdapter
-                  ? "Using location or character reference via IP-Adapter"
-                  : "Using reference media for img2img"
-              : usingIpAdapter
-                ? "Using establishing reference via IP-Adapter"
-                : "Using establishing reference for img2img",
+            pipelineLabel ??
+            (usingDualIpAdapter
+              ? "Using character and location references via dual IP-Adapter"
+              : usingSceneIntegrate
+                ? "Painting character into the location plate (masked inpaint)"
+              : usingLocationPlate
+                ? batchGenerationOptions.stillReferenceMode ===
+                  "integrate_in_scene"
+                  ? "Integrating character into location plate (single pass)"
+                  : "Using location plate and character reference (composited)"
+                : usingCompositeInpaint
+                  ? "Pasting character on location plate, then integration pass"
+                  : usingIpAdapter
+                    ? "Using location or character reference via IP-Adapter"
+                    : "Using reference media for img2img"),
           lastHeartbeatAt: now(),
         });
       }
     }
 
     if (
-      LOCATION_ANCHOR_TEMPLATE_IDS.has(batch.workflowTemplateId) &&
+      workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
       batch.entityType === "location_angle" &&
       !referenceImage
     ) {
@@ -861,8 +1194,58 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     }
 
     if (
+      workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
+      batch.entityType === "character_angle" &&
+      !referenceImage
+    ) {
+      throw new Error(
+        "Front reference image missing on disk. Reselect the front angle reference and try again."
+      );
+    }
+
+    if (
       batch.entityType === "shot" &&
-      LOCATION_ANCHOR_TEMPLATE_IDS.has(batch.workflowTemplateId) &&
+      workflowTemplateId === BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID &&
+      (!referenceImage || !secondaryReferenceImage)
+    ) {
+      // The Qwen scene edit graph loads fixed input filenames. If either
+      // upload is missing, ComfyUI would silently reuse whatever file was
+      // uploaded last (possibly a different character or plate), so fail
+      // loudly instead.
+      throw new Error(
+        !referenceImage
+          ? "Character reference upload failed for scene edit. Check the character state reference image and try again."
+          : "Location plate upload failed for scene edit. Check the location angle reference image and try again."
+      );
+    }
+
+    if (
+      batch.entityType === "shot" &&
+      workflowTemplateId === BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID &&
+      (!referenceImage || !characterIsolateImage)
+    ) {
+      // Same fixed-filename hazard as scene edit: never run the face pass
+      // against a stale input image.
+      throw new Error(
+        !characterIsolateImage
+          ? "Face detail pass could not load the finished render from the previous stage."
+          : "Character reference upload failed for the face detail pass."
+      );
+    }
+
+    if (
+      batch.entityType === "shot" &&
+      workflowTemplateId === BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID &&
+      !secondaryReferenceImage
+    ) {
+      throw new Error(
+        "Image edit source upload failed. The still being edited is missing on disk."
+      );
+    }
+
+    if (
+      batch.entityType === "shot" &&
+      needsAnchorImage &&
       !referenceImage &&
       !secondaryReferenceImage
     ) {
@@ -873,14 +1256,71 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     }
 
     if (
-      batch.workflowTemplateId ===
-        BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID ||
-      batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID
+      workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID
     ) {
       await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
         "IPAdapterModelLoader",
         "CLIPVisionLoader",
         "IPAdapterAdvanced",
+      ]);
+    }
+
+    if (workflowTemplateId === BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID) {
+      await assertComfyuiNodeClasses(
+        batch.comfyuiEndpointUrl,
+        [...COMPOSITING_NODE_CLASSES]
+      );
+    }
+
+    if (
+      workflowTemplateId === BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID
+    ) {
+      // Qwen Image Edit stack: core ComfyUI nodes, but assert so an outdated
+      // ComfyUI fails with a clear message instead of a silent queue error.
+      await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
+        "UNETLoader",
+        "TextEncodeQwenImageEditPlus",
+        "ModelSamplingAuraFlow",
+        "LoraLoaderModelOnly",
+      ]);
+    }
+
+    if (workflowTemplateId === BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID) {
+      // Face detail pass needs ComfyUI-Impact-Pack (FaceDetailer) plus
+      // ComfyUI-Impact-Subpack (UltralyticsDetectorProvider) and the
+      // IP-Adapter Plus nodes for likeness.
+      await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
+        "FaceDetailer",
+        "UltralyticsDetectorProvider",
+        "IPAdapterModelLoader",
+        "CLIPVisionLoader",
+        "IPAdapterAdvanced",
+      ]);
+    }
+
+    if (
+      workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID
+    ) {
+      // Mask nodes are core ComfyUI; the rembg subject re-composite stage
+      // (discard invented background inside the mask, keep only the subject on
+      // the original plate) needs ComfyUI_essentials, same as the composited
+      // pipeline. Assert so a truncated install fails with a clear message.
+      await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
+        "SolidMask",
+        "MaskComposite",
+        "FeatherMask",
+        "SetLatentNoiseMask",
+        "RemBGSession+",
+        "ImageRemoveBackground+",
+        "GrowMask",
+        "MaskBlur+",
+        "ImageCompositeMasked",
       ]);
     }
 
@@ -914,15 +1354,17 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
         ? {
             weight: generationOptions.ipAdapterWeight,
             endAt: generationOptions.ipAdapterEndAt,
+            ...(generationOptions.ipAdapterWeightType != null
+              ? { weightType: generationOptions.ipAdapterWeightType }
+              : {}),
           }
         : undefined;
 
     const useDualIpAdapterProfiles =
       !ipAdapterOverrides &&
       batch.entityType === "shot" &&
-      batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID &&
-      referenceImage &&
-      secondaryReferenceImage;
+      workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID &&
+      Boolean(referenceImage && secondaryReferenceImage);
 
     const useDualIpAdapterBackdropProfiles =
       useDualIpAdapterProfiles && generationOptions.virtualBackdrop === true;
@@ -931,22 +1373,36 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       !ipAdapterOverrides &&
       !useDualIpAdapterProfiles &&
       !useDualIpAdapterBackdropProfiles &&
-      batch.entityType === "location_angle" &&
-      batch.workflowTemplateId ===
-        BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
+      option.pipelineStage === "character" &&
       referenceImage
-        ? resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
+        ? ("character_lock" as const)
         : !ipAdapterOverrides &&
             !useDualIpAdapterProfiles &&
             !useDualIpAdapterBackdropProfiles &&
-            batch.entityType === "shot" &&
-            batch.workflowTemplateId ===
+            batch.entityType === "location_angle" &&
+            workflowTemplateId ===
               BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
             referenceImage
-          ? resolveShotReframeIntensity(shotPromptForComposition, {
-              referenceFocus: singleShotReferenceFocus,
-            })
-          : undefined;
+          ? resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
+          : !ipAdapterOverrides &&
+              !useDualIpAdapterProfiles &&
+              !useDualIpAdapterBackdropProfiles &&
+              batch.entityType === "character_angle" &&
+              workflowTemplateId ===
+                BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
+              referenceImage
+            ? resolveCharacterAnchorReframeIntensity(batch.rawPrompt ?? "")
+            : !ipAdapterOverrides &&
+              !useDualIpAdapterProfiles &&
+              !useDualIpAdapterBackdropProfiles &&
+              batch.entityType === "shot" &&
+              workflowTemplateId ===
+                BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
+              referenceImage
+            ? resolveShotReframeIntensity(shotPromptForComposition, {
+                referenceFocus: singleShotReferenceFocus,
+              })
+            : undefined;
 
     const detailMacro =
       batch.entityType === "shot" &&
@@ -954,22 +1410,34 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
 
     const visualStyle = parseVisualStyle(project.visualStyleJson);
     const referenceDimensions =
-      batch.entityType === "character_state"
-        ? resolveCharacterSheetReferenceDimensions(
-            visualStyle,
-            resolvedSettings.referenceAspectRatio as
-              | ReferenceAspectRatioPreset
-              | undefined
-          )
+      batch.entityType === "character_state" ||
+      batch.entityType === "character_angle"
+        ? generationOptions.frontBackDiptych
+          ? resolveFrontBackDiptychDimensions(
+              visualStyle,
+              resolvedSettings.referenceAspectRatio as
+                | ReferenceAspectRatioPreset
+                | undefined
+            )
+          : resolveCharacterSheetReferenceDimensions(
+              visualStyle,
+              resolvedSettings.referenceAspectRatio as
+                | ReferenceAspectRatioPreset
+                | undefined
+            )
         : undefined;
 
     let ipAdapterFilenames:
       | { ipadapter?: string; clipVision?: string }
       | undefined;
     if (
-      batch.workflowTemplateId ===
-        BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID ||
-      batch.workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID
+      workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID ||
+      workflowTemplateId === BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID
     ) {
       const [ipadapterModels, clipVisionModels] = await Promise.all([
         getModels(batch.comfyuiEndpointUrl, "ipadapter").catch(
@@ -979,7 +1447,10 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
           () => [] as string[]
         ),
       ]);
-      const ipadapter = resolveSdxlPlusIpAdapterFilename(ipadapterModels);
+      const ipadapter =
+        workflowTemplateId === BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID
+          ? resolveSdxlPlusFaceIpAdapterFilename(ipadapterModels)
+          : resolveSdxlPlusIpAdapterFilename(ipadapterModels);
       const clipVision =
         clipVisionModels.find((name) =>
           name.toLowerCase().includes("vit.h.14")
@@ -989,16 +1460,61 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       }
     }
 
+    // Integrate in scene: subject-region inpaint mask sized against the real
+    // plate dimensions so the character renders at a controlled scale.
+    let integrateSubjectMask:
+      | ReturnType<typeof computeIntegrateSubjectMaskBox>
+      | undefined;
+    if (
+      workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID
+    ) {
+      let plateDimensions: { width: number; height: number } | null = null;
+      if (shotDualPaths.locationPath) {
+        const plateAbs = resolveMediaPath(
+          projectRoot,
+          shotDualPaths.locationPath
+        );
+        if (fs.existsSync(plateAbs)) {
+          plateDimensions = readImageDimensions(plateAbs);
+        }
+      }
+      integrateSubjectMask = computeIntegrateSubjectMaskBox({
+        frameWidth: plateDimensions?.width ?? 1216,
+        frameHeight: plateDimensions?.height ?? 832,
+        heightFraction: generationOptions.integrateSubjectHeightFraction,
+        anchorX: generationOptions.integrateSubjectAnchorX,
+        groundY: generationOptions.integrateSubjectGroundY,
+      });
+    }
+
+    let portraitPrompt = batch.processedPrompt;
+    let negativePrompt = batch.negativePrompt ?? "";
+    if (option.pipelineStage === "character") {
+      portraitPrompt = buildCharacterIsolatePrompt(
+        batch.entityId,
+        shotPromptForComposition || batch.rawPrompt || ""
+      );
+      negativePrompt = buildCharacterIsolateNegative(negativePrompt);
+    } else if (
+      option.pipelineStage === "face_refine" &&
+      batch.entityType === "shot"
+    ) {
+      portraitPrompt = buildFaceRefinePrompt(batch.entityId);
+      negativePrompt =
+        "blurry, low quality, deformed face, cross-eyed, extra eyes, oversharpened";
+    }
+
     const { workflow, clientId } = buildPortraitPayload(
       template,
       JSON.parse(template.bindingsJson || "{}"),
       resolvedSettings,
       {
-        prompt: batch.processedPrompt,
-        negativePrompt: batch.negativePrompt,
+        prompt: portraitPrompt,
+        negativePrompt,
         seed: option.seed,
         referenceImage,
         secondaryReferenceImage,
+        characterIsolateImage,
       },
       {
         checkpoint: resolvedSettings.checkpoint,
@@ -1012,6 +1528,19 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
         detailMacroHeight: SHOT_MACRO_LATENT_HEIGHT,
         referenceDimensions,
         ipAdapterFilenames,
+        locationPlateDenoise: generationOptions.locationPlateDenoise,
+        integrateSubjectMask,
+        compositeInpaintDenoise: generationOptions.compositeInpaintDenoise,
+        compositeBackgroundBlurRadius:
+          generationOptions.compositeBackgroundBlurRadius,
+        compositeBackgroundBlurSigma:
+          generationOptions.compositeBackgroundBlurSigma,
+        compositeCharacterWidth: generationOptions.compositeCharacterWidth,
+        compositeCharacterHeight: generationOptions.compositeCharacterHeight,
+        compositeCharacterX: generationOptions.compositeCharacterX,
+        compositeCharacterY: generationOptions.compositeCharacterY,
+        compositeMaskBlurAmount: generationOptions.compositeMaskBlurAmount,
+        compositeColorMatchFactor: generationOptions.compositeColorMatchFactor,
       }
     );
 
@@ -1032,10 +1561,11 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
 
         const heartbeat = now();
         if (update.type === "executing") {
+          const label = resolveComfyNodeLabel(option.pipelineStage, update.nodeId);
           updateAssetOption(option.id, {
-            statusMessage: update.nodeId
-              ? `Executing node ${update.nodeId}`
-              : "Finalizing",
+            statusMessage:
+              label ??
+              (update.nodeId ? `Executing node ${update.nodeId}` : "Finalizing"),
             lastHeartbeatAt: heartbeat,
           });
         } else if (update.type === "progress") {
@@ -1079,6 +1609,10 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
   }
 }
 
+const ASSET_ORPHAN_PROMPT_GRACE_MS = 120_000;
+const ASSET_COMPOSITE_STAGE_TIMEOUT_MS = 480_000;
+const ASSET_DEFAULT_STAGE_TIMEOUT_MS = 900_000;
+
 async function pollAssetOptionProgress(
   option: AssetGenerationOption,
   batch: typeof schema.assetGenerationBatches.$inferSelect
@@ -1088,45 +1622,87 @@ async function pollAssetOptionProgress(
   const heartbeat = now();
   const lastHeartbeat = option.lastHeartbeatAt ?? option.createdAt;
   const staleForMs = heartbeat - lastHeartbeat;
+  const stageTimeoutMs =
+    option.pipelineStage === "composite"
+      ? ASSET_COMPOSITE_STAGE_TIMEOUT_MS
+      : ASSET_DEFAULT_STAGE_TIMEOUT_MS;
 
   try {
     const queue = await getQueue(batch.comfyuiEndpointUrl);
     const queueState = findPromptQueueState(queue, option.comfyuiPromptId);
 
+    if (queueState === "absent") {
+      const history = await getHistory(
+        batch.comfyuiEndpointUrl,
+        option.comfyuiPromptId
+      );
+      if (!history?.status?.completed && staleForMs >= ASSET_ORPHAN_PROMPT_GRACE_MS) {
+        failAssetOption(
+          option,
+          "ComfyUI job did not finish (removed from queue or server restarted)"
+        );
+      }
+      return;
+    }
+
     if (queueState === "pending") {
-      updateAssetOption(option.id, {
-        statusMessage: "Waiting in ComfyUI queue",
-        lastHeartbeatAt: heartbeat,
-      });
+      if (option.statusMessage !== "Waiting in ComfyUI queue") {
+        updateAssetOption(option.id, {
+          statusMessage: "Waiting in ComfyUI queue",
+        });
+      }
       return;
     }
 
     if (queueState === "running") {
-      const nextProgress =
-        option.progress > 0
-          ? Math.min(0.92, option.progress + (staleForMs >= 3000 ? 0.06 : 0))
-          : 0.12;
-      updateAssetOption(option.id, {
-        progress: nextProgress,
-        statusMessage: "Generating on ComfyUI",
-        lastHeartbeatAt: heartbeat,
-      });
+      if (staleForMs >= stageTimeoutMs) {
+        failAssetOption(
+          option,
+          `ComfyUI timed out after ${Math.round(stageTimeoutMs / 60_000)} minutes with no progress`
+        );
+        return;
+      }
+
+      const hasDetailedMessage =
+        Boolean(option.statusMessage) &&
+        option.statusMessage !== "Generating on ComfyUI" &&
+        option.statusMessage !== "Running on ComfyUI (waiting for progress)";
+      const wsRecentlyUpdated = staleForMs < 8000;
+      const patch: {
+        progress?: number;
+        statusMessage?: string;
+      } = {};
+
+      if (
+        option.progress < 0.92 &&
+        !wsRecentlyUpdated &&
+        option.progress < 0.85
+      ) {
+        patch.progress =
+          option.progress > 0
+            ? Math.min(0.92, option.progress + (staleForMs >= 5000 ? 0.02 : 0))
+            : 0.08;
+      }
+
+      if (!hasDetailedMessage && !wsRecentlyUpdated) {
+        patch.statusMessage = "Running on ComfyUI (waiting for progress)";
+      }
+
+      if (Object.keys(patch).length > 0) {
+        updateAssetOption(option.id, patch);
+      }
       return;
     }
 
-    if (option.progress < 0.92 && staleForMs >= 3000) {
+    if (option.progress < 0.92 && staleForMs >= 5000 && staleForMs < 45000) {
       updateAssetOption(option.id, {
-        progress: Math.min(0.92, option.progress + 0.06),
-        statusMessage: option.statusMessage ?? "Generating on ComfyUI",
-        lastHeartbeatAt: heartbeat,
+        progress: Math.min(0.92, option.progress + 0.02),
       });
     }
   } catch {
-    if (option.progress < 0.92 && staleForMs >= 3000) {
+    if (option.progress < 0.92 && staleForMs >= 5000 && staleForMs < 45000) {
       updateAssetOption(option.id, {
-        progress: Math.min(0.92, option.progress + 0.06),
-        statusMessage: option.statusMessage ?? "Generating on ComfyUI",
-        lastHeartbeatAt: heartbeat,
+        progress: Math.min(0.92, option.progress + 0.02),
       });
     }
   }
@@ -1188,7 +1764,10 @@ async function finalizeAssetOption(option: AssetGenerationOption): Promise<void>
 
     const projectRoot = resolveProjectRoot(project);
     const output = outputs[outputs.length - 1];
-    const relativePath = getCandidateOutputPath(batch, option.id);
+    const relativePath =
+      latestOption.pipelineStage === "character"
+        ? getPipelineIsolateOutputPath(batch, option.id)
+        : getCandidateOutputPath(batch, option.id);
     const absoluteOutput = path.join(projectRoot, relativePath);
     fs.mkdirSync(path.dirname(absoluteOutput), { recursive: true });
 

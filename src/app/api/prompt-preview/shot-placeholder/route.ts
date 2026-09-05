@@ -2,9 +2,16 @@ import type { NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api-helpers";
 import { getDb, schema } from "@/lib/db";
-import { buildShotPlaceholderPrompts } from "@/lib/services/prompt-preprocess";
+import {
+  applyShotReferenceModePromptExtras,
+  buildShotPlaceholderPrompts,
+} from "@/lib/services/prompt-preprocess";
 import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
 import { parseShotRenderOverrides } from "@/lib/shot-render-overrides";
+import {
+  resolveShotStillReferencePlan,
+  type ShotStillReferenceMode,
+} from "@/lib/services/shot-still-reference-mode";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import type { RenderSettings } from "@/types";
 
@@ -16,6 +23,13 @@ export async function GET(req: NextRequest) {
     const shotId = req.nextUrl.searchParams.get("shotId")?.trim();
     const hasLocationReference =
       req.nextUrl.searchParams.get("hasLocationReference") === "1";
+    const hasCharacterReference =
+      req.nextUrl.searchParams.get("hasCharacterReference") !== "0";
+    const stillReferenceModeParam = req.nextUrl.searchParams.get(
+      "stillReferenceMode"
+    );
+    const compositingPipelineAvailable =
+      req.nextUrl.searchParams.get("compositingPipelineAvailable") === "1";
 
     if (!title) {
       return jsonError("title is required", 400);
@@ -24,6 +38,7 @@ export async function GET(req: NextRequest) {
     let visualStyle = parseVisualStyle(undefined);
     let imageDefaultNegative: string | undefined;
     let stillNegativePrompt: string | undefined;
+    let stillReferenceMode: ShotStillReferenceMode = "auto";
 
     if (projectId) {
       const db = getDb();
@@ -46,29 +61,52 @@ export async function GET(req: NextRequest) {
           .where(eq(schema.shots.id, shotId))
           .get();
         if (shot) {
-          stillNegativePrompt = parseShotRenderOverrides(
-            shot.renderOverridesJson
-          ).stillNegativePrompt;
+          const overrides = parseShotRenderOverrides(shot.renderOverridesJson);
+          stillNegativePrompt = overrides.stillNegativePrompt;
+          stillReferenceMode =
+            (stillReferenceModeParam as ShotStillReferenceMode | null) ??
+            overrides.stillReferenceMode ??
+            "auto";
         }
       }
     }
 
+    if (stillReferenceModeParam && !shotId) {
+      stillReferenceMode = stillReferenceModeParam as ShotStillReferenceMode;
+    }
+
+    const referencePlan = resolveShotStillReferencePlan(
+      {
+        characterPath: hasCharacterReference ? "preview/character.png" : null,
+        locationPath: hasLocationReference ? "preview/location.png" : null,
+      },
+      stillReferenceMode,
+      { compositingPipelineAvailable }
+    );
+
     const { processedPrompt, negativePrompt, usedLlm } =
       await buildShotPlaceholderPrompts(title, description, visualStyle, {
-        hasLocationReference,
+        hasLocationReference: referencePlan.hasLocationReferenceForPrompt,
       });
 
-    const mergedNegative = mergeImageNegativePrompt(
+    const promptExtras = applyShotReferenceModePromptExtras(
+      processedPrompt,
       negativePrompt,
+      referencePlan
+    );
+
+    const mergedNegative = mergeImageNegativePrompt(
+      promptExtras.negativePrompt,
       imageDefaultNegative,
       stillNegativePrompt
     );
 
     return jsonOk({
-      processedPrompt,
+      processedPrompt: promptExtras.processedPrompt,
       negativePrompt: mergedNegative,
       usedLlm,
       visualStyle,
+      effectiveReferenceMode: referencePlan.effectiveMode,
     });
   } catch (err) {
     return handleApiError(err);

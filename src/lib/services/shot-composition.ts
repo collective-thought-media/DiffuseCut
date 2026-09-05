@@ -2,7 +2,19 @@
 
 export function detectRearViewShot(description: string): boolean {
   const lower = description.toLowerCase();
-  return /\b(back|rear|behind|from behind|back to camera|back view|dorsal|over the shoulder|(?:demon|character|subject|his|her|their)['']?s back)\b/.test(
+  // Explicit facing-camera language always wins over rear cues: "storefront
+  // behind her, facing camera" is a front view with background context.
+  if (
+    /\bfacing (?:the )?camera\b|\bfaces? (?:the )?camera\b|\blooking (?:at|into|toward) (?:the )?camera\b|\bfront view\b|\beye contact\b/.test(
+      lower
+    )
+  ) {
+    return false;
+  }
+  // Camera-direction rear cues only. Bare "behind" / "back" also match scene
+  // descriptions like "window glow behind her" or "the back of the shop" and
+  // must not flip the whole shot to a rear view.
+  return /\bfrom behind\b|\bback to (?:the )?camera\b|\brear view\b|\bback view\b|\bseen from behind\b|\bcamera behind\b|\bover the shoulder\b|\bdorsal\b|\bon the back of\b|\bback of (?:the )?head\b|\b(?:demon|character|subject|his|her|their)['']?s back\b/.test(
     lower
   );
 }

@@ -2,33 +2,37 @@ import type { NextRequest } from "next/server";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api-helpers";
 import {
   discardCharacterSheetBatch,
-  getDisplayBatchForState,
-  getBatchWithOptions,
+  getCharacterSheetBatchView,
 } from "@/lib/services/asset-generation-queue";
 
 type RouteParams = {
   params: Promise<{ id: string; characterId: string; stateId: string }>;
 };
 
-export async function GET(_req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     const { characterId, stateId } = await params;
-    const batch = getDisplayBatchForState(characterId, stateId);
-    if (!batch) {
+    const batchId = req.nextUrl.searchParams.get("batchId");
+    const view = getCharacterSheetBatchView(characterId, stateId, batchId);
+    if (!view.batch && view.packs.length === 0) {
       return jsonError("No active character sheet batch", 404);
     }
-    const data = getBatchWithOptions(batch.id);
-    if (!data) return jsonError("Batch not found", 404);
-    return jsonOk(data);
+    return jsonOk(view);
   } catch (err) {
     return handleApiError(err);
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: RouteParams) {
+export async function DELETE(req: NextRequest, { params }: RouteParams) {
   try {
     const { id: projectId, characterId, stateId } = await params;
-    discardCharacterSheetBatch(projectId, characterId, stateId);
+    const batchId = req.nextUrl.searchParams.get("batchId");
+    discardCharacterSheetBatch(
+      projectId,
+      characterId,
+      stateId,
+      batchId ?? undefined
+    );
     return jsonOk({ ok: true });
   } catch (err) {
     return handleApiError(err);

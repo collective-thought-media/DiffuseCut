@@ -1,8 +1,5 @@
 import type { NextRequest } from "next/server";
-import {
-  getDisplayBatchForState,
-  getBatchWithOptions,
-} from "@/lib/services/asset-generation-queue";
+import { getCharacterSheetBatchView } from "@/lib/services/asset-generation-queue";
 
 const POLL_INTERVAL_MS = 1000;
 
@@ -20,23 +17,9 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
       const send = () => {
         if (closed) return;
-        const batch = getDisplayBatchForState(characterId, stateId);
-        if (!batch) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ batch: null, options: [] })}\n\n`
-            )
-          );
-          return;
-        }
-        const data = getBatchWithOptions(batch.id);
+        const view = getCharacterSheetBatchView(characterId, stateId);
         controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              batch: data?.batch ?? null,
-              options: data?.options ?? [],
-            })}\n\n`
-          )
+          encoder.encode(`data: ${JSON.stringify(view)}\n\n`)
         );
       };
 

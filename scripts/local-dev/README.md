@@ -14,7 +14,11 @@ Maintainer-only remote-host helpers (rename/ignore for local desk setup):
 
 | Script | Purpose |
 |--------|---------|
+| `install-git-workhorse.ps1` | Git for Windows on the remote ComfyUI GPU host (required for `git clone` custom nodes) |
 | `install-epicrealism-workhorse.ps1` | epiCRealism XL CrystalClear checkpoint on a remote ComfyUI host |
+| `install-compositing-nodes-workhorse.ps1` | Verify compositing nodes (ImageCompositeMasked, ImageToMask, InvertMask) for multi-stage shot compositing |
+| `install-mask-blur-workhorse.ps1` | Install ComfyUI Essentials (`MaskBlur+`) for soft subject mask edges before paste |
+| `restart-comfy-after-mask-blur-workhorse.ps1` | Stop ComfyUI, finish Essentials pip deps, restart, verify `MaskBlur+` |
 | `redownload-clip-vision-workhorse.ps1` | CLIP vision weights on a remote host |
 | `patch-comfy-model-paths.ps1` | Patch `extra_model_paths.yaml` |
 

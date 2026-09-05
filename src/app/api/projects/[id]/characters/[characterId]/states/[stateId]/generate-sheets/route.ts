@@ -5,13 +5,14 @@ import {
   handleApiError,
   parseJson,
 } from "@/lib/api-helpers";
-import { enqueueCharacterSheetBatch, getBatchWithOptions } from "@/lib/services/asset-generation-queue";
+import { enqueueCharacterSheetBatch, getCharacterSheetBatchView } from "@/lib/services/asset-generation-queue";
 
 interface GenerateSheetsBody {
   count?: number;
   replace?: boolean;
   /** Live UI description; falls back to saved character + state fields. */
   description?: string;
+  extraNegativePrompt?: string;
 }
 
 type RouteParams = {
@@ -36,18 +37,12 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       {
         replace: body.replace === true,
         descriptionOverride: body.description?.trim() || undefined,
+        extraNegativePrompt: body.extraNegativePrompt?.trim() || undefined,
       }
     );
 
-    const data = getBatchWithOptions(batch.id);
-    if (!data) {
-      return jsonError("Failed to load new batch", 500);
-    }
-
-    return jsonOk(
-      { batchId: batch.id, batch: data.batch, options: data.options },
-      201
-    );
+    const view = getCharacterSheetBatchView(characterId, stateId, batch.id);
+    return jsonOk(view, 201);
   } catch (err) {
     return handleApiError(err);
   }

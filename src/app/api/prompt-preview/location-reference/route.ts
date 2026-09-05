@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { jsonOk, jsonError, handleApiError } from "@/lib/api-helpers";
 import { getDb, schema } from "@/lib/db";
 import { buildLocationReferencePrompts } from "@/lib/services/prompt-preprocess";
+import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 
 export async function GET(req: NextRequest) {
@@ -28,13 +29,25 @@ export async function GET(req: NextRequest) {
     }
 
     const anchorMode = req.nextUrl.searchParams.get("anchorMode") === "true";
+    const extraNegativePrompt =
+      req.nextUrl.searchParams.get("extraNegativePrompt")?.trim() || undefined;
 
     const { processedPrompt, negativePrompt, usedLlm } =
       await buildLocationReferencePrompts(name, description, visualStyle, {
         anchorMode,
       });
 
-    return jsonOk({ processedPrompt, negativePrompt, usedLlm, visualStyle });
+    const negativeWithExtra = mergeImageNegativePrompt(
+      negativePrompt,
+      extraNegativePrompt
+    );
+
+    return jsonOk({
+      processedPrompt,
+      negativePrompt: negativeWithExtra,
+      usedLlm,
+      visualStyle,
+    });
   } catch (err) {
     return handleApiError(err);
   }

@@ -5,8 +5,7 @@ import {
   handleApiError,
   parseJson,
 } from "@/lib/api-helpers";
-import { getBatchWithOptions } from "@/lib/services/asset-generation-queue";
-import { enqueueLocationReferenceBatch } from "@/lib/services/location-asset-generation";
+import { enqueueLocationReferenceBatch, getLocationReferenceBatchView } from "@/lib/services/location-asset-generation";
 
 import type { LocationReferenceGenerationOptions } from "@/types";
 
@@ -14,6 +13,7 @@ interface GenerateBody {
   count?: number;
   replace?: boolean;
   generationOptions?: LocationReferenceGenerationOptions;
+  extraNegativePrompt?: string;
 }
 
 type RouteParams = {
@@ -41,18 +41,15 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       stateId,
       angleId,
       count,
-      { replace: body.replace === true, generationOptions: body.generationOptions }
+      {
+        replace: body.replace === true,
+        generationOptions: body.generationOptions,
+        extraNegativePrompt: body.extraNegativePrompt?.trim() || undefined,
+      }
     );
 
-    const data = getBatchWithOptions(batch.id);
-    if (!data) {
-      return jsonError("Failed to load new batch", 500);
-    }
-
-    return jsonOk(
-      { batchId: batch.id, batch: data.batch, options: data.options },
-      201
-    );
+    const view = getLocationReferenceBatchView(angleId, batch.id);
+    return jsonOk(view, 201);
   } catch (err) {
     return handleApiError(err);
   }

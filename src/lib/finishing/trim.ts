@@ -55,12 +55,20 @@ export function framesFromClipDelta(
   return Math.round(deltaPx / pixelsPerFrame);
 }
 
+/**
+ * Frame to preview when a trim edge changes, relative to the trimmed
+ * timeline (0 = the shot's trim-in point).
+ */
 export function trimPreviewFrameInShot(
   durationFrames: number,
   trimInFrames: number,
   trimOutFrames: number,
   edge: "in" | "out"
 ): number {
-  if (edge === "in") return Math.min(trimInFrames, durationFrames - 1);
-  return Math.max(trimInFrames, Math.min(trimOutFrames - 1, durationFrames - 1));
+  if (edge === "in") return 0;
+  const span = effectiveTrimFrames(
+    Math.max(0, trimInFrames),
+    Math.min(trimOutFrames, durationFrames)
+  );
+  return Math.max(0, span - 1);
 }

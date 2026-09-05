@@ -1,0 +1,113 @@
+{
+  "title": "Last Warm Loaf",
+  "logline": "On a stormy closing night, a bakery owner and a soaked night courier share one quiet kindness before the lights go out.",
+  "plot": "Rain lashes a corner bakery as Mira flips the OPEN sign to CLOSED. Outside, Theo, a night courier, shields a crumpled delivery ticket and stares at the dark doorway. Mira notices him through the glass, unlocks the door, and hands him the last warm loaf wrapped in paper. They stand in the golden doorway while rain beads on Theo's jacket. He nods once, tucks the bread under his arm, and steps back into the storm. Mira watches him go, then dims the lights.",
+  "visualStylePreset": "photoreal_cinematic",
+  "referenceAspectRatio": "16_9",
+  "characters": [
+    {
+      "name": "Mira",
+      "description": "Mid-forties bakery owner with calm eyes and flour-dusted hands, closing alone on a rainy night.",
+      "state": {
+        "name": "Closing shift",
+        "lookDescription": "Woman in her mid-forties with black hair in a low bun, soft crow's feet, warm brown eyes. Cream knit sweater under a faded navy canvas apron dusted with flour. Dark jeans, brown leather loafers, thin gold hoop earrings, a small flour smear on one cheek.",
+        "angles": [
+          {
+            "name": "Front full body",
+            "viewDescription": "Full body front three-quarter, head to toe, casting reference framing"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Theo",
+      "description": "Early-twenties night courier caught in the rain after the last stop of his route.",
+      "state": {
+        "name": "Rain soaked",
+        "lookDescription": "Young man in his early twenties with short damp black hair plastered to his forehead, tired dark eyes. Olive green waterproof courier jacket with reflective strips, soaked charcoal hoodie underneath, dark cargo pants darkened by rain, muddy sneakers, battered messenger bag across his chest, wet receipt paper clenched in one fist.",
+        "angles": [
+          {
+            "name": "Front full body",
+            "viewDescription": "Full body front three-quarter, head to toe, casting reference framing"
+          }
+        ]
+      }
+    }
+  ],
+  "locations": [
+    {
+      "name": "Corner bakery at night",
+      "description": "A small street-corner bakery with warm interior light spilling onto wet pavement during a heavy rainstorm.",
+      "state": {
+        "name": "Storm closing",
+        "lookDescription": "Narrow brick-front bakery with a large front window and glass door. Warm amber interior light on wooden shelves of leftover loaves, a metal cooling rack, chalk menu board half erased. Outside: glossy wet asphalt, neon reflections in puddles, rain streaks on glass, a CLOSED sign hanging crooked, steam fogging the lower panes.",
+        "angles": [
+          {
+            "name": "Establishing wide",
+            "viewDescription": "Wide establishing view of the full environment"
+          }
+        ]
+      }
+    }
+  ],
+  "shots": [
+    {
+      "title": "Closed for the night",
+      "prompt": "Night rain on a corner bakery, warm amber light glowing through a large front window, Mira in a navy flour-dusted apron reaching up to flip a hanging CLOSED sign, wet brick facade and puddles reflecting neon, quiet and cinematic.",
+      "motionPrompt": "Slow push toward the bakery window as rain streaks the glass, Mira's hand turns the CLOSED sign, warm interior light holds steady against the storm.",
+      "characterIndex": 0,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": true,
+      "renderDeep": false
+    },
+    {
+      "title": "Courier in the rain",
+      "prompt": "Theo stands alone on wet pavement outside the bakery doorway, olive green courier jacket dark with rain, reflective strips catching streetlight, messenger bag across his chest, crumpled ticket in his fist, rain falling hard around him.",
+      "motionPrompt": "Theo shifts his weight, rain beads and runs off his jacket, he glances from the ticket to the lit doorway, breath visible in the cold.",
+      "characterIndex": 1,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": false,
+      "renderDeep": false
+    },
+    {
+      "title": "Door unlocks",
+      "prompt": "From inside looking out through rain-beaded glass, Mira unlocks the bakery door and opens it a crack, golden light spilling onto Theo's soaked silhouette on the sidewalk, steam rising where warm air meets cold rain.",
+      "motionPrompt": "The door swings open, warm light floods the wet sidewalk, Theo looks up startled as Mira appears in the doorway holding a paper-wrapped loaf.",
+      "characterIndex": 0,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": true,
+      "renderDeep": false
+    },
+    {
+      "title": "The last loaf",
+      "prompt": "Close two-shot in the bakery doorway, Mira offering a paper-wrapped warm loaf with both hands, Theo accepting it carefully, rain glittering behind them, soft golden key light on their faces, quiet gratitude in the frame.",
+      "motionPrompt": "Mira extends the wrapped loaf, Theo takes it with both hands, a small nod passes between them, steam rises faintly from the paper in the cold air.",
+      "characterIndex": 1,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": false,
+      "renderDeep": true
+    },
+    {
+      "title": "Into the storm",
+      "prompt": "Wide night shot of the bakery doorway as Theo tucks the loaf under his arm and steps back into heavy rain, Mira standing in the golden rectangle of light watching him leave, empty wet street stretching behind him.",
+      "motionPrompt": "Theo turns and walks into the rain with the loaf sheltered under his arm, Mira remains in the doorway, then the bakery lights dim as he disappears down the glistening street.",
+      "characterIndex": 1,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": false,
+      "renderDeep": true
+    }
+  ],
+  "finishing": {
+    "overlayText": "Last Warm Loaf",
+    "trimInFrames": 4
+  },
+  "meta": {
+    "author": "grokbot",
+    "runner": "grokbot"
+  }
+}

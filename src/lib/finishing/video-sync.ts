@@ -1,6 +1,14 @@
 import type { Shot } from "@/lib/db/schema";
-import { frameAtTimelinePosition, shotStartFrame } from "@/lib/timing/frames";
+import {
+  frameAtTrimmedTimelinePosition,
+  trimmedShotStartFrame,
+} from "@/lib/timing/frames";
 
+/**
+ * Video source time for a frame on the trimmed timeline. frameInShot is
+ * relative to the trim window (0 = trim in), so playback runs the trimmed
+ * span at natural speed with no time stretching.
+ */
 export function shotVideoTimeSec(
   shot: Shot,
   frameInShot: number,
@@ -9,9 +17,8 @@ export function shotVideoTimeSec(
   const trimIn = shot.trimInFrames ?? 0;
   const trimOut = shot.trimOutFrames ?? shot.durationFrames;
   const trimSpan = Math.max(1, trimOut - trimIn);
-  const durationFrames = Math.max(1, shot.durationFrames);
-  const ratio = Math.min(1, Math.max(0, frameInShot / durationFrames));
-  return (trimIn + ratio * trimSpan) / fps;
+  const clamped = Math.min(trimSpan, Math.max(0, frameInShot));
+  return (trimIn + clamped) / fps;
 }
 
 export function frameInShotFromVideoTime(
@@ -27,9 +34,7 @@ export function frameInShotFromVideoTime(
   const trimOut = shot.trimOutFrames ?? shot.durationFrames;
   const trimSpan = Math.max(1, trimOut - trimIn);
   const videoFrame = videoTimeSec * fps;
-  const clamped = Math.min(trimOut, Math.max(trimIn, videoFrame));
-  const ratio = (clamped - trimIn) / trimSpan;
-  return Math.round(ratio * Math.max(1, shot.durationFrames - 1));
+  return Math.min(trimSpan - 1, Math.max(0, Math.round(videoFrame - trimIn)));
 }
 
 export function globalFrameFromVideoTime(
@@ -39,7 +44,7 @@ export function globalFrameFromVideoTime(
   fps: number
 ): number {
   return (
-    shotStartFrame(shots, shotIndex) +
+    trimmedShotStartFrame(shots, shotIndex) +
     frameInShotFromVideoTime(shots, shotIndex, videoTimeSec, fps)
   );
 }
@@ -86,5 +91,5 @@ export function frameAtTimelinePositionSafe(
   frame: number
 ): { shotIndex: number; frameInShot: number } {
   if (shots.length === 0) return { shotIndex: 0, frameInShot: 0 };
-  return frameAtTimelinePosition(shots, frame);
+  return frameAtTrimmedTimelinePosition(shots, frame);
 }

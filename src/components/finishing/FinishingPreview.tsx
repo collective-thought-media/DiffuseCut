@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { AudioTrack, Shot } from "@/lib/db/schema";
 import { Card } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { frameAtTimelinePosition, totalProjectFrames } from "@/lib/timing/frames";
+import {
+  frameAtTrimmedTimelinePosition,
+  totalTimelineFrames,
+} from "@/lib/timing/frames";
 import { resolveTrackTiming } from "@/lib/finishing/audio-track-timing";
 import {
   resolveShotPreviewLayer,
@@ -16,6 +19,10 @@ import {
   shotVideoTimeSec,
 } from "@/lib/finishing/video-sync";
 import { effectiveTrimFrames } from "@/lib/finishing/trim";
+import {
+  parseShotRenderOverrides,
+  resolveShotAudioPolicy,
+} from "@/lib/shot-render-overrides";
 import { mediaUrl } from "@/lib/media-url";
 import type { TextOverlayDraft } from "@/components/export/OverlayEditor";
 
@@ -53,7 +60,7 @@ export function FinishingPreview({
   const prevPlayingRef = useRef(playing);
 
   const { shotIndex, frameInShot } = useMemo(
-    () => frameAtTimelinePosition(shots, currentFrame),
+    () => frameAtTrimmedTimelinePosition(shots, currentFrame),
     [shots, currentFrame]
   );
 
@@ -69,7 +76,7 @@ export function FinishingPreview({
   );
 
   const timelineTotalFrames = useMemo(
-    () => totalProjectFrames(shots),
+    () => totalTimelineFrames(shots),
     [shots]
   );
 
@@ -261,15 +268,13 @@ export function FinishingPreview({
     );
   }
 
-  const durationSec = activeShot
-    ? (activeShot.durationFrames / fps).toFixed(2)
-    : "0.00";
   const trimOut = activeShot
     ? activeShot.trimOutFrames ?? activeShot.durationFrames
     : 0;
   const trimEffective = activeShot
     ? effectiveTrimFrames(activeShot.trimInFrames, trimOut)
     : 0;
+  const durationSec = (trimEffective / fps).toFixed(2);
   const sourceLabel =
     activeLayer?.kind === "rendered-video"
       ? "Rendered video"
@@ -289,6 +294,18 @@ export function FinishingPreview({
             const isActive = index === shotIndex;
 
             if (isVideoLayer(layer)) {
+              // Preview matches export: Auto mutes shot audio once any
+              // finishing track exists; explicit Keep/Mute always wins.
+              const hasTimelineAudio = audioTracks.some(
+                (track) =>
+                  track.filePath && !track.filePath.includes("pending")
+              );
+              const shotMuted =
+                resolveShotAudioPolicy(
+                  parseShotRenderOverrides(shots[index]?.renderOverridesJson)
+                    .audioPolicy,
+                  hasTimelineAudio
+                ) === "mute" || layer.kind !== "rendered-video";
               return (
                 <video
                   key={`${layer.id}-${layer.src}`}
@@ -300,7 +317,7 @@ export function FinishingPreview({
                     "absolute inset-0 h-full w-full object-contain",
                     isActive ? "opacity-100" : "opacity-0"
                   )}
-                  muted
+                  muted={shotMuted}
                   playsInline
                   preload="auto"
                   aria-hidden={!isActive}
@@ -367,7 +384,7 @@ export function FinishingPreview({
           </p>
           <p className="mt-0.5 text-xs tabular-nums text-neutral-300">
             Shot {shotIndex + 1} of {shots.length} · frame {frameInShot + 1}{" "}
-            / {activeShot?.durationFrames ?? 0} · {durationSec}s @ {fps} fps ·{" "}
+            / {trimEffective} · {durationSec}s @ {fps} fps ·{" "}
             In {activeShot?.trimInFrames ?? 0} · Out {trimOut} · {trimEffective}f
             effective · {sourceLabel}
           </p>

@@ -1,5 +1,8 @@
 import type { AudioTrack, Shot } from "@/lib/db/schema";
-import { shotStartFrame } from "@/lib/timing/frames";
+import {
+  shotTimelineFrames,
+  trimmedShotStartFrame,
+} from "@/lib/timing/frames";
 
 export type AudioTrackSpanMode =
   | "full_timeline"
@@ -69,8 +72,8 @@ export function resolveTrackTiming(
     const shotIndex = shots.findIndex((s) => s.id === track.targetShotId);
     if (shotIndex >= 0) {
       const shot = shots[shotIndex];
-      const startFrame = shotStartFrame(shots, shotIndex);
-      const durationFrames = Math.max(1, shot.durationFrames);
+      const startFrame = trimmedShotStartFrame(shots, shotIndex);
+      const durationFrames = shotTimelineFrames(shot);
       return {
         startFrame,
         durationFrames,

@@ -10,6 +10,7 @@ import {
   type ReferenceAspectRatioPreset,
 } from "@/lib/services/reference-aspect-ratio";
 import type { AnchorReframeIntensity } from "@/lib/ip-adapter-profiles";
+import type { IntegrateSubjectMaskBox } from "@/lib/integrate-subject-mask";
 import {
   DUAL_IP_ADAPTER_CHARACTER_PROFILE,
   DUAL_IP_ADAPTER_LOCATION_PROFILE,
@@ -35,6 +36,8 @@ export interface UploadedRefs {
   video?: string;
   characterImages?: Record<string, string>;
   locationImage?: string;
+  /** Uploaded dialog audio file for audio-conditioned (lip sync) renders. */
+  audio?: string;
 }
 
 export interface WorkflowPayload {
@@ -70,6 +73,17 @@ function collectBindingNodeIds(bindings: WorkflowBindings): string[] {
   add(bindings.negativePromptNodeId);
   add(bindings.frameCountNodeId);
   add(bindings.referenceImageNodeId);
+  add(bindings.locationPlateImageNodeId);
+  add(bindings.backgroundBlurNodeId);
+  add(bindings.characterScaleNodeId);
+  add(bindings.characterIsolateImageNodeId);
+  add(bindings.maskBlurNodeId);
+  add(bindings.colorMatchNodeId);
+  add(bindings.compositeNodeId);
+  add(bindings.subjectMaskFrameNodeId);
+  add(bindings.subjectMaskBoxNodeId);
+  add(bindings.subjectMaskCompositeNodeId);
+  add(bindings.subjectMaskFeatherNodeId);
   add(bindings.secondaryReferenceImageNodeId);
   add(bindings.characterIpAdapterNodeId);
   add(bindings.locationIpAdapterNodeId);
@@ -80,6 +94,8 @@ function collectBindingNodeIds(bindings: WorkflowBindings): string[] {
   add(bindings.createVideoNodeId);
   add(bindings.conditioningFpsNodeId);
   add(bindings.audioLatentFpsNodeId);
+  add(bindings.audioInputNodeId);
+  add(bindings.audioTrimDurationNodeId);
   add(bindings.durationSecondsNodeId);
   add(bindings.outputFilenameNodeId);
   add(bindings.latentVideoNodeId);
@@ -280,20 +296,53 @@ export function buildWorkflowPayload(
     durationSeconds
   );
 
-  if (renderSettings.videoWidth != null) {
+  // Audio-conditioned (lip sync) renders: bind the uploaded dialog audio and
+  // clamp the conditioning audio to the exact clip length (float seconds, not
+  // the rounded int above, so audio and video latents stay the same length).
+  if (uploadedRefs.audio) {
+    setNodeInput(
+      workflow,
+      mergedBindings.audioInputNodeId,
+      mergedBindings.audioInputInputKey ?? "audio",
+      uploadedRefs.audio
+    );
+  }
+  setNodeInput(
+    workflow,
+    mergedBindings.audioTrimDurationNodeId,
+    mergedBindings.audioTrimDurationInputKey ?? "duration",
+    shot.durationFrames / fps
+  );
+
+  let latentWidth = renderSettings.videoWidth;
+  let latentHeight = renderSettings.videoHeight;
+  const areaBudget = mergedBindings.latentVideoAreaBudget;
+  if (
+    areaBudget != null &&
+    latentWidth != null &&
+    latentHeight != null &&
+    latentWidth * latentHeight > areaBudget
+  ) {
+    // Scale down proportionally (keep aspect), snap to multiples of 16.
+    const scale = Math.sqrt(areaBudget / (latentWidth * latentHeight));
+    latentWidth = Math.max(256, Math.round((latentWidth * scale) / 16) * 16);
+    latentHeight = Math.max(256, Math.round((latentHeight * scale) / 16) * 16);
+  }
+
+  if (latentWidth != null) {
     setNodeInput(
       workflow,
       mergedBindings.latentVideoNodeId,
       mergedBindings.latentVideoWidthInputKey ?? "width",
-      renderSettings.videoWidth
+      latentWidth
     );
   }
-  if (renderSettings.videoHeight != null) {
+  if (latentHeight != null) {
     setNodeInput(
       workflow,
       mergedBindings.latentVideoNodeId,
       mergedBindings.latentVideoHeightInputKey ?? "height",
-      renderSettings.videoHeight
+      latentHeight
     );
   }
 
@@ -456,6 +505,8 @@ export interface PortraitPromptInput {
   seed: number;
   referenceImage?: string;
   secondaryReferenceImage?: string;
+  /** Character isolate PNG for composited paste layer. */
+  characterIsolateImage?: string;
 }
 
 export const CHARACTER_SHEET_LATENT_WIDTH = 1536;
@@ -541,7 +592,8 @@ export function buildPortraitPayload(
     clientId?: string;
     checkpoint?: string;
     ipAdapterReframe?: AnchorReframeIntensity;
-    ipAdapterOverrides?: Pick<IpAdapterProfileSettings, "weight" | "endAt">;
+    ipAdapterOverrides?: Pick<IpAdapterProfileSettings, "weight" | "endAt"> &
+      Partial<Pick<IpAdapterProfileSettings, "weightType">>;
     dualIpAdapterReframe?: {
       character?: AnchorReframeIntensity;
       location?: AnchorReframeIntensity;
@@ -550,6 +602,20 @@ export function buildPortraitPayload(
     useDualIpAdapterProfiles?: boolean;
     /** Virtual backdrop: character IP first, location IP last so gray backdrop wins. */
     useDualIpAdapterBackdropProfiles?: boolean;
+    /** Partial denoise for location-plate composited stills. */
+    locationPlateDenoise?: number;
+    /** Integrate in scene: subject-region inpaint mask geometry (pixels). */
+    integrateSubjectMask?: IntegrateSubjectMaskBox;
+    /** Seam blend denoise for composite inpaint stage. */
+    compositeInpaintDenoise?: number;
+    compositeBackgroundBlurRadius?: number;
+    compositeBackgroundBlurSigma?: number;
+    compositeCharacterWidth?: number;
+    compositeCharacterHeight?: number;
+    compositeCharacterX?: number;
+    compositeCharacterY?: number;
+    compositeMaskBlurAmount?: number;
+    compositeColorMatchFactor?: number;
     detailMacro?: boolean;
     detailMacroWidth?: number;
     detailMacroHeight?: number;
@@ -608,6 +674,31 @@ export function buildPortraitPayload(
       workflow,
       mergedBindings.secondaryReferenceImageNodeId,
       mergedBindings.secondaryReferenceImageInputKey ?? "image",
+      input.secondaryReferenceImage
+    );
+  }
+
+  if (input.characterIsolateImage && mergedBindings.characterIsolateImageNodeId) {
+    setNodeInput(
+      workflow,
+      mergedBindings.characterIsolateImageNodeId,
+      mergedBindings.characterIsolateImageInputKey ?? "image",
+      input.characterIsolateImage
+    );
+  }
+
+  const referenceUsage = mergedBindings.referenceImageUsage ?? "img2img";
+  if (
+    (referenceUsage === "location_plate" ||
+      referenceUsage === "composite_inpaint" ||
+      referenceUsage === "scene_edit") &&
+    input.secondaryReferenceImage &&
+    mergedBindings.locationPlateImageNodeId
+  ) {
+    setNodeInput(
+      workflow,
+      mergedBindings.locationPlateImageNodeId,
+      mergedBindings.locationPlateImageInputKey ?? "image",
       input.secondaryReferenceImage
     );
   }
@@ -709,7 +800,6 @@ export function buildPortraitPayload(
   }
 
   // buildPortraitPayload is only used for character/location reference batches.
-  const referenceUsage = mergedBindings.referenceImageUsage ?? "img2img";
   const needsFreshLatent =
     !input.referenceImage || referenceUsage === "ipadapter";
 
@@ -823,6 +913,208 @@ export function buildPortraitPayload(
     });
     applyIpAdapterReframeProfile(workflow, options.ipAdapterReframe);
   } else if (referenceUsage === "ipadapter" && input.referenceImage) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options?.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options?.ipAdapterFilenames?.clipVision,
+    });
+  } else if (referenceUsage === "location_plate" && input.referenceImage) {
+    applyIpAdapterModelFiles(workflow, {
+      ipadapterFile: options?.ipAdapterFilenames?.ipadapter,
+      clipVisionFile: options?.ipAdapterFilenames?.clipVision,
+    });
+    applyIpAdapterSettingsToNode(
+      workflow,
+      mergedBindings.characterIpAdapterNodeId,
+      options?.ipAdapterOverrides
+        ? {
+            ...DUAL_IP_ADAPTER_CHARACTER_PROFILE,
+            ...options.ipAdapterOverrides,
+          }
+        : DUAL_IP_ADAPTER_CHARACTER_PROFILE
+    );
+    if (options?.locationPlateDenoise != null) {
+      const samplerControl = mergedBindings.controls?.find(
+        (control) => control.type === "sampler"
+      );
+      if (samplerControl?.nodeId) {
+        setNodeInput(
+          workflow,
+          samplerControl.nodeId,
+          "denoise",
+          options.locationPlateDenoise
+        );
+      }
+    }
+    const subjectMask = options?.integrateSubjectMask;
+    if (subjectMask && mergedBindings.subjectMaskBoxNodeId) {
+      if (mergedBindings.subjectMaskFrameNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskFrameNodeId,
+          "width",
+          subjectMask.frameWidth
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskFrameNodeId,
+          "height",
+          subjectMask.frameHeight
+        );
+      }
+      setNodeInput(
+        workflow,
+        mergedBindings.subjectMaskBoxNodeId,
+        "width",
+        subjectMask.boxWidth
+      );
+      setNodeInput(
+        workflow,
+        mergedBindings.subjectMaskBoxNodeId,
+        "height",
+        subjectMask.boxHeight
+      );
+      if (mergedBindings.subjectMaskCompositeNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskCompositeNodeId,
+          "x",
+          subjectMask.x
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskCompositeNodeId,
+          "y",
+          subjectMask.y
+        );
+      }
+      if (mergedBindings.subjectMaskFeatherNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskFeatherNodeId,
+          "left",
+          subjectMask.featherX
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskFeatherNodeId,
+          "right",
+          subjectMask.featherX
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskFeatherNodeId,
+          "top",
+          subjectMask.featherTop
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskFeatherNodeId,
+          "bottom",
+          subjectMask.featherBottom
+        );
+      }
+    }
+  } else if (referenceUsage === "composite_inpaint") {
+    if (input.referenceImage) {
+      applyIpAdapterModelFiles(workflow, {
+        ipadapterFile: options?.ipAdapterFilenames?.ipadapter,
+        clipVisionFile: options?.ipAdapterFilenames?.clipVision,
+      });
+      applyIpAdapterSettingsToNode(
+        workflow,
+        mergedBindings.characterIpAdapterNodeId,
+        DUAL_IP_ADAPTER_CHARACTER_PROFILE
+      );
+    }
+    if (options?.compositeBackgroundBlurRadius != null) {
+      setNodeInput(
+        workflow,
+        mergedBindings.backgroundBlurNodeId,
+        mergedBindings.backgroundBlurRadiusInputKey ?? "blur_radius",
+        options.compositeBackgroundBlurRadius
+      );
+    }
+    if (options?.compositeBackgroundBlurSigma != null) {
+      setNodeInput(
+        workflow,
+        mergedBindings.backgroundBlurNodeId,
+        mergedBindings.backgroundBlurSigmaInputKey ?? "sigma",
+        options.compositeBackgroundBlurSigma
+      );
+    }
+    if (options?.compositeCharacterWidth != null) {
+      setNodeInput(
+        workflow,
+        mergedBindings.characterScaleNodeId,
+        mergedBindings.characterScaleWidthInputKey ?? "width",
+        options.compositeCharacterWidth
+      );
+    }
+    if (options?.compositeCharacterHeight != null) {
+      setNodeInput(
+        workflow,
+        mergedBindings.characterScaleNodeId,
+        mergedBindings.characterScaleHeightInputKey ?? "height",
+        options.compositeCharacterHeight
+      );
+    }
+    if (options?.compositeCharacterX != null) {
+      setNodeInput(
+        workflow,
+        mergedBindings.compositeNodeId,
+        mergedBindings.compositeXInputKey ?? "x",
+        options.compositeCharacterX
+      );
+    }
+    if (options?.compositeCharacterY != null) {
+      setNodeInput(
+        workflow,
+        mergedBindings.compositeNodeId,
+        mergedBindings.compositeYInputKey ?? "y",
+        options.compositeCharacterY
+      );
+    }
+    if (
+      options?.compositeMaskBlurAmount != null &&
+      mergedBindings.maskBlurNodeId
+    ) {
+      setNodeInput(
+        workflow,
+        mergedBindings.maskBlurNodeId,
+        mergedBindings.maskBlurAmountInputKey ?? "amount",
+        options.compositeMaskBlurAmount
+      );
+    }
+    if (
+      options?.compositeColorMatchFactor != null &&
+      mergedBindings.colorMatchNodeId
+    ) {
+      setNodeInput(
+        workflow,
+        mergedBindings.colorMatchNodeId,
+        mergedBindings.colorMatchFactorInputKey ?? "factor",
+        options.compositeColorMatchFactor
+      );
+    }
+    if (options?.compositeInpaintDenoise != null) {
+      const samplerControl = mergedBindings.controls?.find(
+        (control) => control.type === "sampler"
+      );
+      if (samplerControl?.nodeId) {
+        setNodeInput(
+          workflow,
+          samplerControl.nodeId,
+          "denoise",
+          options.compositeInpaintDenoise
+        );
+      }
+    }
+  } else if (referenceUsage === "face_refine" && input.referenceImage) {
+    // Face detail pass: point the IP-Adapter loaders at whatever face (or
+    // generic plus) IP-Adapter the host actually has installed. The
+    // FaceDetailer's denoise stays at the template value; the sampler control
+    // intentionally omits denoise so project render settings cannot blow away
+    // the low-denoise face repaint.
     applyIpAdapterModelFiles(workflow, {
       ipadapterFile: options?.ipAdapterFilenames?.ipadapter,
       clipVisionFile: options?.ipAdapterFilenames?.clipVision,

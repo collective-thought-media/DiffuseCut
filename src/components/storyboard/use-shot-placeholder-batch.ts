@@ -12,6 +12,11 @@ import {
   parseShotRenderOverrides,
   serializeShotRenderOverrides,
 } from "@/lib/shot-render-overrides";
+import type { ShotStillReferenceMode } from "@/lib/services/shot-still-reference-mode";
+import {
+  parseApiResponse,
+  readApiResponseBody,
+} from "@/lib/parse-api-response";
 
 export function formatShotBatchFailureMessage(
   batch: AssetGenerationBatch,
@@ -57,6 +62,9 @@ export interface UseShotPlaceholderBatchProps {
   hasPlaceholder?: boolean;
   renderOverridesJson?: string | null;
   hasLocationReference?: boolean;
+  hasCharacterReference?: boolean;
+  stillReferenceMode?: ShotStillReferenceMode;
+  compositingPipelineAvailable?: boolean;
   onRenderOverridesChange?: (renderOverridesJson: string | null) => void;
   onPlaceholderSelected: (shot: {
     id: string;
@@ -74,6 +82,9 @@ export function useShotPlaceholderBatch({
   hasPlaceholder = false,
   renderOverridesJson,
   hasLocationReference = false,
+  hasCharacterReference = true,
+  stillReferenceMode = "auto",
+  compositingPipelineAvailable = false,
   onRenderOverridesChange,
   onPlaceholderSelected,
 }: UseShotPlaceholderBatchProps) {
@@ -93,11 +104,18 @@ export function useShotPlaceholderBatch({
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [sendingToComfyId, setSendingToComfyId] = useState<string | null>(null);
+  const [comfySendResult, setComfySendResult] = useState<{
+    optionId: string;
+    endpointUrl: string;
+    filename: string;
+  } | null>(null);
   const [stackReady, setStackReady] = useState(false);
   const [ipAdapterAvailable, setIpAdapterAvailable] = useState<boolean | null>(
     null
   );
   const [error, setError] = useState<string | null>(null);
+  const [activityNow, setActivityNow] = useState(() => Date.now());
   const [expanded, setExpanded] = useState(!hasPlaceholder);
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(
     null
@@ -167,11 +185,11 @@ export function useShotPlaceholderBatch({
           setError(null);
           return;
         }
-        const data = (await res.json()) as BatchView;
+        const data = await readApiResponseBody<BatchView & { error?: string }>(
+          res
+        );
         if (!res.ok) {
-          throw new Error(
-            (data as { error?: string }).error ?? "Failed to load batch"
-          );
+          throw new Error(data.error ?? "Failed to load batch");
         }
         applyBatchView(data, batchId);
         setError(null);
@@ -206,17 +224,23 @@ export function useShotPlaceholderBatch({
       if (hasLocationReference) {
         params.set("hasLocationReference", "1");
       }
+      if (!hasCharacterReference) {
+        params.set("hasCharacterReference", "0");
+      }
+      if (stillReferenceMode !== "auto") {
+        params.set("stillReferenceMode", stillReferenceMode);
+      }
+      if (compositingPipelineAvailable) {
+        params.set("compositingPipelineAvailable", "1");
+      }
       const res = await fetch(
         `/api/prompt-preview/shot-placeholder?${params.toString()}`
       );
-      const data = (await res.json()) as {
+      const data = await parseApiResponse<{
         processedPrompt?: string;
         negativePrompt?: string;
         error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to load prompt preview");
-      }
+      }>(res);
       setPromptPreview(data.processedPrompt ?? null);
       setNegativePreview(data.negativePrompt ?? null);
     } catch (err) {
@@ -234,6 +258,9 @@ export function useShotPlaceholderBatch({
     projectId,
     shotId,
     hasLocationReference,
+    hasCharacterReference,
+    stillReferenceMode,
+    compositingPipelineAvailable,
   ]);
 
   const togglePromptPreview = useCallback(() => {
@@ -364,8 +391,9 @@ export function useShotPlaceholderBatch({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ count: sampleCount, replace }),
       });
-      const data = (await res.json()) as BatchView & { error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Generation failed");
+      const data = await parseApiResponse<
+        BatchView & { error?: string }
+      >(res);
       setError(null);
       applyBatchView(data, data.activeBatchId ?? data.batch?.id ?? null);
     } catch (err) {
@@ -392,16 +420,17 @@ export function useShotPlaceholderBatch({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ optionId }),
       });
-      const data = (await res.json()) as BatchView & {
-        error?: string;
-        shot?: {
-          id: string;
-          placeholderPath: string | null;
-          placeholderKind: "image" | "video" | null;
-          updatedAt: number;
-        };
-      };
-      if (!res.ok) throw new Error(data.error ?? "Selection failed");
+      const data = await parseApiResponse<
+        BatchView & {
+          error?: string;
+          shot?: {
+            id: string;
+            placeholderPath: string | null;
+            placeholderKind: "image" | "video" | null;
+            updatedAt: number;
+          };
+        }
+      >(res);
       if (!data.shot) {
         throw new Error("Selection succeeded but shot was not returned");
       }
@@ -411,6 +440,63 @@ export function useShotPlaceholderBatch({
       setError(err instanceof Error ? err.message : "Selection failed");
     } finally {
       setSelectingId(null);
+    }
+  }
+
+  async function handleInstructionEdit(
+    optionId: string,
+    instruction: string
+  ) {
+    if (!instruction.trim()) return;
+    setSubmitting(true);
+    submittingRef.current = true;
+    try {
+      const res = await fetch(`${apiBase}/image-edit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          optionId,
+          instruction,
+          count: 2,
+          replace: true,
+        }),
+      });
+      const data = await parseApiResponse<BatchView & { error?: string }>(res);
+      setError(null);
+      applyBatchView(data, data.activeBatchId ?? data.batch?.id ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Edit failed");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSendToComfyui(optionId: string) {
+    setSendingToComfyId(optionId);
+    setComfySendResult(null);
+    try {
+      const res = await fetch(`${apiBase}/send-to-comfyui`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ optionId }),
+      });
+      const data = await parseApiResponse<{
+        endpointUrl: string;
+        filename: string;
+        error?: string;
+      }>(res);
+      setComfySendResult({
+        optionId,
+        endpointUrl: data.endpointUrl,
+        filename: data.filename,
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to send image to ComfyUI"
+      );
+    } finally {
+      setSendingToComfyId(null);
     }
   }
 
@@ -429,10 +515,9 @@ export function useShotPlaceholderBatch({
         `${apiBase}/placeholder-batch?batchId=${encodeURIComponent(viewingBatchId)}`,
         { method: "DELETE" }
       );
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error ?? "Failed to remove pack");
-      }
+      const data = await parseApiResponse<{ error?: string; ok?: boolean }>(
+        res
+      );
       await loadBatch(activeBatchId);
     } catch (err) {
       setError(
@@ -484,10 +569,16 @@ export function useShotPlaceholderBatch({
     comfyuiOk === true &&
     stackReady &&
     !isGenerating;
+  useEffect(() => {
+    if (!isGenerating) return;
+    const timer = setInterval(() => setActivityNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [isGenerating]);
+
   const readyHint = descriptionEmpty
     ? "Add a shot prompt, location, or character cast first."
     : isGenerating
-      ? "Generation is in progress. Wait for it to finish or remove the current pack."
+      ? null
       : comfyuiOk === false
         ? "ComfyUI is not reachable. Check Settings or System Status."
         : !stackReady
@@ -554,11 +645,16 @@ export function useShotPlaceholderBatch({
     generateLabel,
     ready,
     readyHint,
+    activityNow,
     displayError,
     showOptions,
     canRegenerate,
     handleGenerate,
     handleSelect,
+    handleInstructionEdit,
+    handleSendToComfyui,
+    sendingToComfyId,
+    comfySendResult,
     dismissError,
     dismissOptions,
   };

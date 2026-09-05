@@ -203,6 +203,23 @@ function migrate(db: Database.Database) {
   backfillCharacterStates(db);
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS character_angles (
+      id TEXT PRIMARY KEY,
+      character_state_id TEXT NOT NULL REFERENCES character_states(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      view_description TEXT NOT NULL DEFAULT '',
+      reference_path TEXT,
+      reference_kind TEXT,
+      reference_source TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+
+  backfillCharacterAngles(db);
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS location_states (
       id TEXT PRIMARY KEY,
       location_id TEXT NOT NULL REFERENCES locations(id) ON DELETE CASCADE,
@@ -323,6 +340,33 @@ function migrate(db: Database.Database) {
   if (!exportJobCols.some((c) => c.name === "total_frames")) {
     db.exec(`ALTER TABLE export_jobs ADD COLUMN total_frames INTEGER`);
   }
+  if (!exportJobCols.some((c) => c.name === "output_meta_json")) {
+    db.exec(`ALTER TABLE export_jobs ADD COLUMN output_meta_json TEXT`);
+  }
+
+  const renderJobCols = db
+    .prepare("PRAGMA table_info(render_jobs)")
+    .all() as { name: string }[];
+  if (!renderJobCols.some((c) => c.name === "lip_sync_audio_path")) {
+    db.exec(`ALTER TABLE render_jobs ADD COLUMN lip_sync_audio_path TEXT`);
+  }
+
+  const optionCols = db
+    .prepare("PRAGMA table_info(asset_generation_options)")
+    .all() as { name: string }[];
+  if (!optionCols.some((c) => c.name === "pipeline_stage")) {
+    db.exec(`ALTER TABLE asset_generation_options ADD COLUMN pipeline_stage TEXT`);
+  }
+  if (!optionCols.some((c) => c.name === "pipeline_group_id")) {
+    db.exec(
+      `ALTER TABLE asset_generation_options ADD COLUMN pipeline_group_id TEXT`
+    );
+  }
+  if (!optionCols.some((c) => c.name === "depends_on_option_id")) {
+    db.exec(
+      `ALTER TABLE asset_generation_options ADD COLUMN depends_on_option_id TEXT`
+    );
+  }
 
   seedBuiltinWorkflowTemplates(db);
 }
@@ -368,6 +412,49 @@ function backfillCharacterStates(db: Database.Database) {
       character.reference_source,
       character.created_at,
       character.updated_at
+    );
+  }
+}
+
+function backfillCharacterAngles(db: Database.Database) {
+  const states = db
+    .prepare(
+      `SELECT id, reference_path, reference_kind, reference_source, created_at, updated_at FROM character_states`
+    )
+    .all() as {
+    id: string;
+    reference_path: string | null;
+    reference_kind: string | null;
+    reference_source: string | null;
+    created_at: number;
+    updated_at: number;
+  }[];
+
+  const countStmt = db.prepare(
+    `SELECT COUNT(*) as count FROM character_angles WHERE character_state_id = ?`
+  );
+  const insertAngleStmt = db.prepare(
+    `INSERT INTO character_angles (
+      id, character_state_id, name, view_description,
+      reference_path, reference_kind, reference_source, sort_order, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)`
+  );
+
+  for (const state of states) {
+    const existing = countStmt.get(state.id) as { count: number };
+    if (existing.count > 0) continue;
+
+    const angleId = `cangle_${state.id.slice(0, 8)}_${Date.now().toString(36)}`;
+    insertAngleStmt.run(
+      angleId,
+      state.id,
+      "Front full body",
+      "Full body front three-quarter, head to toe, casting reference framing",
+      state.reference_path,
+      state.reference_kind,
+      state.reference_source,
+      state.created_at,
+      state.updated_at
     );
   }
 }

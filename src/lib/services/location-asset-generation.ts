@@ -1,8 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb, schema } from "@/lib/db";
+import { HttpError } from "@/lib/api-helpers";
 import {
   BUILTIN_CHARACTER_SHEET_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
@@ -29,21 +30,28 @@ import { buildLocationReferencePrompts } from "@/lib/services/prompt-preprocess"
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings, resolveProjectEndpointUrl } from "@/lib/services/generation-stack";
 import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
-import type { RenderSettings } from "@/types";
-import { isIpAdapterAvailable } from "@/lib/services/comfyui-client";
+import {
+  isIpAdapterAvailable,
+  listEndpoints,
+} from "@/lib/services/comfyui-client";
 import {
   getDefaultComfyuiEndpoints,
   resolveComfyuiEndpoints,
 } from "@/lib/services/settings";
-import { listEndpoints } from "@/lib/services/comfyui-client";
 import type { LocationReferenceGenerationOptions, RenderSettings } from "@/types";
 import {
   getActiveBatchForEntity,
   getDisplayBatchForEntity,
   getBatchWithOptions,
   updateAssetBatch,
-  updateAssetOption,
+  archiveBatchAfterReferenceSelection,
 } from "@/lib/services/asset-generation-queue";
+import {
+  getAssetGenerationBatchView,
+  listAssetGenerationPacks,
+  supersedeAssetGenerationBatch,
+  type AssetGenerationPack,
+} from "@/lib/services/asset-generation-packs";
 
 function randomSeed(): number {
   return Math.floor(Math.random() * 2_147_483_647);
@@ -103,22 +111,76 @@ export function getDisplayBatchForLocationAngle(
   return getDisplayBatchForEntity("location_angle", angleId);
 }
 
+export type LocationReferencePack = AssetGenerationPack;
+
+export function listLocationReferencePacks(
+  angleId: string
+): LocationReferencePack[] {
+  return listAssetGenerationPacks("location_angle", angleId, () =>
+    getDisplayBatchForLocationAngle(angleId)
+  );
+}
+
+export function getLocationReferenceBatchView(
+  angleId: string,
+  batchId?: string | null
+) {
+  return getAssetGenerationBatchView(
+    "location_angle",
+    angleId,
+    () => getDisplayBatchForLocationAngle(angleId),
+    batchId
+  );
+}
+
+export function supersedeLocationReferenceBatch(
+  projectId: string,
+  locationId: string,
+  stateId: string,
+  angleId: string,
+  priorBatch: AssetGenerationBatch
+): void {
+  supersedeAssetGenerationBatch(priorBatch, (batch) =>
+    discardLocationReferenceBatch(
+      projectId,
+      locationId,
+      stateId,
+      angleId,
+      batch
+    )
+  );
+}
+
 export function discardLocationReferenceBatch(
   projectId: string,
   locationId: string,
   stateId: string,
   angleId: string,
-  batchOverride?: AssetGenerationBatch
+  batchOverride?: AssetGenerationBatch | string
 ): void {
-  const batch = batchOverride ?? getDisplayBatchForLocationAngle(angleId);
+  const db = getDb();
+  let batch: AssetGenerationBatch | undefined;
+  if (typeof batchOverride === "string") {
+    batch =
+      db
+        .select()
+        .from(schema.assetGenerationBatches)
+        .where(eq(schema.assetGenerationBatches.id, batchOverride))
+        .get() ?? undefined;
+  } else {
+    batch =
+      batchOverride ?? getDisplayBatchForLocationAngle(angleId) ?? undefined;
+  }
   if (!batch) {
     throw new Error("No location reference batch to discard");
   }
   if (batch.projectId !== projectId) {
     throw new Error("Batch does not belong to this project");
   }
+  if (batch.entityType !== "location_angle" || batch.entityId !== angleId) {
+    throw new Error("Batch does not belong to this location angle");
+  }
 
-  const db = getDb();
   const project = db
     .select()
     .from(schema.projects)
@@ -174,7 +236,11 @@ export async function enqueueLocationReferenceBatch(
   stateId: string,
   angleId: string,
   sampleCount: number,
-  options?: { replace?: boolean; generationOptions?: LocationReferenceGenerationOptions }
+  options?: {
+    replace?: boolean;
+    generationOptions?: LocationReferenceGenerationOptions;
+    extraNegativePrompt?: string;
+  }
 ): Promise<AssetGenerationBatch> {
   await assertDependency("comfyui");
 
@@ -205,10 +271,13 @@ export async function enqueueLocationReferenceBatch(
   const angle = getLocationAngle(projectId, locationId, stateId, angleId);
   if (!angle) throw new Error("Location angle not found");
 
-  const priorBatch = getActiveBatchForLocationAngle(angleId);
+  const priorBatch =
+    getActiveBatchForLocationAngle(angleId) ??
+    (options?.replace ? getDisplayBatchForLocationAngle(angleId) : null);
   if (priorBatch && !options?.replace) {
-    throw new Error(
-      "A location reference batch is already in progress. Discard it first or regenerate."
+    throw new HttpError(
+      "A location reference batch is already in progress. Discard it first or regenerate.",
+      409
     );
   }
 
@@ -291,7 +360,8 @@ export async function enqueueLocationReferenceBatch(
   ) as RenderSettings;
   const finalNegativePrompt = mergeImageNegativePrompt(
     negativePrompt,
-    renderSettings.imageDefaultNegative
+    renderSettings.imageDefaultNegative,
+    options?.extraNegativePrompt
   );
 
   const ts = Date.now();
@@ -343,7 +413,7 @@ export async function enqueueLocationReferenceBatch(
   }
 
   if (priorBatch) {
-    discardLocationReferenceBatch(
+    supersedeLocationReferenceBatch(
       projectId,
       locationId,
       stateId,
@@ -442,56 +512,7 @@ export async function selectLocationReferenceOption(
     .where(eq(schema.locations.id, locationId))
     .get()!;
 
-  const siblingOptions = db
-    .select()
-    .from(schema.assetGenerationOptions)
-    .where(eq(schema.assetGenerationOptions.batchId, batch.id))
-    .all();
-
-  for (const sibling of siblingOptions) {
-    if (sibling.id === optionId) {
-      updateAssetOption(sibling.id, { selected: true });
-    } else if (sibling.outputPath) {
-      try {
-        const siblingAbs = resolveMediaPath(projectRoot, sibling.outputPath);
-        if (fs.existsSync(siblingAbs)) fs.unlinkSync(siblingAbs);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  const candidateDir = path.join(
-    projectRoot,
-    "locations",
-    locationId,
-    "states",
-    stateId,
-    "angles",
-    angleId,
-    "candidates",
-    batch.id
-  );
-  if (fs.existsSync(candidateDir)) {
-    fs.rmSync(candidateDir, { recursive: true, force: true });
-  }
-
-  updateAssetBatch(batch.id, {
-    status: "completed",
-    completedAt: ts,
-  });
-
-  db.delete(schema.assetGenerationOptions)
-    .where(
-      and(
-        eq(schema.assetGenerationOptions.batchId, batch.id),
-        inArray(
-          schema.assetGenerationOptions.id,
-          siblingOptions.filter((s) => s.id !== optionId).map((s) => s.id)
-        )
-      )
-    )
-    .run();
+  archiveBatchAfterReferenceSelection(batch.id, optionId);
 
   return updated;
 }

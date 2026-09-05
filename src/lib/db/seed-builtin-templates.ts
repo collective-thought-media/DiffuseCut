@@ -6,7 +6,15 @@ import {
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
   BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID,
+  BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID,
+  BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
   BUILTIN_LTX_I2V_TEMPLATE_ID,
+  BUILTIN_LTX_I2V_AUDIO_TEMPLATE_ID,
   BUILTIN_MINIMAX_I2V_TEMPLATE_ID,
   BUILTIN_KREA2_STILL_TEMPLATE_ID,
 } from "@/lib/db/builtin-template-ids";
@@ -16,7 +24,15 @@ export {
   BUILTIN_LOCATION_REFERENCE_IMG2IMG_TEMPLATE_ID,
   BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID,
   BUILTIN_SHOT_DUAL_IPADAPTER_TEMPLATE_ID,
+  BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID,
+  BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
+  BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID,
+  BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID,
+  BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
   BUILTIN_LTX_I2V_TEMPLATE_ID,
+  BUILTIN_LTX_I2V_AUDIO_TEMPLATE_ID,
   BUILTIN_MINIMAX_I2V_TEMPLATE_ID,
   BUILTIN_KREA2_STILL_TEMPLATE_ID,
 } from "@/lib/db/builtin-template-ids";
@@ -26,6 +42,14 @@ const BUILTIN_LTX_I2V = {
   name: "Local LTX 2.3 (image to video)",
   description:
     "Built-in LTX 2.3 I2V workflow for local ComfyUI. Bindings cover prompt, still reference, frame length (8n+1), UNET, VAE, and checkpoint controls. Tune models in Render settings or import your own img2vid workflow.",
+  purpose: "shot_video" as const,
+};
+
+const BUILTIN_LTX_I2V_AUDIO = {
+  id: BUILTIN_LTX_I2V_AUDIO_TEMPLATE_ID,
+  name: "Local LTX 2.3 lip sync (image + audio to video)",
+  description:
+    "Built-in LTX 2.3 audio-conditioned I2V workflow for local ComfyUI. Renders the shot still into video whose performance is lip-synced to a supplied dialog audio file instead of model-invented sound. Used by the Render lip sync action on the finishing Dialog tab.",
   purpose: "shot_video" as const,
 };
 
@@ -59,6 +83,62 @@ const BUILTIN_SHOT_DUAL_IPADAPTER = {
   description:
     "Built-in storyboard still workflow with two IP-Adapter inputs: character casting reference for identity and wardrobe, plus location reference for background and set lighting. Used when a shot has both references available.",
   purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_LOCATION_PLATE = {
+  id: BUILTIN_SHOT_LOCATION_PLATE_TEMPLATE_ID,
+  name: "Storyboard shot (location plate + character)",
+  description:
+    "Composited still workflow: encodes the saved location angle into the latent at partial denoise, then applies character IP-Adapter. Opt-in alternative to dual IP-Adapter when set layout fidelity matters.",
+  purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_CHARACTER_ISOLATE = {
+  id: BUILTIN_SHOT_CHARACTER_ISOLATE_TEMPLATE_ID,
+  name: "Storyboard shot (character isolate)",
+  description:
+    "Pipeline stage: generate the cast member on a neutral backdrop with character IP-Adapter for use as a foreground layer.",
+  purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_COMPOSITE_INPAINT = {
+  id: BUILTIN_SHOT_COMPOSITE_INPAINT_TEMPLATE_ID,
+  name: "Storyboard shot (composite inpaint)",
+  description:
+    "Pipeline stage: paste the isolated character onto the saved location plate, then run a partial img2img integration pass so lighting, depth, and edges match the set.",
+  purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT = {
+  id: BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
+  name: "Storyboard shot (integrate in scene, masked inpaint)",
+  description:
+    "Integrate in scene workflow: encodes the saved location plate, then denoises only a soft subject-region mask so the character is painted into the scene at a controlled size while the rest of the plate stays pixel-locked. Uses core ComfyUI mask nodes plus character IP-Adapter.",
+  purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_SCENE_EDIT_QWEN = {
+  id: BUILTIN_SHOT_SCENE_EDIT_QWEN_TEMPLATE_ID,
+  name: "Storyboard shot (scene edit, Qwen Image Edit)",
+  description:
+    "Scene edit workflow: feeds the saved location plate and the character reference into Qwen Image Edit 2511 with an instruction prompt, so the model places the character into the scene with real interaction, occlusion, and matched lighting. Requires qwen_image_edit_2511_fp8mixed.safetensors (diffusion_models), qwen_2.5_vl_7b_fp8_scaled.safetensors (text_encoders), qwen_image_vae.safetensors (vae), and the Qwen-Image-Edit-2511-Lightning-4steps LoRA (loras).",
+  purpose: "location_sheet" as const,
+};
+
+const BUILTIN_SHOT_FACE_REFINE = {
+  id: BUILTIN_SHOT_FACE_REFINE_TEMPLATE_ID,
+  name: "Storyboard shot (face detail pass)",
+  purpose: "location_sheet" as const,
+  description:
+    "Pipeline stage: detect the character's face in a finished still, crop and upscale it, re-diffuse at low denoise with a face IP-Adapter tied to the character reference, and paste the sharpened result back. Requires ComfyUI-Impact-Pack, ComfyUI-Impact-Subpack, an ultralytics face model (models/ultralytics/bbox/face_yolov8m.pt), and an SDXL face IP-Adapter (ip-adapter-plus-face_sdxl_vit-h.safetensors).",
+};
+
+const BUILTIN_SHOT_IMAGE_EDIT_QWEN = {
+  id: BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID,
+  name: "Storyboard shot (edit with instruction, Qwen Image Edit)",
+  purpose: "location_sheet" as const,
+  description:
+    "Image edit workflow: feeds a finished still into Qwen Image Edit 2511 with a plain-language instruction (fix sign text, remove an object, change time of day) and returns the edited frame. Requires the same Qwen Image Edit models as the scene edit workflow.",
 };
 
 const BUILTIN_LOCATION_REFERENCE_IMG2IMG = {
@@ -133,6 +213,74 @@ function loadBuiltinShotDualIpAdapterFiles(): {
   return { workflowJson, bindingsJson };
 }
 
+function loadBuiltinShotLocationPlateFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-location-plate.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-location-plate.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotCharacterIsolateFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-character-isolate.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-character-isolate.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotCompositeInpaintFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-composite-inpaint.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-composite-inpaint.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotSceneIntegrateInpaintFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-scene-integrate-inpaint.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-scene-integrate-inpaint.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
 function loadBuiltinLocationReferenceImg2imgFiles(): {
   workflowJson: string;
   bindingsJson: string;
@@ -163,6 +311,21 @@ function loadBuiltinLtxI2vFiles(): {
   return { workflowJson, bindingsJson };
 }
 
+function loadBuiltinLtxI2vAudioFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/ltx-i2v-audio/workflow.api.json"
+  );
+  const bindingsJson = readTemplateFile("templates/ltx-i2v-audio/bindings.json");
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
 function loadBuiltinMinimaxI2vFiles(): {
   workflowJson: string;
   bindingsJson: string;
@@ -186,6 +349,57 @@ function loadBuiltinKrea2StillFiles(): {
     "templates/krea2-still/workflow.api.json"
   );
   const bindingsJson = readTemplateFile("templates/krea2-still/bindings.json");
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotSceneEditQwenFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-scene-edit-qwen.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-scene-edit-qwen.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotFaceRefineFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-face-refine.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-face-refine.json"
+  );
+
+  JSON.parse(workflowJson);
+  JSON.parse(bindingsJson);
+
+  return { workflowJson, bindingsJson };
+}
+
+function loadBuiltinShotImageEditQwenFiles(): {
+  workflowJson: string;
+  bindingsJson: string;
+} {
+  const workflowJson = readTemplateFile(
+    "templates/shot-composite/workflow-image-edit-qwen.api.json"
+  );
+  const bindingsJson = readTemplateFile(
+    "templates/shot-composite/bindings-image-edit-qwen.json"
+  );
 
   JSON.parse(workflowJson);
   JSON.parse(bindingsJson);
@@ -259,7 +473,47 @@ export function seedBuiltinWorkflowTemplates(db: Database.Database): void {
     BUILTIN_SHOT_DUAL_IPADAPTER,
     loadBuiltinShotDualIpAdapterFiles()
   );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_LOCATION_PLATE,
+    loadBuiltinShotLocationPlateFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_CHARACTER_ISOLATE,
+    loadBuiltinShotCharacterIsolateFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_COMPOSITE_INPAINT,
+    loadBuiltinShotCompositeInpaintFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT,
+    loadBuiltinShotSceneIntegrateInpaintFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_SCENE_EDIT_QWEN,
+    loadBuiltinShotSceneEditQwenFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_FACE_REFINE,
+    loadBuiltinShotFaceRefineFiles()
+  );
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_SHOT_IMAGE_EDIT_QWEN,
+    loadBuiltinShotImageEditQwenFiles()
+  );
   upsertBuiltinTemplate(db, BUILTIN_LTX_I2V, loadBuiltinLtxI2vFiles());
+  upsertBuiltinTemplate(
+    db,
+    BUILTIN_LTX_I2V_AUDIO,
+    loadBuiltinLtxI2vAudioFiles()
+  );
   upsertBuiltinTemplate(
     db,
     BUILTIN_MINIMAX_I2V,

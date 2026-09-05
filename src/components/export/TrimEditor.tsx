@@ -9,7 +9,11 @@ import {
   validateTrim,
 } from "@/lib/finishing/trim";
 import { durationMs } from "@/lib/timing/frames";
-import { Button, Card, Input } from "@/components/ui/button";
+import { Button, Card, Input, Label, Select } from "@/components/ui/button";
+import {
+  parseShotRenderOverrides,
+  type ShotAudioPolicy,
+} from "@/lib/shot-render-overrides";
 import { cn } from "@/lib/utils";
 
 export type TrimUpdateOptions = {
@@ -29,6 +33,7 @@ interface TrimEditorProps {
     trimOutFrames: number | null,
     options?: TrimUpdateOptions
   ) => void;
+  onUpdateAudioPolicy?: (shotId: string, policy: ShotAudioPolicy | "") => void;
 }
 
 function TrimNumberInput({
@@ -186,6 +191,7 @@ export function TrimEditor({
   onToggleShowAll,
   onSelectShot,
   onUpdateTrim,
+  onUpdateAudioPolicy,
 }: TrimEditorProps) {
   const selectedRowRef = useRef<HTMLTableRowElement | null>(null);
 
@@ -290,6 +296,35 @@ export function TrimEditor({
                 )}
                 f effective
               </span>
+              {onUpdateAudioPolicy && (
+                <div className="flex items-center gap-2">
+                  <Label
+                    className="text-xs text-muted-foreground"
+                    htmlFor={`shot-audio-${selectedShot.id}`}
+                  >
+                    Shot audio
+                  </Label>
+                  <Select
+                    id={`shot-audio-${selectedShot.id}`}
+                    className="h-7 w-28 px-2 text-xs"
+                    title="Auto keeps the clip's rendered audio until a score, dialog, or SFX track exists, then mutes it"
+                    value={
+                      parseShotRenderOverrides(selectedShot.renderOverridesJson)
+                        .audioPolicy ?? ""
+                    }
+                    onChange={(e) =>
+                      onUpdateAudioPolicy(
+                        selectedShot.id,
+                        e.target.value as ShotAudioPolicy | ""
+                      )
+                    }
+                  >
+                    <option value="">Auto</option>
+                    <option value="keep">Keep</option>
+                    <option value="mute">Mute</option>
+                  </Select>
+                </div>
+              )}
             </div>
           </div>
         </Card>

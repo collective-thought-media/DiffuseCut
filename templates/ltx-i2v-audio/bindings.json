@@ -1,0 +1,111 @@
+{
+  "promptNodeId": "319",
+  "promptInputKey": "value",
+  "extraPromptNodes": [
+    {
+      "nodeId": "325",
+      "inputKey": "prompt"
+    }
+  ],
+  "negativePromptNodeId": "313",
+  "negativePromptInputKey": "text",
+  "frameCountNodeId": "295",
+  "frameCountInputKey": "length",
+  "frameCountTransform": "ltx_8n1",
+  "latentVideoNodeId": "295",
+  "latentVideoWidthInputKey": "width",
+  "latentVideoHeightInputKey": "height",
+  "referenceImageNodeId": "8001",
+  "referenceImageInputKey": "image",
+  "seedNodeId": "276",
+  "seedInputKey": "noise_seed",
+  "extraSeedNodeIds": [
+    "277"
+  ],
+  "extraSeedInputKey": "noise_seed",
+  "fpsNodeId": "300",
+  "fpsInputKey": "value",
+  "createVideoNodeId": "310",
+  "createVideoFpsInputKey": "fps",
+  "conditioningFpsNodeId": "304",
+  "conditioningFpsInputKey": "frame_rate",
+  "durationSecondsNodeId": "301",
+  "durationSecondsInputKey": "value",
+  "outputFilenameNodeId": "9002",
+  "outputFilenameInputKey": "filename_prefix",
+  "outputNodeIds": [
+    "9002"
+  ],
+  "controls": [
+    {
+      "id": "ltx_checkpoint_te",
+      "label": "LTX checkpoint (TE / audio config)",
+      "type": "checkpoint",
+      "nodeId": "317",
+      "nameInputKey": "ckpt_name"
+    },
+    {
+      "id": "ltx_checkpoint_audio_vae",
+      "label": "LTX audio VAE checkpoint",
+      "type": "checkpoint",
+      "nodeId": "279",
+      "nameInputKey": "ckpt_name"
+    },
+    {
+      "id": "video_unet",
+      "label": "Video UNET",
+      "type": "unet",
+      "nodeId": "8000",
+      "nameInputKey": "unet_name"
+    },
+    {
+      "id": "video_vae",
+      "label": "Video VAE",
+      "type": "vae",
+      "nodeId": "8002",
+      "nameInputKey": "vae_name"
+    },
+    {
+      "id": "video_text_encoder",
+      "label": "Text encoder",
+      "type": "text_encoder",
+      "nodeId": "317",
+      "inputKey": "text_encoder"
+    },
+    {
+      "id": "video_width_primitive",
+      "label": "Width (primitive)",
+      "type": "video_width",
+      "nodeId": "312",
+      "inputKey": "value"
+    },
+    {
+      "id": "video_height_primitive",
+      "label": "Height (primitive)",
+      "type": "video_height",
+      "nodeId": "299",
+      "inputKey": "value"
+    },
+    {
+      "id": "model_device",
+      "label": "Model GPU device",
+      "type": "model_device",
+      "nodeId": "8010",
+      "inputKey": "device",
+      "optional": true
+    },
+    {
+      "id": "vae_device",
+      "label": "VAE GPU device",
+      "type": "vae_device",
+      "nodeId": "8012",
+      "inputKey": "device",
+      "optional": true
+    }
+  ],
+  "audioInputNodeId": "400",
+  "audioInputInputKey": "audio",
+  "audioTrimDurationNodeId": "401",
+  "audioTrimDurationInputKey": "duration",
+  "latentVideoAreaBudget": 921600
+}

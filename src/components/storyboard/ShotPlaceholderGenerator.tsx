@@ -3,16 +3,17 @@
 import {
   createContext,
   useContext,
+  useMemo,
+  useState,
   type ReactNode,
 } from "react";
+import { filterSelectableShotOptions } from "@/lib/shot-pipeline-shared";
 import Link from "next/link";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { mediaUrl } from "@/lib/media-url";
-import { formatComfyuiError } from "@/lib/services/comfyui-errors";
 import { ComfyuiGenerationStack } from "@/components/sheets/ComfyuiGenerationStack";
+import { AssetGenerationOptionsGrid } from "@/components/sheets/AssetGenerationOptionsGrid";
 import { SheetGenerationControls } from "@/components/sheets/SheetGenerationControls";
 import { VisualStyleBadge } from "@/components/project/VisualStylePanel";
-import { ImageLightbox } from "@/components/ui/ImageLightbox";
 import { AsyncRefreshOverlay } from "@/components/ui/AsyncRefreshOverlay";
 import { GenerationErrorAlert } from "@/components/ui/GenerationErrorAlert";
 import { Button, Badge, Card } from "@/components/ui/button";
@@ -51,15 +52,6 @@ export function ShotPlaceholderBatchProvider({
       {children}
     </ShotPlaceholderBatchContext.Provider>
   );
-}
-
-function statusVariant(
-  status: ShotPlaceholderBatchState["options"][number]["status"]
-): "default" | "success" | "warning" | "error" {
-  if (status === "completed") return "success";
-  if (status === "running") return "warning";
-  if (status === "failed" || status === "cancelled") return "error";
-  return "default";
 }
 
 export function ShotReferenceInfoPanel({
@@ -284,6 +276,9 @@ export function ShotPlaceholderControls({
                     previewError={previewError}
                     stillNegativePrompt={stillNegativePrompt}
                     onStillNegativePromptChange={onStillNegativePromptChange}
+                    extraNegativeLabel="Extra negative prompt (this shot)"
+                    extraNegativePlaceholder="Optional. Appended to this shot's still generation negatives only."
+                    previewEmptyHint="No preview text returned. Check the shot prompt and try again."
                     onGenerate={() => void handleGenerate(canRegenerate)}
                     previewDisabled={descriptionEmpty}
                   />
@@ -317,16 +312,27 @@ export function ShotPlaceholderOptionsPanel({
     handleSelect,
     selectingId,
     dismissOptions,
-    lightbox,
-    setLightbox,
+    expanded,
+    isGenerating,
+    handleInstructionEdit,
+    handleSendToComfyui,
+    sendingToComfyId,
+    comfySendResult,
   } = useShotPlaceholderContext();
+  const [editingOptionId, setEditingOptionId] = useState<string | null>(null);
+  const [editInstruction, setEditInstruction] = useState("");
 
-  if (!showOptions) return null;
+  const displayOptions = useMemo(
+    () => filterSelectableShotOptions(options),
+    [options]
+  );
+
+  if (!showOptions || !expanded) return null;
 
   const canDismiss =
     batch &&
     (batch.status === "awaiting_selection" || batch.status === "archived") &&
-    options.some((option) => option.status === "completed");
+    displayOptions.some((option) => option.status === "completed");
 
   const packStatusLabel = (status: NonNullable<typeof batch>["status"]) => {
     if (status === "archived") return "saved";
@@ -389,90 +395,93 @@ export function ShotPlaceholderOptionsPanel({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {options.map((option) => {
-          const previewSrc = option.outputPath
-            ? mediaUrl(projectId, option.outputPath)
-            : null;
-          const progressPct = Math.round(option.progress * 100);
-
-          return (
-            <div key={option.id} className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">
-                  Option {option.variantIndex + 1}
-                </span>
-                <Badge variant={statusVariant(option.status)}>
-                  {option.status}
-                </Badge>
-              </div>
-
-              {previewSrc ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setLightbox({
-                      src: previewSrc,
-                      alt: `Shot option ${option.variantIndex + 1}`,
-                    })
+      <AssetGenerationOptionsGrid
+        projectId={projectId}
+        options={displayOptions}
+        awaitingSelection={canSelectFromPack}
+        selectingId={selectingId}
+        onSelect={(optionId) => void handleSelect(optionId)}
+        selectLabel="Use this image"
+        selectedLabel="Current placeholder"
+        optionAltPrefix="Shot option"
+        showCompositedStaleHint
+        selectedOptionId={
+          displayOptions.find((option) => option.selected)?.id ?? null
+        }
+        renderOptionActions={(option) => (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isGenerating}
+                onClick={() => {
+                  if (editingOptionId === option.id) {
+                    setEditingOptionId(null);
+                  } else {
+                    setEditingOptionId(option.id);
+                    setEditInstruction("");
                   }
-                  className="block w-full cursor-zoom-in overflow-hidden rounded-lg border border-neutral-800 bg-black transition hover:opacity-90"
-                >
-                  <div className="aspect-video w-full bg-black/40">
-                    <img
-                      src={previewSrc}
-                      alt={`Shot option ${option.variantIndex + 1}`}
-                      className="ui-image-enter h-full w-full object-contain"
-                    />
-                  </div>
-                </button>
-              ) : (
-                <div className="space-y-2 rounded-lg border border-neutral-800 bg-black/40 p-4">
-                  <div className="h-2 overflow-hidden rounded-full bg-neutral-800">
-                    <div
-                      className="h-full bg-primary transition-all duration-300"
-                      style={{ width: `${progressPct}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {option.statusMessage ?? `${progressPct}%`}
-                  </p>
-                </div>
-              )}
-
-              {option.errorMessage && (
-                <p className="text-xs text-red-400">
-                  {formatComfyuiError(option.errorMessage)}
-                </p>
-              )}
-
-              {canSelectFromPack && option.status === "completed" && (
-                option.selected ? (
-                  <Badge variant="success">Current placeholder</Badge>
-                ) : (
+                }}
+              >
+                {editingOptionId === option.id ? "Cancel edit" : "Edit with instruction"}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={sendingToComfyId === option.id}
+                onClick={() => void handleSendToComfyui(option.id)}
+              >
+                {sendingToComfyId === option.id
+                  ? "Sending…"
+                  : "Send to ComfyUI"}
+              </Button>
+            </div>
+            {editingOptionId === option.id ? (
+              <div className="space-y-2 rounded-lg border border-neutral-800 bg-neutral-950/60 p-2">
+                <textarea
+                  value={editInstruction}
+                  onChange={(e) => setEditInstruction(e.target.value)}
+                  rows={2}
+                  placeholder={'Describe one change, e.g. change the sign to read "CORNER DELI" or remove the parked car'}
+                  className="w-full rounded-md border border-neutral-800 bg-black/40 p-2 text-sm text-foreground placeholder:text-muted-foreground"
+                />
+                <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    onClick={() => void handleSelect(option.id)}
-                    disabled={selectingId === option.id}
+                    disabled={!editInstruction.trim() || isGenerating}
+                    onClick={() => {
+                      void handleInstructionEdit(option.id, editInstruction);
+                      setEditingOptionId(null);
+                    }}
                   >
-                    {selectingId === option.id
-                      ? "Selecting…"
-                      : "Use this image"}
+                    Apply edit (new pack)
                   </Button>
-                )
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {lightbox && (
-        <ImageLightbox
-          src={lightbox.src}
-          alt={lightbox.alt}
-          onClose={() => setLightbox(null)}
-        />
-      )}
+                  <span className="text-xs text-muted-foreground">
+                    Runs Qwen Image Edit on this image only.
+                  </span>
+                </div>
+              </div>
+            ) : null}
+            {comfySendResult?.optionId === option.id ? (
+              <p className="text-xs text-muted-foreground">
+                Uploaded to ComfyUI inputs as {comfySendResult.filename}. Open{" "}
+                <a
+                  href={comfySendResult.endpointUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary hover:underline"
+                >
+                  ComfyUI
+                </a>{" "}
+                and load it with a LoadImage node. Tip: dragging the saved PNG
+                from your project folder into ComfyUI rebuilds the exact
+                workflow that generated it.
+              </p>
+            ) : null}
+          </div>
+        )}
+      />
     </Card>
   );
 }

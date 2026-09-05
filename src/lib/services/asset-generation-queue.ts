@@ -3,6 +3,7 @@ import path from "path";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { getDb, schema } from "@/lib/db";
+import { HttpError } from "@/lib/api-helpers";
 import {
   resolveDefaultCharacterSheetTemplateId,
 } from "@/lib/db/seed-builtin-templates";
@@ -16,6 +17,7 @@ import {
   resolveProjectRoot,
 } from "@/lib/paths/project-paths";
 import { assertDependency } from "@/lib/services/dependency-checker";
+import { filterSelectableShotOptions } from "@/lib/shot-pipeline-shared";
 import {
   buildStateSheetDescription,
   getCharacterState,
@@ -25,6 +27,12 @@ import { buildCharacterSheetPrompts } from "@/lib/services/prompt-preprocess";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
 import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
+import {
+  getAssetGenerationBatchView,
+  listAssetGenerationPacks,
+  supersedeAssetGenerationBatch,
+  type AssetGenerationPack,
+} from "@/lib/services/asset-generation-packs";
 import type { RenderSettings } from "@/types";
 import {
   getDefaultCharacterSheetTemplateId,
@@ -65,7 +73,11 @@ export async function enqueueCharacterSheetBatch(
   characterId: string,
   stateId: string,
   sampleCount: number,
-  options?: { replace?: boolean; descriptionOverride?: string }
+  options?: {
+    replace?: boolean;
+    descriptionOverride?: string;
+    extraNegativePrompt?: string;
+  }
 ): Promise<AssetGenerationBatch> {
   await assertDependency("comfyui");
 
@@ -101,8 +113,9 @@ export async function enqueueCharacterSheetBatch(
       ? getDisplayBatchForState(characterId, stateId)
       : null);
   if (priorBatch && !options?.replace) {
-    throw new Error(
-      "A character sheet batch is already in progress. Discard it first or regenerate."
+    throw new HttpError(
+      "A character sheet batch is already in progress. Discard it first or regenerate.",
+      409
     );
   }
 
@@ -151,7 +164,8 @@ export async function enqueueCharacterSheetBatch(
   ) as RenderSettings;
   const finalNegativePrompt = mergeImageNegativePrompt(
     negativePrompt,
-    renderSettings.imageDefaultNegative
+    renderSettings.imageDefaultNegative,
+    options?.extraNegativePrompt
   );
 
   const ts = Date.now();
@@ -198,7 +212,12 @@ export async function enqueueCharacterSheetBatch(
   }
 
   if (priorBatch) {
-    discardCharacterSheetBatch(projectId, characterId, stateId, priorBatch);
+    supersedeCharacterSheetBatch(
+      projectId,
+      characterId,
+      stateId,
+      priorBatch
+    );
   }
 
   return db
@@ -267,6 +286,25 @@ export function archiveAssetBatch(batchId: string): void {
     status: "archived",
     completedAt: Date.now(),
   });
+}
+
+/** Keep all generated options in pack history after the user picks a reference. */
+export function archiveBatchAfterReferenceSelection(
+  batchId: string,
+  selectedOptionId: string
+): void {
+  const data = getBatchWithOptions(batchId);
+  if (!data) return;
+
+  for (const option of data.options) {
+    updateAssetOption(option.id, {
+      selected: option.id === selectedOptionId,
+    });
+  }
+
+  if (data.batch.status !== "archived") {
+    archiveAssetBatch(batchId);
+  }
 }
 
 export function listRetainedBatchesForEntity(
@@ -357,21 +395,73 @@ export function getActiveBatchForCharacter(
   return getActiveBatchForEntity("character", characterId);
 }
 
+export type CharacterSheetPack = AssetGenerationPack;
+
+export function listCharacterSheetPacks(
+  characterId: string,
+  stateId: string
+): CharacterSheetPack[] {
+  return listAssetGenerationPacks("character_state", stateId, () =>
+    getDisplayBatchForState(characterId, stateId)
+  );
+}
+
+export function getCharacterSheetBatchView(
+  characterId: string,
+  stateId: string,
+  batchId?: string | null
+) {
+  return getAssetGenerationBatchView(
+    "character_state",
+    stateId,
+    () => getDisplayBatchForState(characterId, stateId),
+    batchId
+  );
+}
+
+export function supersedeCharacterSheetBatch(
+  projectId: string,
+  characterId: string,
+  stateId: string,
+  priorBatch: AssetGenerationBatch
+): void {
+  supersedeAssetGenerationBatch(priorBatch, (batch) =>
+    discardCharacterSheetBatch(projectId, characterId, stateId, batch)
+  );
+}
+
 export function discardCharacterSheetBatch(
   projectId: string,
   characterId: string,
   stateId: string,
-  batchOverride?: AssetGenerationBatch
+  batchOverride?: AssetGenerationBatch | string
 ): void {
-  const batch = batchOverride ?? getDisplayBatchForState(characterId, stateId);
+  const db = getDb();
+  let batch: AssetGenerationBatch | undefined;
+  if (typeof batchOverride === "string") {
+    batch =
+      db
+        .select()
+        .from(schema.assetGenerationBatches)
+        .where(eq(schema.assetGenerationBatches.id, batchOverride))
+        .get() ?? undefined;
+  } else {
+    batch = batchOverride ?? getDisplayBatchForState(characterId, stateId) ?? undefined;
+  }
   if (!batch) {
     throw new Error("No character sheet batch to discard");
   }
   if (batch.projectId !== projectId) {
     throw new Error("Batch does not belong to this project");
   }
+  const batchMatchesState =
+    batch.entityType === "character_state" && batch.entityId === stateId;
+  const batchMatchesLegacy =
+    batch.entityType === "character" && batch.entityId === characterId;
+  if (!batchMatchesState && !batchMatchesLegacy) {
+    throw new Error("Batch does not belong to this character state");
+  }
 
-  const db = getDb();
   const project = db
     .select()
     .from(schema.projects)
@@ -466,6 +556,17 @@ export function getNextQueuedAssetOption(): AssetGenerationOption | null {
   if (running.length > 0) return null;
 
   for (const option of options) {
+    if (option.dependsOnOptionId) {
+      const dependency = db
+        .select()
+        .from(schema.assetGenerationOptions)
+        .where(eq(schema.assetGenerationOptions.id, option.dependsOnOptionId))
+        .get();
+      if (!dependency || dependency.status !== "completed") {
+        continue;
+      }
+    }
+
     const batch = db
       .select()
       .from(schema.assetGenerationBatches)
@@ -516,12 +617,17 @@ export function refreshBatchStatus(batchId: string) {
   const { batch, options } = data;
   if (batch.status === "completed" || batch.status === "failed") return;
 
-  const anyFailed = options.some((o) => o.status === "failed");
-  const allDone = options.every(
+  const outcomeOptions =
+    batch.entityType === "shot"
+      ? filterSelectableShotOptions(options)
+      : options;
+
+  const anyFailed = outcomeOptions.some((o) => o.status === "failed");
+  const allDone = outcomeOptions.every(
     (o) => o.status === "completed" || o.status === "failed"
   );
   const anyRunning = options.some((o) => o.status === "running");
-  const allCompleted = options.every((o) => o.status === "completed");
+  const allCompleted = outcomeOptions.every((o) => o.status === "completed");
 
   if (anyRunning && batch.status === "queued") {
     updateAssetBatch(batchId, { status: "running" });
@@ -536,9 +642,11 @@ export function refreshBatchStatus(batchId: string) {
     const failureLabel =
       batch.entityType === "location_angle"
         ? "All location reference options failed"
-        : batch.entityType === "shot"
-          ? "All shot image options failed"
-          : "All character sheet options failed";
+        : batch.entityType === "character_angle"
+          ? "All character reference options failed"
+          : batch.entityType === "shot"
+            ? "All shot image options failed"
+            : "All character sheet options failed";
     updateAssetBatch(batchId, {
       status: "failed",
       errorMessage: failureLabel,
@@ -641,59 +749,7 @@ export async function selectCharacterSheetOption(
     .where(eq(schema.characters.id, characterId))
     .get()!;
 
-  const siblingOptions = db
-    .select()
-    .from(schema.assetGenerationOptions)
-    .where(eq(schema.assetGenerationOptions.batchId, batch.id))
-    .all();
-
-  for (const sibling of siblingOptions) {
-    if (sibling.id === optionId) {
-      updateAssetOption(sibling.id, { selected: true });
-    } else if (sibling.outputPath) {
-      try {
-        const siblingAbs = resolveMediaPath(projectRoot, sibling.outputPath);
-        if (fs.existsSync(siblingAbs)) fs.unlinkSync(siblingAbs);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
-
-  const candidateDirs = [
-    path.join(
-      projectRoot,
-      "characters",
-      characterId,
-      "states",
-      stateId,
-      "candidates",
-      batch.id
-    ),
-    path.join(projectRoot, "characters", characterId, "candidates", batch.id),
-  ];
-  for (const candidateDir of candidateDirs) {
-    if (fs.existsSync(candidateDir)) {
-      fs.rmSync(candidateDir, { recursive: true, force: true });
-    }
-  }
-
-  updateAssetBatch(batch.id, {
-    status: "completed",
-    completedAt: ts,
-  });
-
-  db.delete(schema.assetGenerationOptions)
-    .where(
-      and(
-        eq(schema.assetGenerationOptions.batchId, batch.id),
-        inArray(
-          schema.assetGenerationOptions.id,
-          siblingOptions.filter((s) => s.id !== optionId).map((s) => s.id)
-        )
-      )
-    )
-    .run();
+  archiveBatchAfterReferenceSelection(batch.id, optionId);
 
   return updated;
 }
@@ -702,6 +758,7 @@ export function resolveBatchContext(batch: AssetGenerationBatch): {
   kind: "character";
   characterId: string;
   stateId: string;
+  angleId?: string;
 } | {
   kind: "location";
   locationId: string;
@@ -734,6 +791,30 @@ export function resolveBatchContext(batch: AssetGenerationBatch): {
     return {
       kind: "location",
       locationId: state.locationId,
+      stateId: state.id,
+      angleId: angle.id,
+    };
+  }
+
+  if (batch.entityType === "character_angle") {
+    const db = getDb();
+    const angle = db
+      .select()
+      .from(schema.characterAngles)
+      .where(eq(schema.characterAngles.id, batch.entityId))
+      .get();
+    if (!angle) throw new Error("Character angle missing for asset batch");
+
+    const state = db
+      .select()
+      .from(schema.characterStates)
+      .where(eq(schema.characterStates.id, angle.characterStateId))
+      .get();
+    if (!state) throw new Error("Character state missing for asset batch");
+
+    return {
+      kind: "character",
+      characterId: state.characterId,
       stateId: state.id,
       angleId: angle.id,
     };
@@ -786,5 +867,10 @@ export function getCandidateOutputPath(
   if (ctx.kind === "shot") {
     return `storyboard/shots/${ctx.shotId}/candidates/${batch.id}/${optionId}.png`;
   }
+  if (ctx.angleId) {
+    return `characters/${ctx.characterId}/states/${ctx.stateId}/angles/${ctx.angleId}/candidates/${batch.id}/${optionId}.png`;
+  }
   return `characters/${ctx.characterId}/states/${ctx.stateId}/candidates/${batch.id}/${optionId}.png`;
 }
+
+export { getPipelineIsolateOutputPath, filterSelectableShotOptions } from "@/lib/shot-pipeline-shared";

@@ -3,7 +3,10 @@
 import { useMemo } from "react";
 import { detectVirtualBackdropLocation } from "@/lib/location-backdrop";
 import {
+  resolveCharacterAnchorReframeIntensity,
   resolveLocationAnchorReframeIntensity,
+  extractAnchoredViewDescription,
+  detectCharacterRearView,
 } from "@/lib/anchor-reframe";
 import {
   BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS,
@@ -43,12 +46,41 @@ export function defaultLocationIpAdapterSettings(
   };
 }
 
+export function defaultCharacterIpAdapterSettings(
+  referenceDescription: string,
+  viewDescription?: string
+): LocationIpAdapterSettings {
+  const viewDesc =
+    viewDescription?.trim() ||
+    extractAnchoredViewDescription(referenceDescription);
+  if (detectCharacterRearView(viewDesc)) {
+    return {
+      mode: "prompt_only",
+      weight: 0.22,
+      endAt: 0.35,
+    };
+  }
+  const intensity = resolveCharacterAnchorReframeIntensity(
+    viewDescription?.trim()
+      ? `${viewDescription.trim()}. ${referenceDescription}`
+      : referenceDescription
+  );
+  const profile = getIpAdapterProfile(intensity);
+  return {
+    mode: "auto",
+    weight: profile.weight,
+    endAt: profile.endAt,
+  };
+}
+
 interface LocationIpAdapterControlsProps {
   referenceDescription: string;
   locationName: string;
   settings: LocationIpAdapterSettings;
   onChange: (settings: LocationIpAdapterSettings) => void;
   disabled?: boolean;
+  entityKind?: "location" | "character";
+  viewDescription?: string;
 }
 
 export function LocationIpAdapterControls({
@@ -57,11 +89,22 @@ export function LocationIpAdapterControls({
   settings,
   onChange,
   disabled = false,
+  entityKind = "location",
+  viewDescription,
 }: LocationIpAdapterControlsProps) {
   const autoProfile = useMemo(
-    () => defaultLocationIpAdapterSettings(referenceDescription, locationName),
-    [referenceDescription, locationName]
+    () =>
+      entityKind === "character"
+        ? defaultCharacterIpAdapterSettings(
+            referenceDescription,
+            viewDescription
+          )
+        : defaultLocationIpAdapterSettings(referenceDescription, locationName),
+    [entityKind, referenceDescription, locationName, viewDescription]
   );
+  const rearViewAuto =
+    entityKind === "character" &&
+    detectCharacterRearView(viewDescription?.trim() ?? referenceDescription);
 
   return (
     <div className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
@@ -97,8 +140,25 @@ export function LocationIpAdapterControls({
 
       {settings.mode === "auto" && (
         <p className="text-xs text-muted-foreground">
-          Auto for this angle: weight {autoProfile.weight.toFixed(2)}, through
-          step {(autoProfile.endAt * 100).toFixed(0)}% of denoising.
+          {rearViewAuto ? (
+            <>
+              Back and rear views default to Prompt only. The front anchor
+              image causes front-facing double portraits when IP-Adapter is on.
+            </>
+          ) : (
+            <>
+              Auto for this angle: weight {autoProfile.weight.toFixed(2)}, through
+              step {(autoProfile.endAt * 100).toFixed(0)}% of denoising.
+            </>
+          )}
+        </p>
+      )}
+
+      {settings.mode === "prompt_only" && rearViewAuto && (
+        <p className="text-xs text-muted-foreground">
+          Generating from your text prompt only. Wardrobe and hair should match
+          your descriptions. Pick the best back shot, then save it as this
+          angle&apos;s reference.
         </p>
       )}
 

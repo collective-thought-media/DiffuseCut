@@ -1,6 +1,5 @@
 import type { NextRequest } from "next/server";
-import { getBatchWithOptions } from "@/lib/services/asset-generation-queue";
-import { getDisplayBatchForLocationAngle } from "@/lib/services/location-asset-generation";
+import { getLocationReferenceBatchView } from "@/lib/services/location-asset-generation";
 
 const POLL_INTERVAL_MS = 1000;
 
@@ -23,23 +22,9 @@ export async function GET(_req: NextRequest, { params }: RouteParams) {
 
       const send = () => {
         if (closed) return;
-        const batch = getDisplayBatchForLocationAngle(angleId);
-        if (!batch) {
-          controller.enqueue(
-            encoder.encode(
-              `data: ${JSON.stringify({ batch: null, options: [] })}\n\n`
-            )
-          );
-          return;
-        }
-        const data = getBatchWithOptions(batch.id);
+        const view = getLocationReferenceBatchView(angleId);
         controller.enqueue(
-          encoder.encode(
-            `data: ${JSON.stringify({
-              batch: data?.batch ?? null,
-              options: data?.options ?? [],
-            })}\n\n`
-          )
+          encoder.encode(`data: ${JSON.stringify(view)}\n\n`)
         );
       };
 
