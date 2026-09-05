@@ -61,11 +61,24 @@ function hasProductionBuild() {
   );
 }
 
+const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
+
+if (!fs.existsSync(nextBin)) {
+  console.error(
+    "[app] Next.js is not installed. From this folder run: npm install"
+  );
+  process.exit(1);
+}
+
 if (isProd) {
   process.env.NODE_ENV = "production";
   if (!hasProductionBuild()) {
     console.log("[app] Building the production app. This can take a few minutes the first time.");
-    execSync("npx next build", { cwd: root, stdio: "inherit", shell: true });
+    execSync(`"${process.execPath}" "${nextBin}" build`, {
+      cwd: root,
+      stdio: "inherit",
+      shell: true,
+    });
   }
   console.log("[app] Starting DiffuseCut in production mode on port", port);
 } else {
@@ -74,8 +87,8 @@ if (isProd) {
 
 const nextCmd = isProd ? "start" : "dev";
 const nextArgs = isProd
-  ? ["next", nextCmd, "-p", port]
-  : ["next", nextCmd, "-p", port, "--turbo"];
+  ? [nextBin, nextCmd, "-p", port]
+  : [nextBin, nextCmd, "-p", port, "--turbo"];
 
 const nextEnv = {
   ...process.env,
@@ -83,10 +96,9 @@ const nextEnv = {
   NODE_ENV: isProd ? "production" : process.env.NODE_ENV,
 };
 
-const next = spawn("npx", nextArgs, {
+const next = spawn(process.execPath, nextArgs, {
   cwd: root,
   stdio: "inherit",
-  shell: true,
   env: nextEnv,
 });
 
