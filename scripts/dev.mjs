@@ -63,9 +63,20 @@ function hasProductionBuild() {
 
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
 
-if (!fs.existsSync(nextBin)) {
+function nextIsInstalled() {
+  return fs.existsSync(nextBin);
+}
+
+if (!nextIsInstalled()) {
+  console.log(
+    "[app] Installing project dependencies, including Next.js. This can take a few minutes."
+  );
+  execSync("npm install", { cwd: root, stdio: "inherit", shell: true });
+}
+
+if (!nextIsInstalled()) {
   console.error(
-    "[app] Next.js is not installed. From this folder run: npm install"
+    "[app] Next.js is still missing after npm install. It ships with this repo as an npm dependency, not a separate Windows app. Stay in the DiffuseCut folder, run npm install, and paste any errors."
   );
   process.exit(1);
 }
