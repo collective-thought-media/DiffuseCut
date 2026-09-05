@@ -55,7 +55,13 @@ export function resolveShotCharacterReference(shotId: string) {
       row.characterStateId
     );
     if (!state) return [];
-    return [{ character, state }];
+    return [
+      {
+        character,
+        state,
+        angles: listCharacterAngles(state.id),
+      },
+    ];
   });
 
   return resolveShotCharacterReferenceFromCast(cast);
@@ -90,7 +96,13 @@ export function resolveShotReferencePaths(shot: Shot): ShotReferencePaths {
       row.characterStateId
     );
     if (!state) return [];
-    return [{ character, state }];
+    return [
+      {
+        character,
+        state,
+        angles: listCharacterAngles(state.id),
+      },
+    ];
   });
 
   return resolveShotReferencePathsFromData({

@@ -366,6 +366,17 @@ export function syncCharacterReferenceFromState(
 
   const db = getDb();
   const ts = nowMs();
+  if (coverPath && coverPath !== stateWithAngles.referencePath) {
+    db.update(schema.characterStates)
+      .set({
+        referencePath: coverPath,
+        referenceKind,
+        referenceSource,
+        updatedAt: ts,
+      })
+      .where(eq(schema.characterStates.id, stateWithAngles.id))
+      .run();
+  }
   db.update(schema.characters)
     .set({
       referencePath: coverPath,

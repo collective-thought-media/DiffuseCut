@@ -10,6 +10,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - First production build typecheck now passes. The export reveal helper is no longer an illegal route export.
 - Setup re-reads the Windows PATH and looks in WinGet folders for FFmpeg, so a winget install does not stay missing until a new terminal.
 - Character sheet Generate no longer looks selected-but-disabled. The shown ComfyUI model is saved, and a blocked button now says why.
+- Storyboard shots use the current character-angle picture, not an older state-level sheet left behind after a regenerate.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

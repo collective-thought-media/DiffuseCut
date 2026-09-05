@@ -1,6 +1,12 @@
-import type { Shot, Character, CharacterState } from "@/lib/db/schema";
+import type {
+  Shot,
+  Character,
+  CharacterState,
+  CharacterAngle,
+} from "@/lib/db/schema";
 import type { LocationStatePreview } from "@/lib/location-preview";
 import { resolveLocationStateCoverPath } from "@/lib/location-preview";
+import { resolveCharacterStateCoverPath } from "@/lib/character-preview";
 
 export type ShotVisualReferenceFocus = "location" | "character";
 
@@ -93,8 +99,14 @@ export function resolveShotLocationReferenceFromStates(
   return { path: null, stateName: state.name, angleName: angle?.name ?? null };
 }
 
+export type ShotCastReferenceEntry = {
+  character: Character;
+  state: CharacterState;
+  angles?: CharacterAngle[];
+};
+
 export function resolveShotCharacterReferenceFromCast(
-  cast: Array<{ character: Character; state: CharacterState }>
+  cast: Array<ShotCastReferenceEntry>
 ): { path: string | null; name: string | null } {
   const split = resolveShotCastReferenceSplit(cast);
   if (!split.ipAdapterEntry) {
@@ -108,7 +120,7 @@ export function resolveShotCharacterReferenceFromCast(
 
 /** Which cast members get IP-Adapter art vs prompt text only (one image slot). */
 export function resolveShotCastReferenceSplit(
-  cast: Array<{ character: Character; state: CharacterState }>
+  cast: Array<ShotCastReferenceEntry>
 ): {
   ipAdapterEntry: {
     character: Character;
@@ -126,8 +138,16 @@ export function resolveShotCastReferenceSplit(
     [];
 
   for (const entry of cast) {
-    const referencePath = entry.state.referencePath ?? entry.character.referencePath;
-    const referenceKind = entry.state.referenceKind ?? entry.character.referenceKind;
+    const coverPath = resolveCharacterStateCoverPath({
+      ...entry.state,
+      angles: entry.angles ?? [],
+    });
+    const referencePath =
+      coverPath ??
+      entry.state.referencePath ??
+      entry.character.referencePath;
+    const referenceKind =
+      entry.state.referenceKind ?? entry.character.referenceKind;
     if (
       !ipAdapterEntry &&
       isUsableImagePath(referencePath, referenceKind)
@@ -146,7 +166,7 @@ export function resolveShotReferencePathsFromData(input: {
   locationStates?: LocationStatePreview[];
   legacyLocationPath?: string | null;
   legacyLocationKind?: string | null;
-  cast?: Array<{ character: Character; state: CharacterState }>;
+  cast?: Array<ShotCastReferenceEntry>;
 }): ShotReferencePaths {
   const location = resolveShotLocationReferenceFromStates(
     input.shot,

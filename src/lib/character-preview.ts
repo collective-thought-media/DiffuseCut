@@ -5,9 +5,13 @@ export type CharacterStatePreview = CharacterState & { angles: CharacterAngle[] 
 export function resolveCharacterStateCoverPath(
   state: CharacterStatePreview
 ): string | null {
-  const angleRef = state.angles.find(
+  const imageAngles = state.angles.filter(
     (angle) => angle.referencePath && angle.referenceKind !== "video"
   );
+  const front = imageAngles.find((angle) =>
+    angle.name.trim().toLowerCase().includes("front")
+  );
+  const angleRef = front ?? imageAngles[0];
   if (angleRef?.referencePath) return angleRef.referencePath;
   if (state.referencePath && state.referenceKind !== "video") {
     return state.referencePath;
