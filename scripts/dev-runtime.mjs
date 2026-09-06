@@ -1,5 +1,12 @@
 /** Pure helpers for scripts/dev.mjs. Keep this file importable from tests. */
 
+/**
+ * @param {{
+ *   isProd: boolean;
+ *   argv?: string[];
+ *   env?: Record<string, string | undefined>;
+ * }} opts
+ */
 export function shouldEnableTurbopack({ isProd, argv = [], env = {} }) {
   if (isProd) return false;
   if (argv.includes("--turbo")) return true;
@@ -7,6 +14,7 @@ export function shouldEnableTurbopack({ isProd, argv = [], env = {} }) {
   return flag === "1" || flag === "true";
 }
 
+/** @param {string | null | undefined} text */
 export function isTurbopackManifestRace(text) {
   if (!text) return false;
   return (
@@ -15,7 +23,14 @@ export function isTurbopackManifestRace(text) {
   );
 }
 
-/** After git pull, npm start must rebuild if the last production build is from an older commit. */
+/**
+ * After git pull, npm start must rebuild if the last production build is from an older commit.
+ * @param {{
+ *   hasBuild: boolean;
+ *   builtRev: string;
+ *   currentRev: string;
+ * }} opts
+ */
 export function productionBuildNeedsRebuild({
   hasBuild,
   builtRev,
