@@ -455,9 +455,10 @@ export function LocationReferenceGenerator({
                   <>
                     This angle uses IP-Adapter with your saved{" "}
                     {anchorAngleName ? `"${anchorAngleName}"` : "establishing"}{" "}
-                    reference to match materials, weather, and scale. Your angle
-                    description sets the camera and framing. Close-ups use a
-                    lighter anchor so they are not copies of the wide master.
+                    reference to lock the same room layout, materials, and
+                    lighting. Your angle description moves the camera. Auto keeps
+                    a strong set lock on closer angles so you do not get a new
+                    room that only shares the mood.
                   </>
                 )
               ) : (

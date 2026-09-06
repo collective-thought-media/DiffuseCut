@@ -80,6 +80,7 @@ import {
   resolveLocationAnchorReframeIntensity,
   extractAnchoredViewDescription,
 } from "@/lib/anchor-reframe";
+import { getLocationIpAdapterProfile } from "@/lib/ip-adapter-profiles";
 import { resolveShotReframeIntensity } from "@/lib/services/prompt-preprocess";
 import type { LocationReferenceGenerationOptions } from "@/types";
 import {
@@ -1384,7 +1385,14 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
               ? { weightType: generationOptions.ipAdapterWeightType }
               : {}),
           }
-        : undefined;
+        : batch.entityType === "location_angle" &&
+            workflowTemplateId ===
+              BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
+            referenceImage
+          ? getLocationIpAdapterProfile(
+              resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
+            )
+          : undefined;
 
     const useDualIpAdapterProfiles =
       !ipAdapterOverrides &&
@@ -1405,20 +1413,12 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
         : !ipAdapterOverrides &&
             !useDualIpAdapterProfiles &&
             !useDualIpAdapterBackdropProfiles &&
-            batch.entityType === "location_angle" &&
+            batch.entityType === "character_angle" &&
             workflowTemplateId ===
               BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
             referenceImage
-          ? resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
+          ? resolveCharacterAnchorReframeIntensity(batch.rawPrompt ?? "")
           : !ipAdapterOverrides &&
-              !useDualIpAdapterProfiles &&
-              !useDualIpAdapterBackdropProfiles &&
-              batch.entityType === "character_angle" &&
-              workflowTemplateId ===
-                BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
-              referenceImage
-            ? resolveCharacterAnchorReframeIntensity(batch.rawPrompt ?? "")
-            : !ipAdapterOverrides &&
               !useDualIpAdapterProfiles &&
               !useDualIpAdapterBackdropProfiles &&
               batch.entityType === "shot" &&

@@ -54,6 +54,50 @@ export function getIpAdapterProfile(
   return IP_ADAPTER_REFRAME_PROFILES[intensity];
 }
 
+/**
+ * Location closer angles need architecture lock. The shared reframe table uses
+ * style transfer for moderate/extreme so character sheets can change pose; that
+ * same table made location close-ups keep candle mood but invent a new room.
+ * Linear weight keeps walls, furniture, and doorway layout from the establishing
+ * plate while the angle prompt moves the camera.
+ */
+export const LOCATION_IP_ADAPTER_REFRAME_PROFILES: Record<
+  AnchorReframeIntensity,
+  IpAdapterProfileSettings
+> = {
+  subtle: {
+    weight: 0.55,
+    endAt: 0.72,
+    preset: "PLUS (high strength)",
+    weightType: "linear",
+  },
+  moderate: {
+    weight: 0.5,
+    endAt: 0.65,
+    preset: "PLUS (high strength)",
+    weightType: "linear",
+  },
+  extreme: {
+    weight: 0.42,
+    endAt: 0.55,
+    preset: "PLUS (high strength)",
+    weightType: "linear",
+  },
+  scene: {
+    weight: 0.32,
+    endAt: 0.45,
+    preset: "PLUS (high strength)",
+    weightType: "style transfer",
+  },
+  character_lock: IP_ADAPTER_REFRAME_PROFILES.character_lock,
+};
+
+export function getLocationIpAdapterProfile(
+  intensity: AnchorReframeIntensity
+): IpAdapterProfileSettings {
+  return LOCATION_IP_ADAPTER_REFRAME_PROFILES[intensity];
+}
+
 /** Defaults for tight backdrop reframes (good starting point for manual tuning). */
 export const BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS: IpAdapterProfileSettings = {
   weight: 0.28,

@@ -403,6 +403,23 @@ describe("buildLocationReferencePromptTemplate", () => {
     expect(prompt.toLowerCase()).toContain("fill most of the frame");
   });
 
+  it("does not invent temple stairs for a plain room close-up", () => {
+    const prompt = buildLocationReferencePromptTemplate(
+      "Dragon Lair",
+      "the same room and lair, table on the right with candles, Close up out of focus background plate for a portrait",
+      { preset: "photoreal_cinematic" },
+      {
+        anchorMode: true,
+        viewDescription:
+          "the same room and lair, table on the right with candles, Close up out of focus background plate for a portrait",
+      }
+    );
+    expect(prompt.toLowerCase()).not.toContain("massive stone treads");
+    expect(prompt.toLowerCase()).not.toContain("temple-scale");
+    expect(prompt.toLowerCase()).not.toContain("staircase");
+    expect(prompt.toLowerCase()).toContain("same physical location");
+  });
+
   it("adds close-up negatives for macro anchor angles", () => {
     const negative = buildLocationReferenceNegativePrompt(
       { preset: "photoreal_cinematic" },

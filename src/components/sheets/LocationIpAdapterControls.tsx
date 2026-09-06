@@ -11,6 +11,7 @@ import {
 import {
   BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS,
   getIpAdapterProfile,
+  getLocationIpAdapterProfile,
 } from "@/lib/ip-adapter-profiles";
 import { Label, Select } from "@/components/ui/button";
 
@@ -38,7 +39,7 @@ export function defaultLocationIpAdapterSettings(
     };
   }
   const intensity = resolveLocationAnchorReframeIntensity(referenceDescription);
-  const profile = getIpAdapterProfile(intensity);
+  const profile = getLocationIpAdapterProfile(intensity);
   return {
     mode: "auto",
     weight: profile.weight,
@@ -112,8 +113,10 @@ export function LocationIpAdapterControls({
         <p className="text-sm font-medium text-foreground">Anchor reference</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Tune how much this batch follows your saved anchor image vs the text
-          prompt. Lower influence gives the prompt more control (useful for
-          tighter crops). Prompt only ignores the anchor entirely.
+          prompt. For real locations, Auto keeps a strong set lock even on
+          closer angles. Lower Custom influence only when you want the prompt
+          to redesign framing more aggressively. Prompt only ignores the anchor
+          entirely.
         </p>
       </div>
 

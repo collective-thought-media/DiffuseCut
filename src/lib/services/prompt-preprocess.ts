@@ -427,13 +427,23 @@ export const LOCATION_REFERENCE_BACKDROP_APPEARANCE =
 export { detectVirtualBackdropLocation } from "@/lib/location-backdrop";
 
 export const LOCATION_REFERENCE_ANCHOR_PREFIX =
-  "Same physical location and set as the establishing reference image. Match the identical architecture, stone materials, weather, lighting, and monumental scale. This is the same environment with the camera moved closer or to a new angle, not a different place and not a smaller recreation.";
+  "Same physical location and set as the establishing reference image. Match the identical architecture, materials, weather, lighting, prop layout, and physical scale. This is the same environment with the camera moved closer or to a new angle, not a different place and not a redesigned set.";
 
 export const LOCATION_REFERENCE_ANCHORED_SUFFIX =
-  "closer or tighter view of the same structures from the establishing reference, different camera position and lens as described, preserve monumental architectural scale and tread proportions from the wide shot, never a narrow garden path or residential-sized steps, single clear shot, not a collage, not multiple panels, not a character portrait, clean readable composition, reference photo quality";
+  "closer or tighter view of the same structures from the establishing reference, different camera position and lens as described, preserve the same walls, furniture placement, doorways, and prop layout from the wide shot, single clear shot, not a collage, not multiple panels, not a character portrait, clean readable composition, reference photo quality";
 
+/** Only appended when the establishing description already mentions stairs or temple-scale stonework. */
 export const LOCATION_REFERENCE_SCALE_ANCHOR =
-  "Monumental ancient stonework at temple or cathedral scale, wide heavy stone treads roughly 15 to 20 feet across, same massive staircase as the establishing wide reference";
+  "Preserve the same monumental architectural scale and tread proportions from the establishing wide reference, never a narrow garden path or residential-sized steps";
+
+export function locationDescriptionNeedsScaleAnchor(
+  description: string
+): boolean {
+  const lower = description.toLowerCase();
+  return /stair|steps|\bstep\b|tread|temple|cathedral|monumental|colonnade|grand hall/.test(
+    lower
+  );
+}
 
 export const DEFAULT_LOCATION_REFERENCE_NEGATIVE =
   "blurry, watermark, text, logo, people, characters, faces, cropped, cut off, collage, split screen, multiple panels, low quality, deformed, duplicate";
@@ -442,7 +452,7 @@ export const LOCATION_REFERENCE_ANCHOR_NEGATIVE_EXTRA =
   "different architecture, different location, inconsistent layout, mirrored layout, wrong stair direction, unrelated environment, identical framing to reference, zoomed crop of reference, same camera position as reference, same field of view as establishing wide, duplicate composition, narrow garden path, backyard steps, single-person trail width, residential staircase, small decorative pebbles, tiny mossy garden stones, miniature stairs, path-sized treads, hiking trail steps";
 
 export const LOCATION_REFERENCE_CLOSEUP_NEGATIVE_EXTRA =
-  "wide establishing shot, full staircase in frame, entire environment visible, master shot, panoramic view, distant wide view, environmental wide, full set visible, long shot, aerial overview, duplicate of establishing wide";
+  "wide establishing shot, full room master shot, entire environment visible, panoramic view, distant wide view, environmental wide, full set visible, long shot, aerial overview, duplicate of establishing wide";
 
 export type { AnchorReframeIntensity } from "@/lib/ip-adapter-profiles";
 export {
@@ -492,8 +502,13 @@ export function buildLocationReferencePromptTemplate(
       ? LOCATION_REFERENCE_BACKDROP_ANCHORED_SUFFIX
       : LOCATION_REFERENCE_BACKDROP_LAYOUT_SUFFIX;
   } else {
+    const scaleAnchor =
+      options?.anchorMode &&
+      locationDescriptionNeedsScaleAnchor(`${desc} ${viewDesc}`)
+        ? `. ${LOCATION_REFERENCE_SCALE_ANCHOR}`
+        : "";
     layoutPrefix = options?.anchorMode
-      ? `${LOCATION_REFERENCE_LAYOUT_PREFIX}. ${LOCATION_REFERENCE_ANCHOR_PREFIX}. ${LOCATION_REFERENCE_SCALE_ANCHOR}`
+      ? `${LOCATION_REFERENCE_LAYOUT_PREFIX}. ${LOCATION_REFERENCE_ANCHOR_PREFIX}${scaleAnchor}`
       : LOCATION_REFERENCE_LAYOUT_PREFIX;
     layoutSuffix = options?.anchorMode
       ? LOCATION_REFERENCE_ANCHORED_SUFFIX
@@ -570,38 +585,50 @@ export function buildLocationReferenceNegativePrompt(
 function buildAnchorCameraDirective(description: string): string {
   const lower = description.toLowerCase();
   const intensity = resolveAnchorReframeIntensity(description);
+  const hasStairs = /stair|steps|\bstep\b|tread|staircase/.test(lower);
   const hints: string[] = [];
 
   if (intensity === "extreme" || intensity === "moderate") {
     hints.push(
-      "Close-up or tighter shot on the same monumental stonework from the establishing wide reference, same materials and scale, not a wide master shot"
+      "Closer or tighter shot of the same physical set from the establishing wide reference, same architecture, materials, prop layout, and scale, not a wide master shot and not a redesigned room"
     );
   } else {
     hints.push(
-      "Closer view of the same structures shown in the establishing wide reference, same stone type and monumental scale"
+      "Closer view of the same structures shown in the establishing wide reference, same materials and physical scale"
     );
   }
 
-  if (
-    /extreme macro|macro close|macro shot|tight macro|surface detail|texture fill|macro|close-up|close up|detail shot/.test(
+  const trueMacro =
+    /extreme macro|macro close|macro shot|tight macro|surface detail|texture fill|\bmacro\b|detail shot/.test(
       lower
-    )
-  ) {
+    );
+  if (trueMacro && hasStairs) {
     hints.push(
       "Macro photography, one or two massive stone treads fill most of the frame, camera inches from the wet stone surface, shallow depth of field, each tread still temple-scale width from the establishing reference"
     );
     hints.push(
       "Do not show the full staircase length, do not show the entire environment, subject fills the frame"
     );
+  } else if (trueMacro) {
+    hints.push(
+      "Macro photography on the same set surfaces from the establishing reference, shallow depth of field, subject fills the frame, do not invent a different room"
+    );
+  } else if (intensity === "moderate" || intensity === "extreme") {
+    hints.push(
+      "Tighter camera framing on the same set, keep recognizable landmarks from the establishing plate in shot when the framing allows"
+    );
   }
-  if (
-    /85mm|telephoto|tight|portrait lens|long lens/.test(lower)
-  ) {
+  if (hasStairs && /85mm|telephoto|tight|portrait lens|long lens/.test(lower)) {
     hints.push(
       "Telephoto lens on the same staircase, compressed perspective, still monumental tread width from the establishing reference, tighter framing than the wide master"
     );
+  } else if (/85mm|telephoto|portrait lens|long lens/.test(lower)) {
+    hints.push(
+      "Telephoto lens on the same set, compressed perspective, tighter framing than the wide master"
+    );
   }
   if (
+    hasStairs &&
     /looking down|look down|top down|top-down|overhead|bird.?s eye|straight down/.test(
       lower
     )
@@ -609,8 +636,17 @@ function buildAnchorCameraDirective(description: string): string {
     hints.push(
       "Camera overhead on the same wide stone staircase from the establishing reference, looking down at the same treads"
     );
+  } else if (
+    /looking down|look down|top down|top-down|overhead|bird.?s eye|straight down/.test(
+      lower
+    )
+  ) {
+    hints.push(
+      "Camera overhead looking down at the same set from the establishing reference"
+    );
   }
   if (
+    hasStairs &&
     /low angle|low camera|worm.?s eye|from below|looking up|ground level|straight at/.test(
       lower
     )
@@ -618,20 +654,28 @@ function buildAnchorCameraDirective(description: string): string {
     hints.push(
       "Camera at ground level on the same monumental staircase, low angle near the tread surface, same scale as the establishing wide, not a distant wide view"
     );
+  } else if (
+    /low angle|low camera|worm.?s eye|from below|looking up|ground level/.test(
+      lower
+    )
+  ) {
+    hints.push(
+      "Low camera on the same set from the establishing reference, not a distant wide view"
+    );
   }
   if (/push.?in|dolly in|medium shot|mid shot/.test(lower)) {
     hints.push(
-      "Medium or closer framing on the same set, not a wide master shot, still the same massive architecture"
+      "Medium or closer framing on the same set, not a wide master shot, still the same architecture and prop layout"
     );
   }
   if (/water running|rain on|wet stone|drops on/.test(lower)) {
     hints.push(
-      "Visible water droplets and runoff on the same wet stone surfaces from the establishing shot"
+      "Visible water droplets and runoff on the same wet surfaces from the establishing shot"
     );
   }
 
   hints.push(
-    "Different camera position and lens from the establishing wide, not a pixel crop, not a smaller duplicate staircase, not a duplicate wide composition"
+    "Different camera position and lens from the establishing wide, not a pixel crop, not a redesigned set, not a duplicate wide composition"
   );
 
   return hints.join(". ");
