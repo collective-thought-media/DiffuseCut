@@ -35,6 +35,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Integrate subject masks are wider and hard-edged (no feather). Soft mask edges were fading tails and limbs into the location plate, which counts as a failed still.
 - Integrate in scene no longer runs human RemBG and soft re-composite after the masked paint. That pass was cutting holes through non-human characters and pasting them back over the set as translucent morphs.
 - Integrate in scene pastes the subject back onto the location plate with general-purpose RemBG (not human-only), and skips the soft second blend pass so the set stays locked without fading limbs into the background.
+- Integrate in scene is restored to the morning-tuned two-stage graph (masked paint, RemBG paste onto the plate, harmonization inpaint). RemBG uses general-purpose u2net instead of human-only segmentation so dragons are not punched full of holes, and the sticker-cutout path without harmonization is gone.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

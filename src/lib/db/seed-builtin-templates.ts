@@ -113,7 +113,7 @@ const BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT = {
   id: BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
   name: "Storyboard shot (integrate in scene, masked inpaint)",
   description:
-    "Integrate in scene: paint the character into a subject mask on the location plate, cut the subject out with general-purpose RemBG (not human-only), and paste that opaque cutout back onto the original plate. Keeps the set locked and avoids human-seg holes in non-human characters.",
+    "Integrate in scene: masked paint on the location plate, general-purpose RemBG cutout pasted back onto the plate, then a light harmonization inpaint so lighting and edges match the set. Uses core ComfyUI mask nodes, character IP-Adapter, and ComfyUI Essentials RemBG nodes.",
   purpose: "location_sheet" as const,
 };
 

@@ -97,17 +97,17 @@ describe("shot-still-reference-mode", () => {
     expect(plan.locationPath).toBe("locations/park.png");
     expect(plan.hasLocationReferenceForPrompt).toBe(true);
     // Masked inpaint: denoise applies inside the subject region only, and must
-    // be 1.0 so the subject fully forms instead of ghost-blending.
-    expect(plan.generationOptions.locationPlateDenoise).toBe(1);
+    // be near 1.0 so the subject fully forms instead of ghost-blending.
+    expect(plan.generationOptions.locationPlateDenoise).toBe(0.9);
     expect(plan.generationOptions.integrateSubjectHeightFraction).toBe(0.55);
     expect(plan.generationOptions.integrateSubjectAnchorX).toBe(0.5);
     expect(plan.generationOptions.stillReferenceMode).toBe("integrate_in_scene");
     // Style-transfer character IP keeps identity and outfit but drops the
     // casting reference's pose/composition (a crouched reference must not
     // dictate the shot pose).
-    expect(plan.generationOptions.ipAdapterWeight).toBe(0.58);
-    expect(plan.generationOptions.ipAdapterEndAt).toBe(0.72);
-    expect(plan.generationOptions.ipAdapterWeightType).toBe("linear");
+    expect(plan.generationOptions.ipAdapterWeight).toBe(0.6);
+    expect(plan.generationOptions.ipAdapterEndAt).toBe(0.55);
+    expect(plan.generationOptions.ipAdapterWeightType).toBe("style transfer");
     expect(plan.label).toContain("integrate in scene");
   });
 

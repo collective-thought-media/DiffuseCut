@@ -221,10 +221,9 @@ export function resolveShotStillReferencePlan(
     stillReferenceMode: mode,
     referenceFocus,
     useIpAdapter,
-    // Integrate in scene: linear IP-Adapter locks species/body plan from the
-    // sheet (style transfer alone cannot invent consistent non-human anatomy
-    // across seeds). Pose is steered by prompt suffixes; identity strength
-    // presets on the shot may overwrite weight/endAt downstream.
+    // Integrate in scene: style-transfer IP-Adapter at the morning-tuned
+    // defaults. The graph still RemBG-pastes onto the plate and runs the
+    // harmonization pass so edges and lighting match the set.
     ipAdapterWeight: useIntegrateInScene
       ? INTEGRATE_IN_SCENE_CHARACTER_PROFILE.weight
       : undefined,

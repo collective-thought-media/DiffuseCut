@@ -16,13 +16,12 @@ export const DEFAULT_LOCATION_PLATE_DENOISE = 0.42;
 
 /**
  * Integrate in scene (masked inpaint): denoise applied inside the subject
- * mask only. Must be 1.0: the masked region starts from empty-street plate
- * latent, and any value below full denoise leaves a translucent half-formed
- * subject blended into the background (ghosted pillars through the figure).
- * The plate outside the mask is pixel-locked by the noise mask, so full
- * denoise here does not drift the set.
+ * mask only. Must be near 1.0: the masked region starts from empty-street
+ * plate latent, and mid-range values leave a translucent half-formed subject
+ * blended into the background. The plate outside the mask is pixel-locked by
+ * the noise mask, so high denoise here does not drift the set.
  */
-export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 1;
+export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 0.9;
 
 /** Subject mask height as a fraction of frame height (medium preset). */
 export const DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION = 0.55;
@@ -33,23 +32,22 @@ export const DEFAULT_INTEGRATE_SUBJECT_ANCHOR_X = 0.5;
 /** Where the subject's feet land, as a fraction of frame height. */
 export const DEFAULT_INTEGRATE_SUBJECT_GROUND_Y = 0.95;
 
-/** Mask box width relative to subject height. Wide enough for wings, tails,
- * and outstretched limbs so extremities are not painted into the plate. */
-export const INTEGRATE_SUBJECT_WIDTH_RATIO = 0.95;
+/** Mask box width relative to its height (room for arms, props, stride). */
+export const INTEGRATE_SUBJECT_WIDTH_RATIO = 0.62;
 
 /**
  * Extra mask height above the nominal subject height. Without headroom the
  * hard mask edge crops the head, and the model responds by crouching the
  * figure or smearing the face into the feather band.
  */
-export const INTEGRATE_SUBJECT_HEADROOM_RATIO = 0.28;
+export const INTEGRATE_SUBJECT_HEADROOM_RATIO = 0.22;
 
 /**
- * Feather size relative to the mask box width. Integrate uses a hard mask
- * (0): any feather band is only partially denoised and reads as limbs or
- * tails fading into the location plate, which is an unusable still.
+ * Feather size relative to the mask box width. Keep thin: feathered pixels
+ * are partially denoised, so a wide band reads as a ghosted halo where the
+ * subject alpha-blends into the plate.
  */
-export const INTEGRATE_MASK_FEATHER_RATIO = 0;
+export const INTEGRATE_MASK_FEATHER_RATIO = 0.08;
 
 /** img2img integration pass after rough paste (unifies lighting, depth, edges). */
 export const DEFAULT_COMPOSITE_INPAINT_DENOISE = 0.48;

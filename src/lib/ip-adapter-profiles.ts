@@ -132,17 +132,17 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
   IP_ADAPTER_REFRAME_PROFILES.character_lock;
 
 /**
- * Integrate in scene: lock species silhouette and body plan from the character
- * sheet. Style transfer only carries color/look, so non-human sheets (dragons,
- * creatures) collapse into random blue blobs across seeds. Linear at a moderate
- * weight keeps anatomy stable; pose is steered by integrate prompt suffixes,
- * not by cranking IP into mush territory.
+ * Integrate in scene: keep character identity and look while letting the shot
+ * prompt drive pose. Style transfer at the morning-tuned weight avoids copying
+ * casting-sheet composition; the graph's RemBG paste + harmonization pass
+ * locks the location plate and blends edges (without that second pass the
+ * still reads as a green-screen sticker).
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
-  weight: 0.58,
-  endAt: 0.72,
+  weight: 0.6,
+  endAt: 0.55,
   preset: "PLUS (high strength)",
-  weightType: "linear",
+  weightType: "style transfer",
 };
 
 /** Virtual backdrop dual chain: character first, location last so gray wins over sheet bg. */
@@ -180,9 +180,9 @@ export const INTEGRATE_IDENTITY_STRENGTH_PRESETS: Record<
   "low" | "balanced" | "high",
   { weight: number; endAt: number }
 > = {
-  low: { weight: 0.45, endAt: 0.58 },
-  balanced: { weight: 0.58, endAt: 0.72 },
-  high: { weight: 0.68, endAt: 0.82 },
+  low: { weight: 0.45, endAt: 0.45 },
+  balanced: { weight: 0.6, endAt: 0.55 },
+  high: { weight: 0.7, endAt: 0.65 },
 };
 
 /** @deprecated Prefer mode-specific tables via resolveShotIdentityStrengthPreset. */
