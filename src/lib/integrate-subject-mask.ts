@@ -120,7 +120,7 @@ export function computeIntegrateSubjectMaskBox(
   );
 
   const featherX = Math.max(
-    8,
+    4,
     Math.round(boxWidth * INTEGRATE_MASK_FEATHER_RATIO)
   );
   // Softer top (hair, headroom), tighter bottom (feet stay near the ground
@@ -132,7 +132,7 @@ export function computeIntegrateSubjectMaskBox(
   const featherTop = touchesTop ? 0 : featherX;
   const featherBottom = touchesBottom
     ? 0
-    : Math.max(8, Math.round(featherX * 0.6));
+    : Math.max(4, Math.round(featherX * 0.6));
 
   return {
     frameWidth,

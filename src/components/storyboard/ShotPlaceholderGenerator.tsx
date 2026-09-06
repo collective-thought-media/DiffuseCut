@@ -247,16 +247,6 @@ export function ShotPlaceholderControls({
               {batch.status.replace(/_/g, " ")}
             </Badge>
           )}
-          {isGenerating ? (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={stopping}
-              onClick={() => void stopGeneration()}
-            >
-              {stopping ? "Stopping…" : "Stop generation"}
-            </Button>
-          ) : null}
         </div>
       </div>
 
@@ -378,8 +368,6 @@ export function ShotPlaceholderOptionsPanel({
     handleSelect,
     selectingId,
     dismissOptions,
-    stopGeneration,
-    stopping,
     expanded,
     isGenerating,
     handleInstructionEdit,
@@ -434,16 +422,6 @@ export function ShotPlaceholderOptionsPanel({
               {packStatusLabel(batch.status)}
             </Badge>
           )}
-          {isGenerating ? (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={stopping}
-              onClick={() => void stopGeneration()}
-            >
-              {stopping ? "Stopping…" : "Stop generation"}
-            </Button>
-          ) : null}
           {canDismiss && (
             <Button size="sm" variant="outline" onClick={() => void dismissOptions()}>
               Remove pack

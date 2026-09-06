@@ -30,6 +30,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Stuck shot generations can be stopped. Finished options stay selectable, and Generate unlocks again so you are not trapped on a hung pack.
 - Storyboard "medium close-up" no longer flips into macro-detail prompt mode. Integrate character likeness defaults are moderated again so a dragon sheet is not crushed into anatomical mush.
 - Character likeness High is mode-aware again: hard lock in Character reference mode, a usable bump in Integrate in scene that stays below the mush threshold.
+- Integrate in scene no longer leaves ghosted figures through the set: subject-mask denoise is full strength, the feather band is thinner, likeness Balanced is firmer again, and prompts ban transparent / double-exposure subjects.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

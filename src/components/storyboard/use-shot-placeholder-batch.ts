@@ -621,7 +621,7 @@ export function useShotPlaceholderBatch({
   const readyHint = descriptionEmpty
     ? "Add a shot prompt, location, or character cast first."
     : isGenerating
-      ? "Generation in progress. Use Stop generation to abort a hung option and unlock a new pack."
+      ? null
       : comfyuiOk === false
         ? "ComfyUI is not reachable. Check Settings or System Status."
         : !stackReady
