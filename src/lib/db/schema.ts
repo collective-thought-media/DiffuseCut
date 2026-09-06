@@ -32,7 +32,7 @@ export const characters = sqliteTable("characters", {
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {
-    enum: ["upload", "url", "external_api", "comfyui"],
+    enum: ["upload", "url", "external_api", "comfyui", "punch_in"],
   }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at").notNull(),
@@ -50,7 +50,7 @@ export const characterStates = sqliteTable("character_states", {
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {
-    enum: ["upload", "url", "external_api", "comfyui"],
+    enum: ["upload", "url", "external_api", "comfyui", "punch_in"],
   }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at").notNull(),
@@ -67,7 +67,7 @@ export const characterAngles = sqliteTable("character_angles", {
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {
-    enum: ["upload", "url", "external_api", "comfyui"],
+    enum: ["upload", "url", "external_api", "comfyui", "punch_in"],
   }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at").notNull(),
@@ -84,7 +84,7 @@ export const locations = sqliteTable("locations", {
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {
-    enum: ["upload", "url", "external_api", "comfyui"],
+    enum: ["upload", "url", "external_api", "comfyui", "punch_in"],
   }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at").notNull(),
@@ -102,7 +102,7 @@ export const locationStates = sqliteTable("location_states", {
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {
-    enum: ["upload", "url", "external_api", "comfyui"],
+    enum: ["upload", "url", "external_api", "comfyui", "punch_in"],
   }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at").notNull(),
@@ -119,7 +119,7 @@ export const locationAngles = sqliteTable("location_angles", {
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {
-    enum: ["upload", "url", "external_api", "comfyui"],
+    enum: ["upload", "url", "external_api", "comfyui", "punch_in"],
   }),
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at").notNull(),

@@ -12,6 +12,7 @@ import type {
   AssetGenerationBatch,
   AssetGenerationOption,
   Location,
+  LocationAngle,
 } from "@/lib/db/schema";
 import {
   resolveMediaPath,
@@ -46,6 +47,10 @@ import {
   updateAssetBatch,
   archiveBatchAfterReferenceSelection,
 } from "@/lib/services/asset-generation-queue";
+import {
+  punchInImage,
+  type PunchInFocus,
+} from "@/lib/services/image-punch-in";
 import {
   getAssetGenerationBatchView,
   listAssetGenerationPacks,
@@ -557,6 +562,91 @@ export function resolveLocationAnchorReferencePathForBatch(
   if (!stateWithAngles) return null;
 
   return resolveLocationAnchorReferencePath(stateWithAngles, angleId);
+}
+
+/**
+ * Optical punch-in: crop a zoomed window from the establishing angle and save
+ * it as this angle's reference. No ComfyUI, no diffusion.
+ */
+export async function punchInLocationAngleFromAnchor(
+  projectId: string,
+  locationId: string,
+  stateId: string,
+  angleId: string,
+  options: { zoom: number; focus?: PunchInFocus }
+): Promise<{ angle: LocationAngle; relativePath: string }> {
+  const angle = getLocationAngle(projectId, locationId, stateId, angleId);
+  if (!angle) throw new Error("Location angle not found");
+
+  const db = getDb();
+  const project = db
+    .select()
+    .from(schema.projects)
+    .where(eq(schema.projects.id, projectId))
+    .get();
+  if (!project) throw new Error("Project not found");
+
+  const stateWithAngles = listLocationStates(locationId).find(
+    (item) => item.id === stateId
+  );
+  if (!stateWithAngles) throw new Error("Location state not found");
+
+  const anchorRelative = resolveLocationAnchorReferencePath(
+    stateWithAngles,
+    angleId
+  );
+  if (!anchorRelative) {
+    throw new Error(
+      "Save an establishing angle reference first, then punch in from it"
+    );
+  }
+
+  const projectRoot = resolveProjectRoot(project);
+  const sourceAbs = resolveMediaPath(projectRoot, anchorRelative);
+  if (!fs.existsSync(sourceAbs)) {
+    throw new Error("Establishing reference file is missing on disk");
+  }
+
+  const destRelative =
+    `locations/${locationId}/states/${stateId}/angles/${angleId}/reference.png`.replace(
+      /\\/g,
+      "/"
+    );
+  const destAbs = path.join(projectRoot, destRelative);
+  if (angle.referencePath && angle.referencePath !== destRelative) {
+    try {
+      const oldAbs = path.join(projectRoot, angle.referencePath);
+      if (fs.existsSync(oldAbs)) fs.unlinkSync(oldAbs);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  await punchInImage(sourceAbs, destAbs, {
+    zoom: options.zoom,
+    focus: options.focus,
+  });
+
+  const ts = Date.now();
+  db.update(schema.locationAngles)
+    .set({
+      referencePath: destRelative,
+      referenceKind: "image",
+      referenceSource: "punch_in",
+      updatedAt: ts,
+    })
+    .where(eq(schema.locationAngles.id, angleId))
+    .run();
+
+  const updated = db
+    .select()
+    .from(schema.locationAngles)
+    .where(eq(schema.locationAngles.id, angleId))
+    .get()!;
+
+  syncLocationReferenceFromState(locationId, stateWithAngles, projectRoot);
+
+  return { angle: updated, relativePath: destRelative };
 }
 
 export function getLocationCandidateOutputPath(

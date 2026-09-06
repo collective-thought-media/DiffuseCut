@@ -9,6 +9,7 @@ import {
   resolveLocationAnchorReferencePath,
 } from "@/lib/location-preview";
 import { LocationReferenceGenerator } from "@/components/sheets/LocationReferenceGenerator";
+import { LocationPunchInControls } from "@/components/sheets/LocationPunchInControls";
 import { ReferenceMediaControls } from "@/components/sheets/ReferenceMediaControls";
 import { useDebouncedSave, type DebouncedSaveContext } from "@/lib/hooks/useDebouncedSave";
 import { useSyncedEditableFields } from "@/lib/hooks/useSyncedEditableFields";
@@ -555,6 +556,13 @@ function LocationAngleSection({
             hasReference={Boolean(angle.referencePath)}
             onUpdated={onReferenceSelected}
           />
+          {anchorReferencePath ? (
+            <LocationPunchInControls
+              apiBase={`/api/projects/${projectId}/locations/${locationId}/states/${state.id}/angles/${angle.id}`}
+              anchorAngleName={anchorAngleName}
+              onDone={onReferenceSelected}
+            />
+          ) : null}
         </div>
       </div>
 

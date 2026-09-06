@@ -16,6 +16,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - `npm start` rebuilds after `git pull` when the last production build is from an older commit, so testers are not left on a stale app.
 - Dual reference no longer copies the character sheet's empty studio background over the location. Auto and Integrate in scene remain the modes that lock the saved location plate.
 - Closer location angles keep the establishing set layout instead of inventing a new room that only shares the mood. Close-up prompts no longer inject temple-staircase language into every location.
+- Location angles can punch in from the establishing plate with an optical crop and scale. Same room pixels, tighter framing, no diffusion.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.
