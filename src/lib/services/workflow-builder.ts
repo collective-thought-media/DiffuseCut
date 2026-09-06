@@ -13,6 +13,7 @@ import {
 import type { AnchorReframeIntensity } from "@/lib/ip-adapter-profiles";
 import type { IntegrateSubjectMaskBox } from "@/lib/integrate-subject-mask";
 import {
+  DUAL_IP_ADAPTER_CHARACTER_LOOK_PROFILE,
   DUAL_IP_ADAPTER_CHARACTER_PROFILE,
   DUAL_IP_ADAPTER_LOCATION_PROFILE,
   DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_CHARACTER_PROFILE,
@@ -865,7 +866,7 @@ export function buildPortraitPayload(
     applyIpAdapterSettingsToNode(
       workflow,
       mergedBindings.characterIpAdapterNodeId,
-      DUAL_IP_ADAPTER_CHARACTER_PROFILE
+      DUAL_IP_ADAPTER_CHARACTER_LOOK_PROFILE
     );
   } else if (
     referenceUsage === "ipadapter" &&

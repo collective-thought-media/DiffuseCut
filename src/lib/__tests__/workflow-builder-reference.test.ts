@@ -274,9 +274,9 @@ describe("buildPortraitPayload reference sizing", () => {
             ipadapter: ["12", 0],
             clip_vision: ["15", 0],
             image: ["11", 0],
-            weight: 0.28,
-            end_at: 0.38,
-            weight_type: "style transfer",
+            weight: 0.5,
+            end_at: 0.68,
+            weight_type: "linear",
           },
         },
         "14": {
@@ -286,9 +286,9 @@ describe("buildPortraitPayload reference sizing", () => {
             ipadapter: ["12", 0],
             clip_vision: ["15", 0],
             image: ["10", 0],
-            weight: 0.62,
-            end_at: 0.82,
-            weight_type: "linear",
+            weight: 0.55,
+            end_at: 0.55,
+            weight_type: "style transfer",
           },
         },
       }),
@@ -312,10 +312,12 @@ describe("buildPortraitPayload reference sizing", () => {
 
     expect(workflow["10"].inputs.image).toBe("uploaded-character.png");
     expect(workflow["11"].inputs.image).toBe("uploaded-location.png");
-    expect(workflow["13"].inputs.weight).toBe(0.28);
-    expect(workflow["13"].inputs.end_at).toBe(0.38);
-    expect(workflow["14"].inputs.weight).toBe(0.62);
-    expect(workflow["14"].inputs.end_at).toBe(0.82);
+    expect(workflow["13"].inputs.weight).toBe(0.5);
+    expect(workflow["13"].inputs.end_at).toBe(0.68);
+    expect(workflow["13"].inputs.weight_type).toBe("linear");
+    expect(workflow["14"].inputs.weight).toBe(0.55);
+    expect(workflow["14"].inputs.end_at).toBe(0.55);
+    expect(workflow["14"].inputs.weight_type).toBe("style transfer");
   });
 
   it("swaps dual IP-Adapter chain for virtual backdrop shots", () => {

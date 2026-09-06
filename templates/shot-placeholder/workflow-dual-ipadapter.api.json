@@ -87,11 +87,11 @@
       "ipadapter": ["12", 0],
       "clip_vision": ["15", 0],
       "image": ["11", 0],
-      "weight": 0.28,
-      "weight_type": "style transfer",
+      "weight": 0.5,
+      "weight_type": "linear",
       "combine_embeds": "concat",
       "start_at": 0,
-      "end_at": 0.38,
+      "end_at": 0.68,
       "embeds_scaling": "V only"
     }
   },
@@ -102,11 +102,11 @@
       "ipadapter": ["12", 0],
       "clip_vision": ["15", 0],
       "image": ["10", 0],
-      "weight": 0.62,
-      "weight_type": "linear",
+      "weight": 0.55,
+      "weight_type": "style transfer",
       "combine_embeds": "concat",
       "start_at": 0,
-      "end_at": 0.82,
+      "end_at": 0.55,
       "embeds_scaling": "V only"
     }
   }

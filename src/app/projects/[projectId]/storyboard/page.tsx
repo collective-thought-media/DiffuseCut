@@ -232,7 +232,7 @@ export default function StoryboardPage({ params }: PageProps) {
 
     if (plan.useDualIpAdapter) {
       detailParts.push(
-        `Dual IP-Adapter: ${refs.characterName ?? "Character"} for identity and wardrobe, ${locationLabel || "location"} for background and set lighting.`
+        `Dual IP-Adapter: both images steer the whole frame. ${refs.characterName ?? "Character"} for likeness, ${locationLabel || "location"} for the set. A studio character sheet can still keep its empty background. Use Integrate in scene to lock the location plate.`
       );
     } else if (plan.effectiveMode === "character") {
       detailParts.push(

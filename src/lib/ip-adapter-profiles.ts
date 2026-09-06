@@ -62,10 +62,28 @@ export const BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS: IpAdapterProfileSettings = {
   weightType: "style transfer",
 };
 
-/** Fixed dual IP-Adapter tuning: background first, character last in the chain. */
-export const DUAL_IP_ADAPTER_LOCATION_PROFILE: IpAdapterProfileSettings =
-  BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS;
+/**
+ * Dual storyboard chain: location first, character last. Location used to
+ * share the weak virtual-backdrop profile (0.28 style transfer) while
+ * character used a linear lock, so a studio sheet background wiped the set.
+ * Linear location keeps set layout; style-transfer character keeps likeness
+ * without copying the sheet pose and empty ground.
+ */
+export const DUAL_IP_ADAPTER_LOCATION_PROFILE: IpAdapterProfileSettings = {
+  weight: 0.5,
+  endAt: 0.68,
+  preset: "PLUS (high strength)",
+  weightType: "linear",
+};
 
+export const DUAL_IP_ADAPTER_CHARACTER_LOOK_PROFILE: IpAdapterProfileSettings = {
+  weight: 0.55,
+  endAt: 0.55,
+  preset: "PLUS (high strength)",
+  weightType: "style transfer",
+};
+
+/** Shared by location-plate / composite fallbacks (single character node). */
 export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
   IP_ADAPTER_REFRAME_PROFILES.character_lock;
 

@@ -62,9 +62,10 @@ export function ShotCastEditor({
       <div className="space-y-1">
         <Label>Characters in this shot</Label>
         <p className="text-xs text-muted-foreground">
-          Selected characters are written into the generation prompt. When both
-          a character sheet and location reference exist, dual IP-Adapter sends
-          both images automatically.
+          Selected characters are written into the generation prompt. Auto or
+          Integrate in scene paints them into the saved location plate. Dual
+          reference blends both pictures across the whole frame, so a studio
+          character sheet can keep its empty background.
         </p>
       </div>
       {characters.map((character) => {

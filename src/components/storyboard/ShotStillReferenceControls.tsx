@@ -117,8 +117,8 @@ export function ShotStillReferenceControls({
         <p className="text-sm font-medium text-foreground">Visual reference</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Choose which saved reference art to send to ComfyUI for this shot.
-          Character references lock face and wardrobe. Location references steer
-          background and set lighting. Your shot prompt still drives framing and
+          How the location is used depends on the mode. Character references
+          lock face and wardrobe. Your shot prompt still drives framing and
           action.
         </p>
       </div>
@@ -282,6 +282,14 @@ export function ShotStillReferenceControls({
           plate. The rest of the plate stays pixel-locked, and Subject size
           controls how large the character renders. No cutout paste. Stronger
           set lock than Dual, more natural depth than Composited.
+        </p>
+      ) : null}
+      {mode === "dual" ? (
+        <p className="text-xs text-muted-foreground">
+          Sends both pictures into one diffusion pass. A studio character sheet
+          has a blank ground, so that empty background can still win over the
+          location. Use Auto or Integrate in scene when you want the saved
+          location plate to stay the set.
         </p>
       ) : null}
       {mode === "composited" ? (
