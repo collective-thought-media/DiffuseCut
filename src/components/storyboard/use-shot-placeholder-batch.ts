@@ -103,6 +103,7 @@ export function useShotPlaceholderBatch({
   const [comfyuiOk, setComfyuiOk] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const [stopping, setStopping] = useState(false);
   const [selectingId, setSelectingId] = useState<string | null>(null);
   const [sendingToComfyId, setSendingToComfyId] = useState<string | null>(null);
   const [comfySendResult, setComfySendResult] = useState<{
@@ -515,14 +516,43 @@ export function useShotPlaceholderBatch({
         `${apiBase}/placeholder-batch?batchId=${encodeURIComponent(viewingBatchId)}`,
         { method: "DELETE" }
       );
-      const data = await parseApiResponse<{ error?: string; ok?: boolean }>(
-        res
-      );
+      await parseApiResponse<{ error?: string; ok?: boolean }>(res);
       await loadBatch(activeBatchId);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to remove pack"
       );
+    }
+  }
+
+  async function stopGeneration() {
+    const targetBatchId = activeBatchId ?? viewingBatchId;
+    if (!targetBatchId) return;
+    if (
+      !confirm(
+        "Stop this generation? Finished options in the pack stay available. You can pick one or start a new pack."
+      )
+    ) {
+      return;
+    }
+    setStopping(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `${apiBase}/placeholder-batch?batchId=${encodeURIComponent(targetBatchId)}&stop=1`,
+        { method: "DELETE" }
+      );
+      const data = await parseApiResponse<BatchView & { ok?: boolean; error?: string }>(
+        res
+      );
+      applyBatchView(data, data.activeBatchId ?? targetBatchId);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to stop generation"
+      );
+      await loadBatch(targetBatchId);
+    } finally {
+      setStopping(false);
     }
   }
 
@@ -553,13 +583,26 @@ export function useShotPlaceholderBatch({
     activeBatch?.status === "queued" ||
     activeBatch?.status === "running";
   const batchFailed = batch?.status === "failed";
+  const hasCompletedOption = options.some(
+    (option) => option.status === "completed"
+  );
   const canSelectFromPack =
-    batch?.status === "awaiting_selection" || batch?.status === "archived";
+    batch?.status === "awaiting_selection" ||
+    batch?.status === "archived" ||
+    (Boolean(batch) &&
+      hasCompletedOption &&
+      (batch?.status === "running" ||
+        batch?.status === "queued" ||
+        batch?.status === "cancelled"));
   const awaitingSelection = canSelectFromPack;
   const canRegenerate =
-    activeBatch?.status === "awaiting_selection" && !isGenerating;
+    !isGenerating &&
+    (activeBatch?.status === "awaiting_selection" ||
+      activeBatch?.status === "cancelled" ||
+      activeBatch?.status === "failed" ||
+      activeBatch?.status === "archived");
   const generateLabel =
-    canRegenerate && !isGenerating
+    canRegenerate
       ? "Regenerate shot options"
       : batchFailed && viewingBatchId === activeBatchId
         ? "Try again"
@@ -578,7 +621,7 @@ export function useShotPlaceholderBatch({
   const readyHint = descriptionEmpty
     ? "Add a shot prompt, location, or character cast first."
     : isGenerating
-      ? null
+      ? "Generation in progress. Use Stop generation to abort a hung option and unlock a new pack."
       : comfyuiOk === false
         ? "ComfyUI is not reachable. Check Settings or System Status."
         : !stackReady
@@ -657,6 +700,8 @@ export function useShotPlaceholderBatch({
     comfySendResult,
     dismissError,
     dismissOptions,
+    stopGeneration,
+    stopping,
   };
 }
 

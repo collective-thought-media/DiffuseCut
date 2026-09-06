@@ -61,6 +61,7 @@ import {
   getBatchWithOptions,
   updateAssetBatch,
   updateAssetOption,
+  refreshBatchStatus,
   archiveAssetBatch,
   archiveBatchAfterReferenceSelection,
   listRetainedBatchesForEntity,
@@ -322,6 +323,72 @@ export function discardShotPlaceholderBatch(
     status: "cancelled",
     completedAt: ts,
   });
+}
+
+/**
+ * Abort in-flight shot options without deleting finished ones. Unlocks
+ * Generate and leaves completed images selectable.
+ */
+export async function stopShotPlaceholderGeneration(
+  projectId: string,
+  shotId: string,
+  batchOverride?: AssetGenerationBatch | string
+): Promise<AssetGenerationBatch> {
+  const db = getDb();
+  let batch: AssetGenerationBatch | undefined;
+  if (typeof batchOverride === "string") {
+    batch =
+      db
+        .select()
+        .from(schema.assetGenerationBatches)
+        .where(eq(schema.assetGenerationBatches.id, batchOverride))
+        .get() ?? undefined;
+  } else {
+    batch = batchOverride ?? getActiveBatchForShot(shotId) ?? undefined;
+  }
+
+  if (!batch) {
+    throw new Error("No active shot generation to stop");
+  }
+  if (batch.projectId !== projectId) {
+    throw new Error("Batch does not belong to this project");
+  }
+  if (batch.entityType !== "shot" || batch.entityId !== shotId) {
+    throw new Error("Batch does not belong to this shot");
+  }
+  if (batch.status !== "queued" && batch.status !== "running") {
+    throw new Error("That pack is not generating");
+  }
+
+  const data = getBatchWithOptions(batch.id);
+  const ts = Date.now();
+  let interrupted = false;
+  if (data) {
+    for (const option of data.options) {
+      if (option.status !== "queued" && option.status !== "running") continue;
+      updateAssetOption(option.id, {
+        status: "cancelled",
+        statusMessage: "Stopped by user",
+        completedAt: ts,
+        errorMessage: null,
+      });
+      if (!interrupted && batch.comfyuiEndpointUrl) {
+        const { interruptComfyui } = await import("@/lib/services/comfyui-client");
+        await interruptComfyui(batch.comfyuiEndpointUrl);
+        interrupted = true;
+      }
+    }
+  }
+
+  refreshBatchStatus(batch.id);
+
+  const latest =
+    db
+      .select()
+      .from(schema.assetGenerationBatches)
+      .where(eq(schema.assetGenerationBatches.id, batch.id))
+      .get() ?? batch;
+  return latest;
 }
 
 export async function enqueueShotPlaceholderBatch(

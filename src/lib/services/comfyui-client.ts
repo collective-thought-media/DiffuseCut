@@ -451,6 +451,15 @@ export async function getQueue(baseUrl: string): Promise<ComfyUIQueueSnapshot> {
   };
 }
 
+/** Ask ComfyUI to abort the currently executing prompt (best effort). */
+export async function interruptComfyui(baseUrl: string): Promise<void> {
+  try {
+    await fetch(`${normalizeUrl(baseUrl)}/interrupt`, { method: "POST" });
+  } catch {
+    /* ignore unreachable / unsupported */
+  }
+}
+
 export function findPromptQueueState(
   queue: ComfyUIQueueSnapshot,
   promptId: string

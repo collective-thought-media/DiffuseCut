@@ -624,9 +624,14 @@ export function refreshBatchStatus(batchId: string) {
 
   const anyFailed = outcomeOptions.some((o) => o.status === "failed");
   const allDone = outcomeOptions.every(
-    (o) => o.status === "completed" || o.status === "failed"
+    (o) =>
+      o.status === "completed" ||
+      o.status === "failed" ||
+      o.status === "cancelled"
   );
-  const anyRunning = options.some((o) => o.status === "running");
+  const anyRunning = options.some(
+    (o) => o.status === "running" || o.status === "queued"
+  );
   const allCompleted = outcomeOptions.every((o) => o.status === "completed");
 
   if (anyRunning && batch.status === "queued") {
@@ -652,8 +657,19 @@ export function refreshBatchStatus(batchId: string) {
       errorMessage: failureLabel,
       completedAt: Date.now(),
     });
-  } else if (allDone && options.some((o) => o.status === "completed")) {
+  } else if (
+    allDone &&
+    options.some((o) => o.status === "completed")
+  ) {
     updateAssetBatch(batchId, { status: "awaiting_selection" });
+  } else if (
+    allDone &&
+    outcomeOptions.every((o) => o.status === "cancelled")
+  ) {
+    updateAssetBatch(batchId, {
+      status: "cancelled",
+      completedAt: Date.now(),
+    });
   }
 }
 

@@ -206,6 +206,8 @@ export function ShotPlaceholderControls({
     canRegenerate,
     handleGenerate,
     dismissError,
+    stopGeneration,
+    stopping,
   } = useShotPlaceholderContext();
 
   return (
@@ -245,6 +247,16 @@ export function ShotPlaceholderControls({
               {batch.status.replace(/_/g, " ")}
             </Badge>
           )}
+          {isGenerating ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={stopping}
+              onClick={() => void stopGeneration()}
+            >
+              {stopping ? "Stopping…" : "Stop generation"}
+            </Button>
+          ) : null}
         </div>
       </div>
 
@@ -331,6 +343,10 @@ export function ShotPlaceholderControls({
                     previewEmptyHint="No preview text returned. Check the shot prompt and try again."
                     onGenerate={() => void handleGenerate(canRegenerate)}
                     previewDisabled={descriptionEmpty}
+                    onStopGeneration={
+                      isGenerating ? () => void stopGeneration() : undefined
+                    }
+                    stoppingGeneration={stopping}
                   />
                   {settingsSummary}
                 </div>
@@ -362,6 +378,8 @@ export function ShotPlaceholderOptionsPanel({
     handleSelect,
     selectingId,
     dismissOptions,
+    stopGeneration,
+    stopping,
     expanded,
     isGenerating,
     handleInstructionEdit,
@@ -381,7 +399,10 @@ export function ShotPlaceholderOptionsPanel({
 
   const canDismiss =
     batch &&
-    (batch.status === "awaiting_selection" || batch.status === "archived") &&
+    (batch.status === "awaiting_selection" ||
+      batch.status === "archived" ||
+      batch.status === "cancelled" ||
+      batch.status === "failed") &&
     displayOptions.some((option) => option.status === "completed");
 
   const packStatusLabel = (status: NonNullable<typeof batch>["status"]) => {
@@ -405,7 +426,7 @@ export function ShotPlaceholderOptionsPanel({
               variant={
                 batch.status === "awaiting_selection" || batch.status === "archived"
                   ? "success"
-                  : batch.status === "failed"
+                  : batch.status === "failed" || batch.status === "cancelled"
                     ? "error"
                     : "warning"
               }
@@ -413,6 +434,16 @@ export function ShotPlaceholderOptionsPanel({
               {packStatusLabel(batch.status)}
             </Badge>
           )}
+          {isGenerating ? (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={stopping}
+              onClick={() => void stopGeneration()}
+            >
+              {stopping ? "Stopping…" : "Stop generation"}
+            </Button>
+          ) : null}
           {canDismiss && (
             <Button size="sm" variant="outline" onClick={() => void dismissOptions()}>
               Remove pack

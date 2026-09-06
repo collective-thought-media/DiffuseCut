@@ -22,6 +22,9 @@ interface SheetGenerationControlsProps {
   onGenerate: () => void;
   previewDisabled?: boolean;
   previewEmptyHint?: string;
+  /** When set, show a stop control beside Generate during an active run. */
+  onStopGeneration?: () => void;
+  stoppingGeneration?: boolean;
 }
 
 export function SheetGenerationControls({
@@ -44,6 +47,8 @@ export function SheetGenerationControls({
   onGenerate,
   previewDisabled = false,
   previewEmptyHint = "No preview text returned. Check the description and try again.",
+  onStopGeneration,
+  stoppingGeneration = false,
 }: SheetGenerationControlsProps) {
   return (
     <div className="space-y-3">
@@ -76,6 +81,17 @@ export function SheetGenerationControls({
         >
           {generateLabel}
         </Button>
+        {onStopGeneration ? (
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 w-full sm:w-auto"
+            onClick={onStopGeneration}
+            disabled={stoppingGeneration}
+          >
+            {stoppingGeneration ? "Stopping…" : "Stop generation"}
+          </Button>
+        ) : null}
       </div>
 
       {onStillNegativePromptChange ? (

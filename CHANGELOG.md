@@ -24,6 +24,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Integrate / Dual shot prompts no longer force "one person" or "human scale," and when a character sheet is attached they lock species and body plan to that reference so a dragon sheet is not overwritten by a human-sounding name.
 - Saving a Front character reference clears other Front angles in that look, so an older redhead sheet cannot keep competing with the one you just accepted.
 - Shot positives no longer keep "no redhead / no human" phrases in the text that goes to ComfyUI. Those terms move to the negative. With a character sheet attached, Cast is name only. Integrate IP-Adapter likeness is stronger by default.
+- Stuck shot generations can be stopped. Finished options stay selectable, and Generate unlocks again so you are not trapped on a hung pack.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.
