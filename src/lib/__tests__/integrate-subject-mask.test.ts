@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   computeIntegrateSubjectMaskBox,
   detectIntegrateFramingIntent,
+  detectIntegrateEnvironmentScale,
 } from "@/lib/integrate-subject-mask";
 
 describe("integrate-subject-mask", () => {
@@ -9,10 +10,10 @@ describe("integrate-subject-mask", () => {
     const box = computeIntegrateSubjectMaskBox({
       frameWidth: 1216,
       frameHeight: 832,
-      heightFraction: 0.55,
+      heightFraction: 0.38,
       anchorX: 0.5,
     });
-    const subjectHeight = Math.round(832 * 0.55);
+    const subjectHeight = Math.round(832 * 0.38);
     // Box is taller than the subject: headroom keeps the head inside the
     // fully-denoised mask area instead of cropped by the hard edge.
     expect(box.boxHeight).toBe(Math.round(subjectHeight * 1.22));
@@ -52,7 +53,7 @@ describe("integrate-subject-mask", () => {
       frameWidth: 1216,
       frameHeight: 832,
     });
-    expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.55) * 1.22));
+    expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.38) * 1.22));
     expect(box.featherX).toBeGreaterThan(0);
     expect(box.featherBottom).toBeLessThan(box.featherTop);
   });
@@ -95,6 +96,29 @@ describe("integrate-subject-mask", () => {
       expect(
         detectIntegrateFramingIntent(
           "Theo stands alone on wet pavement outside the bakery doorway"
+        )
+      ).toBeNull();
+    });
+  });
+
+  describe("detectIntegrateEnvironmentScale", () => {
+    it("shrinks subjects for yard and house exteriors", () => {
+      expect(
+        detectIntegrateEnvironmentScale(
+          "Full body standing in the front yard of the suburban house at dusk"
+        )
+      ).toBe(0.3);
+      expect(
+        detectIntegrateEnvironmentScale(
+          "He waits in front of the house with the lawnmower nearby"
+        )
+      ).toBe(0.3);
+    });
+
+    it("returns null for indoor or doorway framing without wide exterior cues", () => {
+      expect(
+        detectIntegrateEnvironmentScale(
+          "Seated at a cafe table near the window, coffee cup in hand"
         )
       ).toBeNull();
     });

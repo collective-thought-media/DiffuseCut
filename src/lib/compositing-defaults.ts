@@ -24,7 +24,7 @@ export const DEFAULT_LOCATION_PLATE_DENOISE = 0.42;
 export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 0.9;
 
 /** Subject mask height as a fraction of frame height (medium preset). */
-export const DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION = 0.55;
+export const DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION = 0.38;
 
 /** Horizontal center of the subject mask as a fraction of frame width. */
 export const DEFAULT_INTEGRATE_SUBJECT_ANCHOR_X = 0.5;

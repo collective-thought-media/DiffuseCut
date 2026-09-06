@@ -99,7 +99,7 @@ describe("shot-still-reference-mode", () => {
     // Masked inpaint: denoise applies inside the subject region only, and must
     // be near 1.0 so the subject fully forms instead of ghost-blending.
     expect(plan.generationOptions.locationPlateDenoise).toBe(0.9);
-    expect(plan.generationOptions.integrateSubjectHeightFraction).toBe(0.55);
+    expect(plan.generationOptions.integrateSubjectHeightFraction).toBe(0.38);
     expect(plan.generationOptions.integrateSubjectAnchorX).toBe(0.5);
     expect(plan.generationOptions.stillReferenceMode).toBe("integrate_in_scene");
     // Style-transfer character IP keeps identity and outfit but drops the

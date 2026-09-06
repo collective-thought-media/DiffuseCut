@@ -16,9 +16,9 @@ const IDENTITY_STRENGTH_LABELS: Record<ShotIdentityStrength, string> = {
 };
 
 const SUBJECT_SCALE_LABELS: Record<ShotSubjectScale, string> = {
-  small: "Small (deeper in the scene)",
-  medium: "Medium (default)",
-  large: "Large (foreground)",
+  small: "Small (distant in an establishing set)",
+  medium: "Medium (natural scale vs doors and windows)",
+  large: "Large (foreground / closer framing)",
 };
 
 const SUBJECT_POSITION_LABELS: Record<ShotSubjectPosition, string> = {
@@ -203,8 +203,10 @@ export function ShotStillReferenceControls({
             )}
           </Select>
           <p className="text-xs text-muted-foreground">
-            Sets the region of the plate the character is painted into, which
-            directly controls how large they render in frame.
+            Sets how tall the character is painted relative to the location
+            plate. Medium aims for door and window scale on establishing sets.
+            Yard, lawn, and in-front-of-house prompts also shrink Medium
+            automatically. Pick Large for closer indoor framing.
           </p>
         </div>
       ) : null}

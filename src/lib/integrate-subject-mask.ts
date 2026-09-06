@@ -78,6 +78,22 @@ export function detectIntegrateFramingIntent(
   return null;
 }
 
+/**
+ * Wide exterior / establishing environments need a smaller subject so a
+ * person stays door-height against a full house or street plate. Returns a
+ * height fraction, or null when the prompt does not imply that scale.
+ */
+export function detectIntegrateEnvironmentScale(prompt: string): number | null {
+  if (
+    /\b(?:front )?(?:yard|lawn|driveway|sidewalk|street|parking lot)\b|\bin front of (?:the )?(?:house|home|building|store|shop|cafe|bakery)\b|\bexterior (?:of|shot|view|establishing)\b|\bwide establishing\b|\benvironmental wide\b|\bfull (?:house|building|facade) in (?:the )?(?:frame|view|shot)\b|\bacross the (?:street|lawn|yard)\b/i.test(
+      prompt
+    )
+  ) {
+    return 0.3;
+  }
+  return null;
+}
+
 export function computeIntegrateSubjectMaskBox(
   input: IntegrateSubjectMaskInput
 ): IntegrateSubjectMaskBox {

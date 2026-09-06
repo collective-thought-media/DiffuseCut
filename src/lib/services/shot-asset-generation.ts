@@ -33,7 +33,7 @@ import {
   SHOT_SUBJECT_POSITION_ANCHORS,
   SHOT_SUBJECT_SCALE_FRACTIONS,
 } from "@/lib/shot-render-overrides";
-import { detectIntegrateFramingIntent } from "@/lib/integrate-subject-mask";
+import { detectIntegrateFramingIntent, detectIntegrateEnvironmentScale } from "@/lib/integrate-subject-mask";
 import { resolveShotIdentityStrengthPreset } from "@/lib/ip-adapter-profiles";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
@@ -488,27 +488,35 @@ export async function enqueueShotPlaceholderBatch(
     referencePlan.generationOptions.ipAdapterEndAt = preset.endAt;
   }
 
-  // Integrate in scene: per-shot subject scale and position presets drive the
-  // inpaint mask geometry (this is the explicit scale control, unlike prompt
-  // language the model can ignore).
+  // Integrate in scene: subject scale drives the inpaint mask. Order:
+  // explicit Large wins; close-up / medium-shot language grows the mask;
+  // wide exterior prompts shrink the default Medium size; otherwise use the
+  // Subject size preset (or the shared default).
   if (referencePlan.effectiveMode === "integrate_in_scene") {
     const subjectScale = shotOverrides.subjectScale;
-    if (subjectScale && SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale] != null) {
+    const framing = detectIntegrateFramingIntent(shot.prompt ?? "");
+    const environmentScale = detectIntegrateEnvironmentScale(shot.prompt ?? "");
+
+    if (framing && subjectScale !== "small") {
       referencePlan.generationOptions.integrateSubjectHeightFraction =
-        SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale];
-    } else {
-      // No explicit size preset: honor framing language in the shot prompt
-      // (medium shot, close-up). Otherwise the model paints the large framing
-      // the prompt asks for and the small default mask box crops the head and
-      // legs mid-frame.
-      const framing = detectIntegrateFramingIntent(shot.prompt ?? "");
-      if (framing) {
-        referencePlan.generationOptions.integrateSubjectHeightFraction =
-          framing.heightFraction;
-        referencePlan.generationOptions.integrateSubjectGroundY =
-          framing.groundY;
+        framing.heightFraction;
+      referencePlan.generationOptions.integrateSubjectGroundY =
+        framing.groundY;
+    } else if (subjectScale && SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale] != null) {
+      let heightFraction = SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale];
+      if (
+        (subjectScale === "medium" || subjectScale === "small") &&
+        environmentScale != null
+      ) {
+        heightFraction = Math.min(heightFraction, environmentScale);
       }
+      referencePlan.generationOptions.integrateSubjectHeightFraction =
+        heightFraction;
+    } else if (environmentScale != null) {
+      referencePlan.generationOptions.integrateSubjectHeightFraction =
+        environmentScale;
     }
+
     const subjectPosition = shotOverrides.subjectPosition;
     if (
       subjectPosition &&

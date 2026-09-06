@@ -47,11 +47,13 @@ export const SHOT_SUBJECT_POSITION_VALUES: ShotSubjectPosition[] = [
   "right",
 ];
 
-/** Mask height as a fraction of frame height per subject scale preset. */
+/** Mask height as a fraction of frame height per subject scale preset.
+ * Tuned so Medium reads as door/window scale on establishing plates.
+ * Large is for closer indoor / foreground hero framing. */
 export const SHOT_SUBJECT_SCALE_FRACTIONS: Record<ShotSubjectScale, number> = {
-  small: 0.38,
-  medium: 0.55,
-  large: 0.72,
+  small: 0.28,
+  medium: 0.38,
+  large: 0.55,
 };
 
 /** Mask horizontal center as a fraction of frame width per position preset. */
