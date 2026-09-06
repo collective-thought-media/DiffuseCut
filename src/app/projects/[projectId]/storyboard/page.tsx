@@ -371,6 +371,21 @@ export default function StoryboardPage({ params }: PageProps) {
     void loadAll();
   }, [loadAll]);
 
+  // Always have an active shot after load/reload. A null selection hides the
+  // generate controls and forces a manual click on shot 1 every refresh.
+  useEffect(() => {
+    if (shots.length === 0) {
+      if (selectedShotId != null) setSelectedShotId(null);
+      return;
+    }
+    const stillExists =
+      selectedShotId != null && shots.some((shot) => shot.id === selectedShotId);
+    if (!stillExists) {
+      setSelectedShotId(shots[0]!.id);
+      setCurrentFrame(0);
+    }
+  }, [shots, selectedShotId]);
+
   const totalFrames = totalProjectFrames(shots);
 
   useEffect(() => {
