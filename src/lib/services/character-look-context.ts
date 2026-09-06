@@ -19,6 +19,23 @@ export function buildStateLookContext(
   return parts.join(" ");
 }
 
+/**
+ * Shot cast line when a character reference image is already attached.
+ * Identity text only. Look description is omitted so an old redhead / dress
+ * paragraph cannot override a regenerated dragon sheet.
+ */
+export function buildStateIdentityContext(
+  character: Character,
+  state: CharacterState
+): string {
+  const parts = [character.name.trim()];
+  if (state.name.trim()) parts.push(`(${state.name.trim()})`);
+  if (character.description.trim()) {
+    parts.push(`: ${character.description.trim()}`);
+  }
+  return parts.join(" ");
+}
+
 function extractLookSections(
   lookDescription: string,
   sectionNames: string[]

@@ -8,10 +8,15 @@ export function resolveCharacterStateCoverPath(
   const imageAngles = state.angles.filter(
     (angle) => angle.referencePath && angle.referenceKind !== "video"
   );
-  const front = imageAngles.find((angle) =>
+  const frontAngles = imageAngles.filter((angle) =>
     angle.name.trim().toLowerCase().includes("front")
   );
-  const angleRef = front ?? imageAngles[0];
+  const pool = frontAngles.length > 0 ? frontAngles : imageAngles;
+  // Prefer the newest front (or newest image) so a regenerated dragon sheet
+  // wins over an older front angle that still holds the previous humanoid.
+  const angleRef =
+    [...pool].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0] ??
+    null;
   if (angleRef?.referencePath) return angleRef.referencePath;
   if (state.referencePath && state.referenceKind !== "video") {
     return state.referencePath;
@@ -89,10 +94,14 @@ export function resolveCharacterAnchorReferencePath(
   );
   if (candidates.length === 0) return null;
 
-  const front = candidates.find((angle) =>
+  const frontAngles = candidates.filter((angle) =>
     angle.name.trim().toLowerCase().includes("front")
   );
-  return front?.referencePath ?? candidates[0]?.referencePath ?? null;
+  const pool = frontAngles.length > 0 ? frontAngles : candidates;
+  return (
+    [...pool].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0]
+      ?.referencePath ?? null
+  );
 }
 
 export function resolveCharacterAnchorAngleName(

@@ -6,13 +6,34 @@ import { listLocationStates } from "@/lib/services/location-states";
 import {
   buildShotCharacterLookSuffix,
   getShotCharacterCast,
+  listCharacterAngles,
   resolveCharacterStateForCast,
 } from "@/lib/services/character-states";
+import { resolveShotCharacterReferenceFromCast } from "@/lib/services/shot-reference-core";
 import { buildShotPlaceholderDescriptionFromData, buildShotPlaceholderContextFromData } from "@/lib/services/shot-placeholder-description";
 export {
   buildShotPlaceholderDescriptionFromData,
   buildShotPlaceholderContextFromData,
 } from "@/lib/services/shot-placeholder-description";
+
+function resolveShotCastForPrompt(shotId: string) {
+  const db = getDb();
+  return getShotCharacterCast(shotId).flatMap((row) => {
+    const character = db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, row.characterId))
+      .get();
+    if (!character) return [];
+    const state = resolveCharacterStateForCast(
+      row.characterId,
+      row.characterStateId
+    );
+    if (!state) return [];
+    const angles = listCharacterAngles(state.id);
+    return [{ character, state, angles }];
+  });
+}
 
 export function buildShotPlaceholderDescription(shotId: string): string {
   const db = getDb();
@@ -54,26 +75,17 @@ export function buildShotPlaceholderDescription(shotId: string): string {
     }
   }
 
-  const cast = getShotCharacterCast(shotId).flatMap((row) => {
-    const character = db
-      .select()
-      .from(schema.characters)
-      .where(eq(schema.characters.id, row.characterId))
-      .get();
-    if (!character) return [];
-    const state = resolveCharacterStateForCast(
-      row.characterId,
-      row.characterStateId
-    );
-    if (!state) return [];
-    return [{ character, state }];
-  });
+  const cast = resolveShotCastForPrompt(shotId);
+  const hasCharacterReference = Boolean(
+    resolveShotCharacterReferenceFromCast(cast).path
+  );
 
   const fromData = buildShotPlaceholderDescriptionFromData({
     prompt: shot.prompt,
     location,
     locationDetail,
     cast,
+    preferCharacterIdentityOverLook: hasCharacterReference,
   });
 
   if (fromData.trim()) return fromData;
@@ -122,26 +134,17 @@ export function buildShotPlaceholderContext(shotId: string): string {
     }
   }
 
-  const cast = getShotCharacterCast(shotId).flatMap((row) => {
-    const character = db
-      .select()
-      .from(schema.characters)
-      .where(eq(schema.characters.id, row.characterId))
-      .get();
-    if (!character) return [];
-    const state = resolveCharacterStateForCast(
-      row.characterId,
-      row.characterStateId
-    );
-    if (!state) return [];
-    return [{ character, state }];
-  });
+  const cast = resolveShotCastForPrompt(shotId);
+  const hasCharacterReference = Boolean(
+    resolveShotCharacterReferenceFromCast(cast).path
+  );
 
   return buildShotPlaceholderContextFromData({
     prompt: shot.prompt,
     location,
     locationDetail,
     cast,
+    preferCharacterIdentityOverLook: hasCharacterReference,
   });
 }
 

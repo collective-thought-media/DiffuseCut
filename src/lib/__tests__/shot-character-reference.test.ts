@@ -55,32 +55,32 @@ function angle(
 }
 
 describe("resolveShotCharacterReferenceFromCast", () => {
-  it("uses the front angle image when the state still points at an older sheet", () => {
-    const hero = character({
-      id: "c1",
-      referencePath: "characters/c1/old-triptych.png",
+  it("uses the newest front angle when an older front still holds the previous sheet", () => {
+    const hero = character({ id: "c1" });
+    const look = state({ id: "s1", characterId: "c1" });
+    const oldFront = angle({
+      id: "a-old",
+      characterStateId: "s1",
+      name: "Front",
+      referencePath: "characters/c1/states/s1/angles/a-old/redhead.png",
       referenceKind: "image",
+      updatedAt: 10,
     });
-    const look = state({
-      id: "s1",
-      characterId: "c1",
-      referencePath: "characters/c1/states/s1/old-triptych.png",
-      referenceKind: "image",
-    });
-    const front = angle({
-      id: "a1",
+    const newFront = angle({
+      id: "a-new",
       characterStateId: "s1",
       name: "Front full body",
-      referencePath: "characters/c1/states/s1/angles/a1/dragon.png",
+      referencePath: "characters/c1/states/s1/angles/a-new/dragon.png",
       referenceKind: "image",
+      updatedAt: 99,
     });
 
     const resolved = resolveShotCharacterReferenceFromCast([
-      { character: hero, state: look, angles: [front] },
+      { character: hero, state: look, angles: [oldFront, newFront] },
     ]);
 
     expect(resolved.path).toBe(
-      "characters/c1/states/s1/angles/a1/dragon.png"
+      "characters/c1/states/s1/angles/a-new/dragon.png"
     );
   });
 });

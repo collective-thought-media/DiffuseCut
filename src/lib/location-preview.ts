@@ -96,10 +96,10 @@ export function resolveLocationAnchorReferencePath(
   const establishing = candidates.find((angle) =>
     angle.name.trim().toLowerCase().includes("establishing")
   );
+  if (establishing?.referencePath) return establishing.referencePath;
   return (
-    establishing?.referencePath ??
-    candidates[0]?.referencePath ??
-    null
+    [...candidates].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0))[0]
+      ?.referencePath ?? null
   );
 }
 

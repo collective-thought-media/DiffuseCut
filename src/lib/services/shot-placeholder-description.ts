@@ -1,7 +1,7 @@
 import type { Character, CharacterState, Location } from "@/lib/db/schema";
 import {
+  buildStateIdentityContext,
   buildStateLookContext,
-  buildWardrobeLockDirective,
   filterCharacterLookForRearView,
 } from "@/lib/services/character-look-context";
 import {
@@ -18,6 +18,8 @@ export function buildShotPlaceholderContextFromData(input: {
     state: CharacterState;
   }>;
   referenceFocus?: "character" | "location";
+  /** When true, cast lines use character identity only (not look description). */
+  preferCharacterIdentityOverLook?: boolean;
 }): string {
   const parts: string[] = [];
 
@@ -42,7 +44,9 @@ export function buildShotPlaceholderContextFromData(input: {
       !detectWideShot(input.prompt) &&
       detectRearViewShot(input.prompt);
     const castParts = input.cast.map(({ character, state }) => {
-      const look = buildStateLookContext(character, state);
+      const look = input.preferCharacterIdentityOverLook
+        ? buildStateIdentityContext(character, state)
+        : buildStateLookContext(character, state);
       return applyRearFilter
         ? filterCharacterLookForRearView(look, input.prompt)
         : look;
@@ -62,6 +66,7 @@ export function buildShotPlaceholderDescriptionFromData(input: {
     state: CharacterState;
   }>;
   referenceFocus?: "character" | "location";
+  preferCharacterIdentityOverLook?: boolean;
 }): string {
   const parts: string[] = [];
 

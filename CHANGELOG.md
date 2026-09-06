@@ -18,6 +18,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Closer location angles keep the establishing set layout instead of inventing a new room that only shares the mood. Close-up prompts no longer inject temple-staircase language into every location.
 - Location angles can punch in from the establishing plate with an optical crop and scale. Same room pixels, tighter framing, no diffusion.
 - Fresh projects prefer Krea 2 turbo for stills when that UNET stack is installed on ComfyUI and the project has not locked an SDXL checkpoint yet.
+- Shot stills with a character reference image no longer inject the state's look description or wardrobe lock text, so an old redhead / dress paragraph cannot override a regenerated dragon sheet. The newest front angle is preferred when several front angles exist.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

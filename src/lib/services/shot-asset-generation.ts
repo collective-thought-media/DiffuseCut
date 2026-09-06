@@ -33,9 +33,6 @@ import {
 } from "@/lib/shot-render-overrides";
 import { detectIntegrateFramingIntent } from "@/lib/integrate-subject-mask";
 import { SHOT_IDENTITY_STRENGTH_PRESETS } from "@/lib/ip-adapter-profiles";
-import {
-  buildShotWardrobeLock,
-} from "@/lib/services/shot-placeholder-options";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
 import { isIpAdapterAvailable } from "@/lib/services/comfyui-client";
@@ -495,16 +492,15 @@ export async function enqueueShotPlaceholderBatch(
     if (!state) return [];
     return [{ character, state }];
   });
-  const wardrobeLock = referencePlan.characterPath
-    ? buildShotWardrobeLock(cast)
-    : null;
   const { processedPrompt, negativePrompt } = await buildShotPlaceholderPrompts(
     shotLabel,
     shotPrompt,
     visualStyle,
     {
       context: shotContext || undefined,
-      wardrobeLock,
+      // Character reference image carries likeness and wardrobe. Look-text
+      // wardrobe locks were reintroducing stale humanoid / dress wording.
+      wardrobeLock: null,
       hasLocationReference: referencePlan.hasLocationReferenceForPrompt,
     }
   );

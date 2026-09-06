@@ -142,6 +142,10 @@ export default function StoryboardPage({ params }: PageProps) {
       location: selectedLocation,
       locationDetail,
       cast: castEntries,
+      preferCharacterIdentityOverLook: castEntries.some(
+        (entry) =>
+          Boolean(entry.state.referencePath || entry.character.referencePath)
+      ),
     });
   }, [selectedShot, selectedLocation, characters]);
 
