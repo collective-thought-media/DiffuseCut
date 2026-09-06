@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import {
   isTurbopackManifestRace,
+  productionBuildNeedsRebuild,
   shouldEnableTurbopack,
 } from "./dev-runtime.mjs";
 
@@ -125,6 +126,48 @@ function hasProductionBuild() {
   );
 }
 
+const buildRevPath = path.join(root, ".next", "diffusecut-build-rev");
+
+function currentGitRev() {
+  try {
+    return execSync("git rev-parse HEAD", {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return "";
+  }
+}
+
+function lastBuiltGitRev() {
+  try {
+    return fs.readFileSync(buildRevPath, "utf8").trim();
+  } catch {
+    return "";
+  }
+}
+
+function rememberBuiltGitRev() {
+  const rev = currentGitRev();
+  if (!rev) return;
+  fs.mkdirSync(path.dirname(buildRevPath), { recursive: true });
+  fs.writeFileSync(buildRevPath, `${rev}\n`);
+}
+
+function runProductionBuild(reason) {
+  console.log(
+    reason ||
+      "[app] Building the production app. This can take a few minutes the first time."
+  );
+  execSync(`"${process.execPath}" "${nextBin}" build`, {
+    cwd: root,
+    stdio: "inherit",
+    shell: true,
+  });
+  rememberBuiltGitRev();
+}
+
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
 
 function nextIsInstalled() {
@@ -153,13 +196,17 @@ const useTurbo = shouldEnableTurbopack({
 
 if (isProd) {
   process.env.NODE_ENV = "production";
-  if (!hasProductionBuild()) {
-    console.log("[app] Building the production app. This can take a few minutes the first time.");
-    execSync(`"${process.execPath}" "${nextBin}" build`, {
-      cwd: root,
-      stdio: "inherit",
-      shell: true,
-    });
+  const needsBuild = productionBuildNeedsRebuild({
+    hasBuild: hasProductionBuild(),
+    builtRev: lastBuiltGitRev(),
+    currentRev: currentGitRev(),
+  });
+  if (needsBuild) {
+    runProductionBuild(
+      hasProductionBuild()
+        ? "[app] Source changed since the last build. Rebuilding the production app."
+        : "[app] Building the production app. This can take a few minutes the first time."
+    );
   }
   console.log("[app] Starting DiffuseCut in production mode on port", port);
 } else if (useTurbo) {
