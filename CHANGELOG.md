@@ -45,6 +45,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Auto no longer silently routes to Scene edit when Qwen is installed. Subject size only resizes the Integrate mask, so Auto stays on Integrate. Small / Medium / Large are spread farther apart, and scale language is added to Integrate and Scene edit prompts.
 - Integrate subject masks stay above a floor that RemBG can keep. The paste GrowMask no longer shrinks the cutout, which was erasing small subjects and leaving a bare location plate.
 - CI typecheck no longer fails on the Turbopack helper test. An ESLint config is checked in so `npm run lint` does not hang waiting for interactive setup.
+- Integrate no longer RemBG-pastes the subject. An empty RemBG cutout was wiping people and leaving a bare plate. The painted subject region is pasted with the same geometric mask, then diffusion harmonization still runs.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

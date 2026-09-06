@@ -15,6 +15,7 @@
   "subjectMaskBoxNodeId": "21",
   "subjectMaskCompositeNodeId": "22",
   "subjectMaskFeatherNodeId": "23",
+  "extraSeedNodeIds": ["39"],
   "outputNodeIds": ["9"],
   "controls": [
     {

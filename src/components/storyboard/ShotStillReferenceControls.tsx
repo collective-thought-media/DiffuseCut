@@ -36,7 +36,7 @@ const MODE_LABELS: Record<ShotStillReferenceMode, string> = {
   auto: "Auto (Integrate in scene for reliable subject scale)",
   scene_edit: "Scene edit: character interacts with the set (Qwen Image Edit)",
   integrate_in_scene:
-    "Integrate in scene: paint into the plate, RemBG onto the set, then diffuse edges",
+    "Integrate in scene: paint into the plate, mask-paste onto the set, then diffuse edges",
   composited:
     "Composited: plate first, character painted over (inpaint + IP-Adapter)",
   dual: "Dual reference: both images steer the whole frame (dual IP-Adapter)",
@@ -292,10 +292,10 @@ export function ShotStillReferenceControls({
       {mode === "integrate_in_scene" ? (
         <p className="text-xs text-muted-foreground">
           Paints the character into a masked region of your saved location
-          plate, re-composites the subject onto that plate, then runs a
-          diffusion pass on the edges so lighting and contact match the set.
-          The rest of the plate stays pixel-locked. Subject size controls how
-          large the character renders.
+          plate, pastes that painted region back onto the plate with the same
+          mask, then runs a diffusion pass on the edges so lighting and contact
+          match the set. The rest of the plate stays pixel-locked. Subject size
+          controls how large the character renders.
         </p>
       ) : null}
       {mode === "dual" ? (

@@ -235,8 +235,9 @@ export function resolveShotStillReferencePlan(
     stillReferenceMode: mode,
     referenceFocus,
     useIpAdapter,
-    // Integrate in scene: morning-tuned style-transfer defaults. The graph
-    // RemBG-pastes onto the plate then runs diffusion harmonization.
+    // Integrate in scene: masked paint, geometric mask paste onto the plate,
+    // then diffusion harmonization. RemBG is not used for the paste: an empty
+    // cutout was wiping subjects and leaving a bare location plate.
     ipAdapterWeight: useIntegrateInScene
       ? INTEGRATE_IN_SCENE_CHARACTER_PROFILE.weight
       : undefined,
