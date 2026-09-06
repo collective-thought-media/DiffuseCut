@@ -132,11 +132,10 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
   IP_ADAPTER_REFRAME_PROFILES.character_lock;
 
 /**
- * Integrate in scene: keep character identity and look while letting the shot
- * prompt drive pose. Style transfer at the morning-tuned weight avoids copying
- * casting-sheet composition; the graph's RemBG paste + harmonization pass
- * locks the location plate and blends edges (without that second pass the
- * still reads as a green-screen sticker).
+ * Integrate in scene: morning-tuned profile. Style transfer keeps casting-sheet
+ * pose from locking every shot. The graph still RemBG-pastes onto the plate
+ * and runs a diffusion harmonization pass afterward (paste alone is never the
+ * final still).
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
   weight: 0.6,

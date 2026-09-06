@@ -233,9 +233,8 @@ export function resolveShotStillReferencePlan(
     stillReferenceMode: mode,
     referenceFocus,
     useIpAdapter,
-    // Integrate in scene: style-transfer IP-Adapter at the morning-tuned
-    // defaults. The graph still RemBG-pastes onto the plate and runs the
-    // harmonization pass so edges and lighting match the set.
+    // Integrate in scene: morning-tuned style-transfer defaults. The graph
+    // RemBG-pastes onto the plate then runs diffusion harmonization.
     ipAdapterWeight: useIntegrateInScene
       ? INTEGRATE_IN_SCENE_CHARACTER_PROFILE.weight
       : undefined,

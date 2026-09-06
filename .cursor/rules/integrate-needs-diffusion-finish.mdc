@@ -8,7 +8,9 @@ alwaysApply: false
 
 Never ship a storyboard still path that only hard-pastes a character cutout onto a location plate and saves that as the final image.
 
-A RemBG (or other) paste onto the plate is acceptable only as an intermediate step. The final output must run an AI diffusion pass afterward (edge-ring / harmonization inpaint, scene edit, or equivalent) so lighting, contact, and edges are painted by the model, not left as a sticker composite.
+A RemBG (or other) paste onto the plate is acceptable only as an intermediate step. The final output must run an AI diffusion pass afterward (harmonization inpaint, scene edit, or equivalent) so lighting, contact, and edges are painted by the model, not left as a sticker composite.
 
 Unacceptable: `ImageCompositeMasked` (or equivalent) → `SaveImage` with no sampler after the paste.
-Acceptable: masked inpaint into the plate, then a second diffusion pass on edges; or Qwen Scene edit; or paste then harmonization KSampler.
+Acceptable: the morning Integrate graph (masked paint → RemBG re-composite onto plate → diffusion harmonization KSampler); or Qwen Scene edit; or paste then harmonization KSampler.
+
+Do not "fix" Integrate by deleting the RemBG+harmonization finish and replacing it with tip-knob mask feather / grow experiments. That broke human-in-set stills that were already working.

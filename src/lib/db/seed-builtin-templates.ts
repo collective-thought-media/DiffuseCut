@@ -113,7 +113,7 @@ const BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT = {
   id: BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID,
   name: "Storyboard shot (integrate in scene, masked inpaint)",
   description:
-    "Integrate in scene: paint the character into a hard subject-region mask on the location plate with character IP-Adapter, then run a second diffusion pass only on a geometric edge ring so lighting and contact match the set. Does not RemBG-paste a cutout as the final image.",
+    "Integrate in scene: masked paint on the location plate with character IP-Adapter, RemBG subject re-composite onto the plate, then a diffusion harmonization pass so lighting and edges match the set. Paste alone is never the final still.",
   purpose: "location_sheet" as const,
 };
 

@@ -755,10 +755,10 @@ export const SHOT_COMPOSITED_NEGATIVE =
   "tiny figure, distant subject, small person in frame, environmental wide master, full scene establishing shot, sharp background, deep focus, everything in focus, pasted cutout, floating subject, bad composite, halo around subject, warm subject on cool background, cool subject on warm background, mismatched white balance, split color grading";
 
 export const SHOT_INTEGRATE_IN_SCENE_SUFFIX =
-  "the character clearly visible in the frame, subject present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at a natural scale for their distance from the camera, correctly proportioned to the doorways, windows, and set pieces around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
+  "the character clearly visible in the frame, one person present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at natural human scale for their distance from the camera, correctly proportioned to the doorways, windows, and street furniture around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
 
 export const SHOT_INTEGRATE_IN_SCENE_NEGATIVE =
-  "empty scene, deserted street with no subject present, missing subject, character absent from frame, extra person, second character, random human companion, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant subject, subject too large for the scene, wrong scale, out of proportion with the environment";
+  "empty scene, deserted street with no one present, missing subject, character absent from frame, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant person, subject too large for the scene, wrong scale, out of proportion with the environment";
 
 /**
  * When a character reference image is attached, force the sampler to keep that
@@ -784,7 +784,7 @@ const INTEGRATE_PROMPT_PHRASES_TO_STRIP = [
 
 /** Added only when the shot prompt does not ask for a supported or low pose. */
 export const SHOT_INTEGRATE_IN_SCENE_GROUNDED_POSE_SUFFIX =
-  "standing at full height on the ground plane, weight balanced, supported by their own body, not leaning on anything";
+  "standing upright at full height, weight balanced on their own two feet, supported by their own body, not leaning on anything";
 
 export const SHOT_INTEGRATE_IN_SCENE_NO_LEAN_NEGATIVE =
   "crouching, squatting, kneeling, hunched over, leaning on empty air, leaning against nothing, propped on an invisible object, resting an arm on nothing, phantom support, leaning against an object that is not there";

@@ -53,10 +53,8 @@ describe("integrate-subject-mask", () => {
       frameHeight: 832,
     });
     expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.55) * 1.22));
-    // Hard first-pass mask; edge blend is a separate geometric ring pass.
-    expect(box.featherX).toBe(0);
-    expect(box.featherTop).toBe(0);
-    expect(box.featherBottom).toBe(0);
+    expect(box.featherX).toBeGreaterThan(0);
+    expect(box.featherBottom).toBeLessThan(box.featherTop);
   });
 
   it("runs the box to the frame edges for medium-shot framing with no edge feather", () => {
@@ -74,7 +72,7 @@ describe("integrate-subject-mask", () => {
     // No feather at edges the box touches (feather there would ghost the subject).
     expect(box.featherTop).toBe(0);
     expect(box.featherBottom).toBe(0);
-    expect(box.featherX).toBe(0);
+    expect(box.featherX).toBeGreaterThan(0);
   });
 
   describe("detectIntegrateFramingIntent", () => {

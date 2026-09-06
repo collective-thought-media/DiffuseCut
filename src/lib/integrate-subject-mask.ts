@@ -120,19 +120,19 @@ export function computeIntegrateSubjectMaskBox(
   );
 
   const featherX = Math.max(
-    0,
+    8,
     Math.round(boxWidth * INTEGRATE_MASK_FEATHER_RATIO)
   );
-  // Hard first-pass mask when feather is 0. Soft first-pass feather leaves
-  // translucent limbs; edge blend is a separate geometric ring pass. When the
-  // box touches a frame edge, never feather that edge either.
+  // Softer top (hair, headroom), tighter bottom (feet stay near the ground
+  // line so contact reads instead of dissolving). When the box touches a
+  // frame edge (medium shot / close-up framing) the crop happens at the image
+  // border, so feathering there would only ghost the subject.
   const touchesTop = y <= 2;
   const touchesBottom = y + boxHeight >= frameHeight - 2;
-  const featherTop = featherX === 0 || touchesTop ? 0 : featherX;
-  const featherBottom =
-    featherX === 0 || touchesBottom
-      ? 0
-      : Math.max(0, Math.round(featherX * 0.6));
+  const featherTop = touchesTop ? 0 : featherX;
+  const featherBottom = touchesBottom
+    ? 0
+    : Math.max(8, Math.round(featherX * 0.6));
 
   return {
     frameWidth,
