@@ -15,8 +15,8 @@ describe("integrate-subject-mask", () => {
     const subjectHeight = Math.round(832 * 0.55);
     // Box is taller than the subject: headroom keeps the head inside the
     // fully-denoised mask area instead of cropped by the hard edge.
-    expect(box.boxHeight).toBe(Math.round(subjectHeight * 1.22));
-    expect(box.boxWidth).toBe(Math.round(subjectHeight * 0.62));
+    expect(box.boxHeight).toBe(Math.round(subjectHeight * 1.28));
+    expect(box.boxWidth).toBe(Math.round(subjectHeight * 0.95));
     // Feet at 95% of frame height.
     expect(box.y + box.boxHeight).toBe(Math.round(832 * 0.95));
     // Horizontally centered.
@@ -52,9 +52,11 @@ describe("integrate-subject-mask", () => {
       frameWidth: 1216,
       frameHeight: 832,
     });
-    expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.55) * 1.22));
-    expect(box.featherX).toBeGreaterThan(0);
-    expect(box.featherBottom).toBeLessThan(box.featherTop);
+    expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.55) * 1.28));
+    // Hard mask: soft feather reads as translucent limbs over the plate.
+    expect(box.featherX).toBe(0);
+    expect(box.featherTop).toBe(0);
+    expect(box.featherBottom).toBe(0);
   });
 
   it("runs the box to the frame edges for medium-shot framing with no edge feather", () => {
@@ -72,7 +74,7 @@ describe("integrate-subject-mask", () => {
     // No feather at edges the box touches (feather there would ghost the subject).
     expect(box.featherTop).toBe(0);
     expect(box.featherBottom).toBe(0);
-    expect(box.featherX).toBeGreaterThan(0);
+    expect(box.featherX).toBe(0);
   });
 
   describe("detectIntegrateFramingIntent", () => {

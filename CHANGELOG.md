@@ -32,6 +32,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Character likeness High is mode-aware again: hard lock in Character reference mode, a usable bump in Integrate in scene that stays below the mush threshold.
 - Integrate in scene no longer leaves ghosted figures through the set: subject-mask denoise is full strength, the feather band is thinner, likeness Balanced is firmer again, and prompts ban transparent / double-exposure subjects.
 - Integrate in scene locks character body plan with linear IP-Adapter again. Style transfer was only keeping color, so non-human sheets invented a new anatomy every option.
+- Integrate subject masks are wider and hard-edged (no feather). Soft mask edges were fading tails and limbs into the location plate, which counts as a failed still.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.
