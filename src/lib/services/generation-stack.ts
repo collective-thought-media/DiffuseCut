@@ -23,6 +23,7 @@ import {
   isKrea2ImageEngine,
   isKrea2UnetAvailable,
   pickDefaultImageCheckpoint,
+  shouldPreferKrea2StillEngine,
   sortImageCheckpointsForPicker,
 } from "@/lib/services/image-checkpoints";
 import { nowMs } from "@/lib/utils";
@@ -223,19 +224,39 @@ export async function getGenerationStack(
     filterImageGenerationCheckpoints(availableCheckpoints)
   );
   const krea2Available = isKrea2UnetAvailable(diffusionModels);
+  let workingSettings = renderSettings;
+
+  if (krea2Available && shouldPreferKrea2StillEngine(renderSettings)) {
+    const detectedUnet = detectKrea2Unet(diffusionModels);
+    workingSettings = {
+      ...renderSettings,
+      imageEngine: "krea2",
+      characterSheetTemplateId: BUILTIN_KREA2_STILL_TEMPLATE_ID,
+      ...(detectedUnet ? { imageUnet: detectedUnet } : {}),
+    };
+    db.update(schema.projects)
+      .set({
+        renderSettingsJson: JSON.stringify(workingSettings),
+        updatedAt: nowMs(),
+      })
+      .where(eq(schema.projects.id, projectId))
+      .run();
+  }
+
   const template = await resolveCharacterSheetTemplateMeta(projectId);
 
   const imageEngine: GenerationStack["imageEngine"] =
-    isKrea2ImageEngine(renderSettings.imageEngine) ||
+    isKrea2ImageEngine(workingSettings.imageEngine) ||
     isKrea2StillTemplate(template.id)
       ? "krea2"
       : "sdxl";
 
   let effectiveCheckpoint: string | null = null;
   let needsCheckpointSelection = availableCheckpoints.length === 0;
-  let effectiveImageUnet: string | null = renderSettings.imageUnet?.trim() || null;
+  let effectiveImageUnet: string | null =
+    workingSettings.imageUnet?.trim() || null;
 
-  let configuredCheckpoint = renderSettings.checkpoint?.trim() || null;
+  let configuredCheckpoint = workingSettings.checkpoint?.trim() || null;
 
   if (imageEngine === "krea2") {
     needsCheckpointSelection = !krea2Available || !effectiveImageUnet;
@@ -250,7 +271,7 @@ export async function getGenerationStack(
           : availableCheckpoints;
       const resolution = await resolveCheckpoint(
         endpointUrl,
-        renderSettings,
+        workingSettings,
         pool
       );
       effectiveCheckpoint = resolution.checkpoint;
@@ -258,7 +279,7 @@ export async function getGenerationStack(
         !configuredCheckpoint || !pool.includes(configuredCheckpoint);
       if (needsCheckpointSelection && effectiveCheckpoint) {
         const updated = withResolvedCheckpoint(
-          renderSettings,
+          workingSettings,
           effectiveCheckpoint
         );
         db.update(schema.projects)
@@ -269,6 +290,7 @@ export async function getGenerationStack(
           .where(eq(schema.projects.id, projectId))
           .run();
         configuredCheckpoint = effectiveCheckpoint;
+        workingSettings = updated;
         needsCheckpointSelection = false;
       }
     } catch {
@@ -291,8 +313,8 @@ export async function getGenerationStack(
     imageEngine,
     krea2Available,
     effectiveImageUnet,
-    loras: renderSettings.loras ?? [],
-    sampler: resolveImageSampler(renderSettings),
+    loras: workingSettings.loras ?? [],
+    sampler: resolveImageSampler(workingSettings),
   };
 }
 

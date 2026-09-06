@@ -6,6 +6,7 @@ import {
   pickDefaultImageCheckpoint,
   pickIpAdapterImageCheckpoint,
   resolveCheckpointForIpAdapter,
+  shouldPreferKrea2StillEngine,
   sortImageCheckpointsForPicker,
 } from "@/lib/services/image-checkpoints";
 
@@ -71,5 +72,16 @@ describe("image-checkpoints", () => {
       "RealVisXL_V5.0_fp16.safetensors",
       "ltx-2.3-22b-distilled-fp8.safetensors",
     ]);
+  });
+
+  it("prefers Krea only for unlocked still settings", () => {
+    expect(shouldPreferKrea2StillEngine({})).toBe(true);
+    expect(shouldPreferKrea2StillEngine({ imageEngine: "sdxl" })).toBe(false);
+    expect(shouldPreferKrea2StillEngine({ imageEngine: "krea2" })).toBe(false);
+    expect(
+      shouldPreferKrea2StillEngine({
+        checkpoint: "epicrealismXL_vxviiCrystalclear.safetensors",
+      })
+    ).toBe(false);
   });
 });

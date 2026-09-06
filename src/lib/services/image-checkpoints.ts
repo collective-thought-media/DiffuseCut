@@ -1,3 +1,8 @@
+import {
+  BUILTIN_CHARACTER_SHEET_TEMPLATE_ID,
+  BUILTIN_KREA2_STILL_TEMPLATE_ID,
+} from "@/lib/db/builtin-template-ids";
+
 /** Checkpoints that are not SDXL still-image models (video, music, etc.). */
 const NON_STILL_IMAGE_CHECKPOINT = /ltx|ace[-_]?step/i;
 
@@ -123,4 +128,28 @@ export function detectKrea2Unet(
 
 export function isKrea2UnetAvailable(diffusionModels: string[]): boolean {
   return Boolean(detectKrea2Unet(diffusionModels));
+}
+
+/**
+ * Prefer local Krea 2 turbo for brand-new still settings when the UNET is on
+ * ComfyUI. Do not override an explicit SDXL engine or a locked SDXL checkpoint.
+ */
+export function shouldPreferKrea2StillEngine(settings: {
+  imageEngine?: string | null;
+  checkpoint?: string | null;
+  characterSheetTemplateId?: string | null;
+}): boolean {
+  if (settings.imageEngine === "sdxl" || settings.imageEngine === "krea2") {
+    return false;
+  }
+  if (settings.checkpoint?.trim()) return false;
+  const templateId = settings.characterSheetTemplateId?.trim();
+  if (
+    templateId &&
+    templateId !== BUILTIN_CHARACTER_SHEET_TEMPLATE_ID &&
+    templateId !== BUILTIN_KREA2_STILL_TEMPLATE_ID
+  ) {
+    return false;
+  }
+  return true;
 }

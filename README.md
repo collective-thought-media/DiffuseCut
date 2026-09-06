@@ -37,7 +37,8 @@ Project tabs, in order: **Dashboard, Characters, Locations, Storyboard, Render, 
 | Writable app data dir | Always | Auto-created |
 | FFmpeg + ffprobe | Export | No |
 | ComfyUI server | Render and generation | No |
-| SDXL checkpoints on ComfyUI | Character and location sheets | No |
+| SDXL checkpoints on ComfyUI | Character and location sheets, IP-Adapter shot modes | No |
+| Krea 2 turbo stack on ComfyUI (UNET + Qwen3-VL + qwen_image VAE) | Optional faster stills engine; preferred automatically when present and the project has not locked an SDXL model | No |
 | IP-Adapter nodes + weights | Anchored location angles (recommended) | No |
 | LTX 2.3 nodes + models | Default shot video workflow | No |
 | Qwen Image Edit 2511 + Lightning LoRA | Scene edit shot mode (optional) | No |
@@ -181,10 +182,13 @@ Per-project FPS, optional ComfyUI endpoint override, character-sheet template ov
 
 | Template | Used for |
 |----------|----------|
-| Character sheet (SDXL txt2img) | Character turnaround stills |
-| Location reference (IP-Adapter) | Location angles from an establishing plate |
+| Krea 2 turbo (txt2img) | Preferred stills engine when the Krea UNET stack is installed on ComfyUI |
+| Character sheet (SDXL txt2img) | Character and location stills when using SDXL |
+| Location reference (IP-Adapter) | Location angles from an establishing plate (SDXL) |
 | LTX 2.3 I2V | Default shot video from a still |
 | ACE-Step 1.5 | Finishing score generation |
+
+Character-into-location shot modes (Integrate in scene, Dual, Composited) still use the SDXL IP-Adapter path. Pick an SDXL checkpoint for those, or keep Krea for prompt-driven sheets and punch-in plates.
 
 You can import your own ComfyUI **API** workflows in Settings and bind them as shot video, character sheet, or location sheet templates.
 

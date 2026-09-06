@@ -18,4 +18,6 @@ Local text-to-image using the Krea 2 turbo stack on ComfyUI.
 
 Select **Krea 2 turbo** in the storyboard Image model picker, or set `characterSheetTemplateId` to `builtin-krea2-still-v1` in Render settings. Tune UNET/VAE/encoder in Render under Image generation.
 
-IP-Adapter dual-reference shots still use SDXL until a Krea reference workflow exists.
+On a fresh project with no locked SDXL checkpoint, DiffuseCut prefers Krea 2 automatically when `krea2_turbo_fp8_scaled` is present under ComfyUI `models/diffusion_models/`.
+
+IP-Adapter dual-reference and integrate-in-scene shots still use SDXL until a Krea reference workflow exists.
