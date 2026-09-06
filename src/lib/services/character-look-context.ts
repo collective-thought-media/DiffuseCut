@@ -23,9 +23,9 @@ export function buildStateLookContext(
 
 /**
  * Shot cast line when a character reference image is already attached.
- * Name and look label only. Description and look text stay out so phrases
- * like "no redhead" cannot activate the forbidden concept in the positive,
- * and the reference image carries likeness instead.
+ * Keep a short positive identity line (species / build) from the character
+ * description after stripping "no redhead" style phrases. Look description
+ * stays out so wardrobe leftovers cannot override the sheet.
  */
 export function buildStateIdentityContext(
   character: Character,
@@ -33,6 +33,10 @@ export function buildStateIdentityContext(
 ): string {
   const parts = [character.name.trim()];
   if (state.name.trim()) parts.push(`(${state.name.trim()})`);
+  const { cleaned } = splitPositiveNegationPhrases(character.description);
+  if (cleaned) {
+    parts.push(`: ${cleaned}`);
+  }
   return parts.join(" ");
 }
 

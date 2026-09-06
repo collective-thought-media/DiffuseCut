@@ -139,8 +139,8 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
  * at higher weights than linear.
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
-  weight: 0.78,
-  endAt: 0.88,
+  weight: 0.62,
+  endAt: 0.72,
   preset: "PLUS (high strength)",
   weightType: "style transfer",
 };
@@ -171,7 +171,7 @@ export const SHOT_IDENTITY_STRENGTH_PRESETS: Record<
   "low" | "balanced" | "high",
   { weight: number; endAt: number }
 > = {
-  low: { weight: 0.55, endAt: 0.7 },
-  balanced: { weight: 0.78, endAt: 0.88 },
-  high: { weight: 0.9, endAt: 0.95 },
+  low: { weight: 0.48, endAt: 0.62 },
+  balanced: { weight: 0.62, endAt: 0.72 },
+  high: { weight: 0.72, endAt: 0.82 },
 };

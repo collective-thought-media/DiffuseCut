@@ -59,7 +59,7 @@ describe("shot cast identity vs look", () => {
     expect(buildStateIdentityContext(jasmine, look).toLowerCase()).not.toContain(
       "redhead"
     );
-    expect(buildStateIdentityContext(jasmine, look).toLowerCase()).not.toContain(
+    expect(buildStateIdentityContext(jasmine, look).toLowerCase()).toContain(
       "blue dragon"
     );
     expect(buildStateIdentityContext(jasmine, look)).toContain("Jasmine");
@@ -70,7 +70,7 @@ describe("shot cast identity vs look", () => {
       preferCharacterIdentityOverLook: true,
     });
     expect(context.toLowerCase()).not.toContain("redhead");
-    expect(context.toLowerCase()).not.toContain("blue dragon");
+    expect(context.toLowerCase()).toContain("blue dragon");
     expect(context).toContain("Jasmine");
   });
 

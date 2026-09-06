@@ -32,7 +32,17 @@ export function detectDetailMacroShot(description: string): boolean {
   }
 
   const lower = description.toLowerCase();
-  return /\b(close-?up|close up|macro|extreme macro|tight close|tight shot|detail shot|texture fill|fills the frame|subject fills|inches from)\b/.test(
+  // Storyboard framing sizes like "close-up" and "medium close-up" are normal
+  // shot sizes. Macro mode is only for extreme texture / ECU detail plates.
+  if (
+    /\bmedium close-?up\b|\bmedium shot\b|\bwaist[- ]?up\b|\bbust shot\b|\bhead and shoulders\b|\bcowboy shot\b/.test(
+      lower
+    )
+  ) {
+    return false;
+  }
+
+  return /\b(macro|extreme macro|extreme close-?up|ecu\b|tight close|detail shot|texture fill|fills the frame|subject fills|inches from|pore[- ]?level|skin texture)\b/.test(
     lower
   );
 }

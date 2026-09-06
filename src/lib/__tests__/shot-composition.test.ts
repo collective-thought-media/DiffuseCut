@@ -24,17 +24,17 @@ describe("shot composition detection", () => {
     expect(detectDetailMacroShot(SENTINELS_PROMPT)).toBe(false);
   });
 
-  it("does not skip reference images (IP-Adapter always used when available)", () => {
+  it("does not treat storyboard medium close-ups as macro detail plates", () => {
     expect(
-      shouldSkipShotReferenceImage(
-        "close-up on the back of Azrael, feathers emerging"
+      detectDetailMacroShot(
+        "medium close-up from the waist up, looking straight to camera"
       )
     ).toBe(false);
     expect(
-      shouldSkipShotReferenceImage("wide establishing shot of the stairway")
+      detectDetailMacroShot("Close-up of Jasmine holding a sword in the lair")
     ).toBe(false);
     expect(
-      shouldSkipShotReferenceImage("rear view of Azrael on the stairway")
-    ).toBe(false);
+      detectDetailMacroShot("extreme macro close-up on scale texture")
+    ).toBe(true);
   });
 });

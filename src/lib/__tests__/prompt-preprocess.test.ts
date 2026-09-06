@@ -560,6 +560,16 @@ describe("buildShotPlaceholderNegativePrompt", () => {
     );
     expect(negative.toLowerCase()).toContain("front view");
     expect(negative.toLowerCase()).toContain("face visible");
+  });
+
+  it("adds macro detail negatives only for extreme macro prompts", async () => {
+    const { buildShotPlaceholderNegativePrompt } = await import(
+      "@/lib/services/prompt-preprocess"
+    );
+    const negative = buildShotPlaceholderNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      "extreme macro close-up on scale texture"
+    );
     expect(negative.toLowerCase()).toContain("full body");
   });
 
