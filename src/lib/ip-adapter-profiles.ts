@@ -132,17 +132,17 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
   IP_ADAPTER_REFRAME_PROFILES.character_lock;
 
 /**
- * Integrate in scene: keep character identity, outfit, and look but drop the
- * reference image's pose and composition. Linear weight transfers composition,
- * so a crouching or seated casting reference forces that pose into every shot;
- * style transfer carries appearance without the pose. Style transfer operates
- * at higher weights than linear.
+ * Integrate in scene: lock species silhouette and body plan from the character
+ * sheet. Style transfer only carries color/look, so non-human sheets (dragons,
+ * creatures) collapse into random blue blobs across seeds. Linear at a moderate
+ * weight keeps anatomy stable; pose is steered by integrate prompt suffixes,
+ * not by cranking IP into mush territory.
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
-  weight: 0.68,
-  endAt: 0.78,
+  weight: 0.58,
+  endAt: 0.72,
   preset: "PLUS (high strength)",
-  weightType: "style transfer",
+  weightType: "linear",
 };
 
 /** Virtual backdrop dual chain: character first, location last so gray wins over sheet bg. */
@@ -180,9 +180,9 @@ export const INTEGRATE_IDENTITY_STRENGTH_PRESETS: Record<
   "low" | "balanced" | "high",
   { weight: number; endAt: number }
 > = {
-  low: { weight: 0.52, endAt: 0.62 },
-  balanced: { weight: 0.68, endAt: 0.78 },
-  high: { weight: 0.75, endAt: 0.85 },
+  low: { weight: 0.45, endAt: 0.58 },
+  balanced: { weight: 0.58, endAt: 0.72 },
+  high: { weight: 0.68, endAt: 0.82 },
 };
 
 /** @deprecated Prefer mode-specific tables via resolveShotIdentityStrengthPreset. */

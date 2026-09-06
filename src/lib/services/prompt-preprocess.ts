@@ -767,10 +767,10 @@ export const SHOT_INTEGRATE_IN_SCENE_NEGATIVE =
  * reference is a dragon or other non-human.
  */
 export const SHOT_CHARACTER_REFERENCE_BODY_LOCK =
-  "exact same species, anatomy, and body plan as the character reference image, match the reference silhouette and features, do not replace the subject with a different species";
+  "exact same species, anatomy, silhouette, limb count, and body plan as the character reference image, match the reference proportions and features, keep one coherent solid body, do not replace the subject with a different species or invent a new creature shape";
 
 export const SHOT_CHARACTER_REFERENCE_BODY_LOCK_NEGATIVE =
-  "wrong species, replaced with a human, human woman, human man, redhead woman, human face on animal body, anthropomorphic redesign that ignores the reference, different creature than the character reference";
+  "wrong species, replaced with a human, human woman, human man, redhead woman, human face on animal body, anthropomorphic redesign that ignores the reference, different creature than the character reference, melted anatomy, morphing body, inconsistent limb count, blob body, deformed silhouette";
 
 /**
  * Inside a masked inpaint the plate already fixes the framing, and

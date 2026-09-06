@@ -175,10 +175,12 @@ export function ShotStillReferenceControls({
             )}
           </Select>
           <p className="text-xs text-muted-foreground">
-            How strongly the character sheet locks identity. High is meant to
-            be used: in Character reference mode it locks hard; in Integrate in
-            scene it still bumps likeness without crushing pose and anatomy.
-            Lower it when the prompt should lead pose and framing.
+            How strongly the character sheet locks identity and body plan. High
+            is meant to be used: in Character reference mode it locks hard; in
+            Integrate in scene it bumps likeness without crushing pose. For
+            creatures and non-human sheets, Balanced or High keeps anatomy from
+            inventing a new body every option. Lower it when the prompt should
+            lead pose and framing.
           </p>
         </div>
       ) : null}

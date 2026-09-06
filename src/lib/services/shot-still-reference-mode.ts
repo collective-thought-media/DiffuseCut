@@ -221,10 +221,10 @@ export function resolveShotStillReferencePlan(
     stillReferenceMode: mode,
     referenceFocus,
     useIpAdapter,
-    // Integrate in scene: style-transfer IP-Adapter keeps character identity
-    // and outfit but drops the casting reference's pose/composition, so a
-    // crouched or seated reference cannot dictate the shot pose. Identity
-    // strength presets on the shot may overwrite weight/endAt downstream.
+    // Integrate in scene: linear IP-Adapter locks species/body plan from the
+    // sheet (style transfer alone cannot invent consistent non-human anatomy
+    // across seeds). Pose is steered by prompt suffixes; identity strength
+    // presets on the shot may overwrite weight/endAt downstream.
     ipAdapterWeight: useIntegrateInScene
       ? INTEGRATE_IN_SCENE_CHARACTER_PROFILE.weight
       : undefined,
