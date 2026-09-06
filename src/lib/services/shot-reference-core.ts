@@ -138,16 +138,29 @@ export function resolveShotCastReferenceSplit(
     [];
 
   for (const entry of cast) {
+    // Prefer explicit angles. If callers only nest angles on state (API shape),
+    // do not wipe them with `entry.angles ?? []` or cover falls back to a
+    // stale state/character referencePath.
+    const nestedAngles =
+      "angles" in entry.state && Array.isArray(entry.state.angles)
+        ? entry.state.angles
+        : [];
+    const angles = entry.angles ?? nestedAngles;
     const coverPath = resolveCharacterStateCoverPath({
       ...entry.state,
-      angles: entry.angles ?? [],
+      angles,
     });
     const referencePath =
       coverPath ??
       entry.state.referencePath ??
       entry.character.referencePath;
+    const coverAngle = angles.find(
+      (angle) => angle.referencePath === referencePath
+    );
     const referenceKind =
-      entry.state.referenceKind ?? entry.character.referenceKind;
+      coverAngle?.referenceKind ??
+      entry.state.referenceKind ??
+      entry.character.referenceKind;
     if (
       !ipAdapterEntry &&
       isUsableImagePath(referencePath, referenceKind)

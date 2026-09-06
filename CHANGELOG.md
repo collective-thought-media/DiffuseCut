@@ -19,6 +19,10 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Location angles can punch in from the establishing plate with an optical crop and scale. Same room pixels, tighter framing, no diffusion.
 - Fresh projects prefer Krea 2 turbo for stills when that UNET stack is installed on ComfyUI and the project has not locked an SDXL checkpoint yet.
 - Shot stills with a character reference image no longer inject the state's look description or wardrobe lock text, so an old redhead / dress paragraph cannot override a regenerated dragon sheet. The newest front angle is preferred when several front angles exist.
+- Visual reference on the storyboard shows the exact character and location image files sent to ComfyUI, so a stale sheet is obvious when prompt and negatives cannot override IP-Adapter.
+- Shot cast reference resolution no longer drops nested character angles and falls back to a leftover state-level image path.
+- Integrate / Dual shot prompts no longer force "one person" or "human scale," and when a character sheet is attached they lock species and body plan to that reference so a dragon sheet is not overwritten by a human-sounding name.
+- Saving a Front character reference clears other Front angles in that look, so an older redhead sheet cannot keep competing with the one you just accepted.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

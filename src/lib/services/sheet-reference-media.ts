@@ -7,6 +7,7 @@ import { resolveProjectRoot } from "@/lib/paths/project-paths";
 import {
   getCharacterAngle,
   getCharacterState,
+  listCharacterAngles,
   listCharacterStates,
   syncCharacterReferenceFromState,
 } from "@/lib/services/character-states";
@@ -57,6 +58,58 @@ function removeReferenceFile(projectRoot: string, referencePath: string | null) 
     /* ignore missing files */
   }
 }
+
+function isFrontAngleName(name: string): boolean {
+  return name.trim().toLowerCase().includes("front");
+}
+
+/**
+ * When a Front reference is the active cover, clear other Front angles in the
+ * same look so an older redhead Front cannot keep competing with the sheet
+ * the user just accepted.
+ */
+export function clearStaleSiblingFrontAngleReferences(
+  projectRoot: string,
+  characterId: string,
+  stateId: string,
+  keepAngleId: string,
+  options?: { resync?: boolean }
+): void {
+  const angles = listCharacterAngles(stateId);
+  const keep = angles.find((angle) => angle.id === keepAngleId);
+  if (!keep || !isFrontAngleName(keep.name)) return;
+
+  const db = getDb();
+  const ts = nowMs();
+  let cleared = false;
+  for (const angle of angles) {
+    if (angle.id === keepAngleId) continue;
+    if (!isFrontAngleName(angle.name)) continue;
+    if (!angle.referencePath) continue;
+
+    removeReferenceFile(projectRoot, angle.referencePath);
+    db.update(schema.characterAngles)
+      .set({
+        referencePath: null,
+        referenceKind: null,
+        referenceSource: null,
+        updatedAt: ts,
+      })
+      .where(eq(schema.characterAngles.id, angle.id))
+      .run();
+    cleared = true;
+  }
+
+  if (cleared && options?.resync !== false) {
+    const stateWithAngles = listCharacterStates(characterId).find(
+      (item) => item.id === stateId
+    );
+    if (stateWithAngles) {
+      syncCharacterReferenceFromState(characterId, stateWithAngles, projectRoot);
+    }
+  }
+}
+
 
 export async function applyLocationAngleReferenceMedia(
   projectId: string,
@@ -217,6 +270,13 @@ export async function applyCharacterAngleReferenceMedia(
   if (stateWithAngles) {
     syncCharacterReferenceFromState(characterId, stateWithAngles, projectRoot);
   }
+  clearStaleSiblingFrontAngleReferences(
+    projectRoot,
+    characterId,
+    stateId,
+    angleId,
+    { resync: true }
+  );
 
   return { angle: updated, relativePath, kind };
 }

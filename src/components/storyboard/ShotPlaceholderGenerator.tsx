@@ -23,6 +23,7 @@ import {
   type ShotPlaceholderBatchState,
   type UseShotPlaceholderBatchProps,
 } from "@/components/storyboard/use-shot-placeholder-batch";
+import { mediaUrl } from "@/lib/media-url";
 
 const ShotPlaceholderBatchContext =
   createContext<ShotPlaceholderBatchState | null>(null);
@@ -55,24 +56,72 @@ export function ShotPlaceholderBatchProvider({
 }
 
 export function ShotReferenceInfoPanel({
+  projectId,
   usesReferenceMedia = false,
   usesDualIpAdapter = false,
   usesCharacterReference = false,
   referenceMediaLabel,
   referenceMediaDetail,
+  characterReferencePath,
+  locationReferencePath,
 }: {
+  projectId?: string;
   usesReferenceMedia?: boolean;
   usesDualIpAdapter?: boolean;
   usesCharacterReference?: boolean;
   referenceMediaLabel?: string | null;
   referenceMediaDetail?: string | null;
+  characterReferencePath?: string | null;
+  locationReferencePath?: string | null;
 }) {
   const { ipAdapterAvailable } = useShotPlaceholderContext();
 
   if (!usesReferenceMedia) return null;
 
+  const showThumbs =
+    Boolean(projectId) &&
+    (Boolean(characterReferencePath) || Boolean(locationReferencePath));
+
   return (
-    <div className="rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 text-sm text-muted-foreground">
+    <div className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-950/60 p-3 text-sm text-muted-foreground">
+      {showThumbs ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {characterReferencePath ? (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-foreground">
+                Character image sent to ComfyUI
+              </p>
+              <div className="aspect-video overflow-hidden rounded-md border border-neutral-800 bg-neutral-900">
+                <img
+                  src={mediaUrl(projectId!, characterReferencePath)}
+                  alt="Character reference used for this shot"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+              <p className="text-xs text-amber-200/90">
+                This exact file locks face and wardrobe. Prompt and negative text
+                cannot override it. If this is still the old humanoid, replace
+                that angle&apos;s reference on the character page.
+              </p>
+            </div>
+          ) : null}
+          {locationReferencePath ? (
+            <div className="space-y-1.5">
+              <p className="text-xs font-medium text-foreground">
+                Location plate sent to ComfyUI
+              </p>
+              <div className="aspect-video overflow-hidden rounded-md border border-neutral-800 bg-neutral-900">
+                <img
+                  src={mediaUrl(projectId!, locationReferencePath)}
+                  alt="Location reference used for this shot"
+                  className="h-full w-full object-contain"
+                />
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {ipAdapterAvailable !== false ? (
         <>
           {usesDualIpAdapter ? (
@@ -91,9 +140,9 @@ export function ShotReferenceInfoPanel({
           )}
           {usesCharacterReference ? (
             <span className="mt-2 block text-xs text-sky-200/90">
-              Character reference locks face and wardrobe. Add outfit and
-              appearance details on the character state&apos;s look description
-              for a closer match.
+              Character likeness is driven by the character image above, not by
+              negative prompts. Clear or replace that image if the wrong face
+              keeps appearing.
             </span>
           ) : null}
           {referenceMediaDetail ? (

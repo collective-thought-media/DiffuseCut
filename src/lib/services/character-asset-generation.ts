@@ -24,6 +24,7 @@ import {
   resolveCharacterAnchorReferencePath,
   syncCharacterReferenceFromState,
 } from "@/lib/services/character-states";
+import { clearStaleSiblingFrontAngleReferences } from "@/lib/services/sheet-reference-media";
 import {
   buildAnchoredCharacterAngleReferenceDescription,
   resolveCharacterBackAngleId,
@@ -668,6 +669,14 @@ export async function selectCharacterAngleReferenceOption(
   if (currentState) {
     syncCharacterReferenceFromState(characterId, currentState, projectRoot);
   }
+  const frontKeepId = selectOptions?.splitPair?.frontAngleId ?? angleId;
+  clearStaleSiblingFrontAngleReferences(
+    projectRoot,
+    characterId,
+    stateId,
+    frontKeepId,
+    { resync: true }
+  );
 
   const updated = db
     .select()

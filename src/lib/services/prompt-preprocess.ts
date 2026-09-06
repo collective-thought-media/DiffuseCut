@@ -739,7 +739,7 @@ export const DEFAULT_SHOT_STILL_NEGATIVE =
 
 
 export const SHOT_DUAL_IPADAPTER_LAYOUT_SUFFIX =
-  "one person clearly visible in the environment, character present in frame, not an empty room, not a vacant set";
+  "the character clearly visible in the environment, subject present in frame, not an empty room, not a vacant set";
 
 export const SHOT_COMPOSITED_CAMERA_SUFFIX =
   "35mm lens at f/1.8, shallow depth of field, subject sharp in foreground, background soft bokeh blur, medium shot, subject large in frame and centered, feet on pavement, on-location cinematic storyboard still, not a distant wide establishing shot, not a tiny figure in the scene";
@@ -751,10 +751,22 @@ export const SHOT_COMPOSITED_NEGATIVE =
   "tiny figure, distant subject, small person in frame, environmental wide master, full scene establishing shot, sharp background, deep focus, everything in focus, pasted cutout, floating subject, bad composite, halo around subject, warm subject on cool background, cool subject on warm background, mismatched white balance, split color grading";
 
 export const SHOT_INTEGRATE_IN_SCENE_SUFFIX =
-  "the character clearly visible in the frame, one person present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at natural human scale for their distance from the camera, correctly proportioned to the doorways, windows, and street furniture around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
+  "the character clearly visible in the frame, subject present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at a natural scale for their distance from the camera, correctly proportioned to the doorways, windows, and set pieces around them, grounded on the visible floor plane, on-location cinematic storyboard still, not a cutout composite";
 
 export const SHOT_INTEGRATE_IN_SCENE_NEGATIVE =
-  "empty scene, deserted street with no one present, missing subject, character absent from frame, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant person, subject too large for the scene, wrong scale, out of proportion with the environment";
+  "empty scene, deserted street with no subject present, missing subject, character absent from frame, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant subject, subject too large for the scene, wrong scale, out of proportion with the environment";
+
+/**
+ * When a character reference image is attached, force the sampler to keep that
+ * sheet's species and body plan. Without this, integrate suffixes plus a
+ * human-sounding name (for example Jasmine) invent a person even when the
+ * reference is a dragon or other non-human.
+ */
+export const SHOT_CHARACTER_REFERENCE_BODY_LOCK =
+  "exact same species, anatomy, and body plan as the character reference image, match the reference silhouette and features, do not replace the subject with a different species";
+
+export const SHOT_CHARACTER_REFERENCE_BODY_LOCK_NEGATIVE =
+  "wrong species, replaced with a human, human woman, human man, redhead woman, human face on animal body, anthropomorphic redesign that ignores the reference, different creature than the character reference";
 
 /**
  * Inside a masked inpaint the plate already fixes the framing, and
@@ -769,7 +781,7 @@ const INTEGRATE_PROMPT_PHRASES_TO_STRIP = [
 
 /** Added only when the shot prompt does not ask for a supported or low pose. */
 export const SHOT_INTEGRATE_IN_SCENE_GROUNDED_POSE_SUFFIX =
-  "standing upright at full height, weight balanced on their own two feet, supported by their own body, not leaning on anything";
+  "standing at full height on the ground plane, weight balanced, supported by their own body, not leaning on anything";
 
 export const SHOT_INTEGRATE_IN_SCENE_NO_LEAN_NEGATIVE =
   "crouching, squatting, kneeling, hunched over, leaning on empty air, leaning against nothing, propped on an invisible object, resting an arm on nothing, phantom support, leaning against an object that is not there";
@@ -804,7 +816,7 @@ export function detectFacingCameraIntent(prompt: string): boolean {
 }
 
 export const SHOT_INTEGRATE_FACING_CAMERA_SUFFIX =
-  "facing the camera, face clearly visible to the camera, front of the body toward the viewer";
+  "facing the camera, head toward the camera, front of the subject toward the viewer";
 
 export const SHOT_INTEGRATE_FACING_CAMERA_NEGATIVE =
   "rear view, back view, seen from behind, back of head, turned away from camera, facing away";
@@ -826,10 +838,10 @@ export function detectSupportedPoseIntent(prompt: string): boolean {
  * the shot description is wrapped instead of suffixed with parity keywords.
  */
 export const SHOT_SCENE_EDIT_INSTRUCTION_PREFIX =
-  "Add the person from image 2 into the scene from image 1.";
+  "Add the subject from image 2 into the scene from image 1.";
 
 export const SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX =
-  "The person keeps the exact same face, hair, and outfit as in image 2, and interacts naturally with the scene, matching its lighting, shadows, and perspective. All architecture, doors, windows, signs, and objects in the scene keep their exact original size, position, and proportions from image 1; do not enlarge or move them. Scale the person realistically to the existing architecture: a doorway is taller than the person, and the person's head stays below the top of the door frame. Photorealistic cinematic still.";
+  "The subject keeps the exact same species, anatomy, face or head, and appearance as in image 2, and interacts naturally with the scene, matching its lighting, shadows, and perspective. All architecture, doors, windows, signs, and objects in the scene keep their exact original size, position, and proportions from image 1; do not enlarge or move them. Scale the subject realistically to the existing architecture: a doorway is taller than the subject, and the subject's head stays below the top of the door frame. Photorealistic cinematic still.";
 
 /**
  * Suffix for instruction edits of a finished still (Qwen Image Edit): apply
@@ -845,10 +857,12 @@ export function applyShotReferenceModePromptExtras(
     effectiveMode: string;
     useDualIpAdapter: boolean;
     useCompositingPipeline: boolean;
+    characterPath?: string | null;
   }
 ): { processedPrompt: string; negativePrompt: string } {
   let nextPrompt = processedPrompt;
   let nextNegative = negativePrompt;
+  const hasCharacterReference = Boolean(plan.characterPath);
 
   if (plan.effectiveMode === "scene_edit") {
     for (const phrase of INTEGRATE_PROMPT_PHRASES_TO_STRIP) {
@@ -886,6 +900,15 @@ export function applyShotReferenceModePromptExtras(
     if (detectFacingCameraIntent(processedPrompt)) {
       suffixParts.push(SHOT_INTEGRATE_FACING_CAMERA_SUFFIX);
     }
+  }
+  if (
+    hasCharacterReference &&
+    (plan.effectiveMode === "integrate_in_scene" ||
+      plan.effectiveMode === "character" ||
+      plan.effectiveMode === "composited" ||
+      plan.useDualIpAdapter)
+  ) {
+    suffixParts.push(SHOT_CHARACTER_REFERENCE_BODY_LOCK);
   }
 
   for (const part of suffixParts) {
@@ -935,6 +958,19 @@ export function applyShotReferenceModePromptExtras(
     nextNegative = nextNegative
       ? `${nextNegative}, ${SHOT_INTEGRATE_IN_SCENE_NO_LEAN_NEGATIVE}`
       : SHOT_INTEGRATE_IN_SCENE_NO_LEAN_NEGATIVE;
+  }
+
+  if (
+    hasCharacterReference &&
+    (plan.effectiveMode === "integrate_in_scene" ||
+      plan.effectiveMode === "character" ||
+      plan.effectiveMode === "composited" ||
+      plan.useDualIpAdapter) &&
+    !nextNegative.includes("wrong species")
+  ) {
+    nextNegative = nextNegative
+      ? `${nextNegative}, ${SHOT_CHARACTER_REFERENCE_BODY_LOCK_NEGATIVE}`
+      : SHOT_CHARACTER_REFERENCE_BODY_LOCK_NEGATIVE;
   }
 
   return { processedPrompt: nextPrompt, negativePrompt: nextNegative };

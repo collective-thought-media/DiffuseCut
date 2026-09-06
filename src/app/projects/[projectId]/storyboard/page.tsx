@@ -7,6 +7,7 @@ import type {
   LocationState,
   Shot,
   Character,
+  CharacterAngle,
   CharacterState,
 } from "@/lib/db/schema";
 import { buildAngleReferenceDescription } from "@/lib/location-preview";
@@ -58,7 +59,9 @@ type StoryboardShot = Shot & {
   characterIds: string[];
 };
 
-type CharacterWithStates = Character & { states: CharacterState[] };
+type CharacterWithStates = Character & {
+  states: Array<CharacterState & { angles?: CharacterAngle[] }>;
+};
 type LocationWithStates = Location & {
   states: Array<LocationState & { angles: LocationAngle[] }>;
 };
@@ -115,9 +118,13 @@ export default function StoryboardPage({ params }: PageProps) {
           character.states.find((s) => s.id === entry.characterStateId) ??
           character.states[0];
         if (!state) return null;
-        return { character, state };
+        return { character, state, angles: state.angles ?? [] };
       })
-      .filter(Boolean) as Array<{ character: Character; state: CharacterState }>;
+      .filter(Boolean) as Array<{
+      character: Character;
+      state: CharacterState;
+      angles: CharacterAngle[];
+    }>;
 
     let locationDetail: string | null = null;
     if (selectedLocation?.states.length) {
@@ -144,7 +151,11 @@ export default function StoryboardPage({ params }: PageProps) {
       cast: castEntries,
       preferCharacterIdentityOverLook: castEntries.some(
         (entry) =>
-          Boolean(entry.state.referencePath || entry.character.referencePath)
+          Boolean(
+            entry.angles.some((angle) => angle.referencePath) ||
+              entry.state.referencePath ||
+              entry.character.referencePath
+          )
       ),
     });
   }, [selectedShot, selectedLocation, characters]);
@@ -157,6 +168,8 @@ export default function StoryboardPage({ params }: PageProps) {
         usesCharacterReference: false,
         referenceMediaLabel: null as string | null,
         referenceDetail: null as string | null,
+        characterReferencePath: null as string | null,
+        locationReferencePath: null as string | null,
         stillReferenceMode: "auto" as ShotStillReferenceMode,
         identityStrength: "balanced" as ShotIdentityStrength,
         showIdentityStrength: false,
@@ -179,9 +192,13 @@ export default function StoryboardPage({ params }: PageProps) {
           character.states.find((s) => s.id === entry.characterStateId) ??
           character.states[0];
         if (!state) return null;
-        return { character, state };
+        return { character, state, angles: state.angles ?? [] };
       })
-      .filter(Boolean) as Array<{ character: Character; state: CharacterState }>;
+      .filter(Boolean) as Array<{
+      character: Character;
+      state: CharacterState;
+      angles: CharacterAngle[];
+    }>;
 
     const refs = resolveShotReferencePathsFromData({
       shot: selectedShot,
@@ -218,6 +235,8 @@ export default function StoryboardPage({ params }: PageProps) {
         usesCharacterReference: false,
         referenceMediaLabel: null,
         referenceDetail: null,
+        characterReferencePath: null,
+        locationReferencePath: null,
         stillReferenceMode,
         identityStrength,
         showIdentityStrength,
@@ -285,13 +304,22 @@ export default function StoryboardPage({ params }: PageProps) {
       );
     }
 
+    const usesCharacterImage =
+      Boolean(plan.characterPath) &&
+      (plan.effectiveMode === "character" ||
+        plan.effectiveMode === "integrate_in_scene" ||
+        plan.effectiveMode === "composited" ||
+        plan.effectiveMode === "scene_edit" ||
+        plan.useDualIpAdapter);
+
     return {
       usesReferenceMedia: plan.useIpAdapter,
       usesDualIpAdapter: plan.useDualIpAdapter,
-      usesCharacterReference:
-        plan.effectiveMode === "character" || plan.useDualIpAdapter,
+      usesCharacterReference: usesCharacterImage,
       referenceMediaLabel: plan.label ?? refs.primaryLabel,
       referenceDetail: detailParts.length > 0 ? detailParts.join(" ") : null,
+      characterReferencePath: plan.characterPath,
+      locationReferencePath: plan.locationPath,
       stillReferenceMode,
       identityStrength,
       showIdentityStrength,
@@ -788,11 +816,14 @@ export default function StoryboardPage({ params }: PageProps) {
               }}
             />
             <ShotReferenceInfoPanel
+              projectId={projectId}
               usesReferenceMedia={shotReferenceMeta.usesReferenceMedia}
               usesDualIpAdapter={shotReferenceMeta.usesDualIpAdapter}
               usesCharacterReference={shotReferenceMeta.usesCharacterReference}
               referenceMediaLabel={shotReferenceMeta.referenceMediaLabel}
               referenceMediaDetail={shotReferenceMeta.referenceDetail}
+              characterReferencePath={shotReferenceMeta.characterReferencePath}
+              locationReferencePath={shotReferenceMeta.locationReferencePath}
             />
           </Card>
 

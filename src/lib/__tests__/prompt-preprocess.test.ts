@@ -649,11 +649,33 @@ describe("buildShotPlaceholderNegativePrompt", () => {
       }
     );
     expect(result.processedPrompt).toContain(SHOT_INTEGRATE_IN_SCENE_SUFFIX);
-    expect(result.processedPrompt).toContain("natural human scale");
+    expect(result.processedPrompt).toContain("natural scale");
+    expect(result.processedPrompt).not.toContain("natural human scale");
+    expect(result.processedPrompt).not.toContain("one person present");
     expect(result.processedPrompt).toContain("not leaning on anything");
     expect(result.negativePrompt).toContain("pasted cutout");
     expect(result.negativePrompt).toContain("oversized subject");
     expect(result.negativePrompt).toContain("leaning on empty air");
+  });
+
+  it("locks species to the character reference when a character sheet is attached", async () => {
+    const {
+      applyShotReferenceModePromptExtras,
+      SHOT_CHARACTER_REFERENCE_BODY_LOCK,
+    } = await import("@/lib/services/prompt-preprocess");
+    const result = applyShotReferenceModePromptExtras(
+      "Jasmine standing in the dragon lair looking to camera",
+      "blurry",
+      {
+        effectiveMode: "integrate_in_scene",
+        useDualIpAdapter: false,
+        useCompositingPipeline: false,
+        characterPath: "characters/jasmine/dragon.png",
+      }
+    );
+    expect(result.processedPrompt).toContain(SHOT_CHARACTER_REFERENCE_BODY_LOCK);
+    expect(result.negativePrompt).toContain("wrong species");
+    expect(result.negativePrompt).toContain("redhead woman");
   });
 
   it("skips anti-lean extras when the shot prompt asks for a supported pose", async () => {

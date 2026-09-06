@@ -83,4 +83,37 @@ describe("resolveShotCharacterReferenceFromCast", () => {
       "characters/c1/states/s1/angles/a-new/dragon.png"
     );
   });
+
+  it("uses nested state.angles when the cast entry omits a top-level angles array", () => {
+    const hero = character({
+      id: "c1",
+      referencePath: "characters/c1/legacy-redhead.png",
+    });
+    const look = {
+      ...state({
+        id: "s1",
+        characterId: "c1",
+        referencePath: "characters/c1/states/s1/legacy-redhead.png",
+        referenceKind: "image",
+      }),
+      angles: [
+        angle({
+          id: "a-new",
+          characterStateId: "s1",
+          name: "Front full body",
+          referencePath: "characters/c1/states/s1/angles/a-new/dragon.png",
+          referenceKind: "image",
+          updatedAt: 99,
+        }),
+      ],
+    };
+
+    const resolved = resolveShotCharacterReferenceFromCast([
+      { character: hero, state: look },
+    ]);
+
+    expect(resolved.path).toBe(
+      "characters/c1/states/s1/angles/a-new/dragon.png"
+    );
+  });
 });
