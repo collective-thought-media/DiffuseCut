@@ -34,7 +34,7 @@ import {
   SHOT_SUBJECT_SCALE_FRACTIONS,
 } from "@/lib/shot-render-overrides";
 import { detectIntegrateFramingIntent } from "@/lib/integrate-subject-mask";
-import { SHOT_IDENTITY_STRENGTH_PRESETS } from "@/lib/ip-adapter-profiles";
+import { resolveShotIdentityStrengthPreset } from "@/lib/ip-adapter-profiles";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
 import { isIpAdapterAvailable } from "@/lib/services/comfyui-client";
@@ -466,16 +466,17 @@ export async function enqueueShotPlaceholderBatch(
     { virtualBackdrop, compositingPipelineAvailable }
   );
 
-  // Per-shot character likeness. Balanced uses the strong integrate default.
-  // Low and high still override. Applied whenever character IP-Adapter drives
-  // a single chain (integrate / character-only).
+  // Per-shot character likeness. High is mode-aware: stronger for character-only,
+  // a usable bump for Integrate without crossing into mushy anatomy.
   const identityStrength = shotOverrides.identityStrength ?? "balanced";
   if (
-    SHOT_IDENTITY_STRENGTH_PRESETS[identityStrength] &&
     (referencePlan.effectiveMode === "integrate_in_scene" ||
       referencePlan.effectiveMode === "character")
   ) {
-    const preset = SHOT_IDENTITY_STRENGTH_PRESETS[identityStrength];
+    const preset = resolveShotIdentityStrengthPreset(
+      identityStrength,
+      referencePlan.effectiveMode
+    );
     referencePlan.generationOptions.ipAdapterWeight = preset.weight;
     referencePlan.generationOptions.ipAdapterEndAt = preset.endAt;
   }

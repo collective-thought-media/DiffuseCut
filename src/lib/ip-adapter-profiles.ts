@@ -139,8 +139,8 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
  * at higher weights than linear.
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
-  weight: 0.62,
-  endAt: 0.72,
+  weight: 0.58,
+  endAt: 0.68,
   preset: "PLUS (high strength)",
   weightType: "style transfer",
 };
@@ -163,15 +163,40 @@ export const DUAL_IP_ADAPTER_VIRTUAL_BACKDROP_LOCATION_PROFILE: IpAdapterProfile
   };
 
 /**
- * Per-shot character likeness presets for storyboard stills.
- * "balanced" matches DUAL_IP_ADAPTER_CHARACTER_PROFILE (the default), so it
- * is expressed by leaving the plan's IP-Adapter overrides unset.
+ * Per-shot character likeness presets.
+ * Character-only can lock harder. Integrate High is a real bump over Balanced
+ * but stays below the range that turns sheets into anatomical mush.
  */
-export const SHOT_IDENTITY_STRENGTH_PRESETS: Record<
+export const CHARACTER_ONLY_IDENTITY_STRENGTH_PRESETS: Record<
   "low" | "balanced" | "high",
   { weight: number; endAt: number }
 > = {
-  low: { weight: 0.48, endAt: 0.62 },
-  balanced: { weight: 0.62, endAt: 0.72 },
-  high: { weight: 0.72, endAt: 0.82 },
+  low: { weight: 0.5, endAt: 0.65 },
+  balanced: { weight: 0.65, endAt: 0.8 },
+  high: { weight: 0.82, endAt: 0.92 },
 };
+
+export const INTEGRATE_IDENTITY_STRENGTH_PRESETS: Record<
+  "low" | "balanced" | "high",
+  { weight: number; endAt: number }
+> = {
+  low: { weight: 0.48, endAt: 0.6 },
+  balanced: { weight: 0.58, endAt: 0.68 },
+  high: { weight: 0.68, endAt: 0.78 },
+};
+
+/** @deprecated Prefer mode-specific tables via resolveShotIdentityStrengthPreset. */
+export const SHOT_IDENTITY_STRENGTH_PRESETS: Record<
+  "low" | "balanced" | "high",
+  { weight: number; endAt: number }
+> = CHARACTER_ONLY_IDENTITY_STRENGTH_PRESETS;
+
+export function resolveShotIdentityStrengthPreset(
+  strength: "low" | "balanced" | "high",
+  mode: string
+): { weight: number; endAt: number } {
+  if (mode === "integrate_in_scene") {
+    return INTEGRATE_IDENTITY_STRENGTH_PRESETS[strength];
+  }
+  return CHARACTER_ONLY_IDENTITY_STRENGTH_PRESETS[strength];
+}

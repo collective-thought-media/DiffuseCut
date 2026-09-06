@@ -175,8 +175,10 @@ export function ShotStillReferenceControls({
             )}
           </Select>
           <p className="text-xs text-muted-foreground">
-            How strongly the character sheet locks face and wardrobe. Lower it
-            when the prompt should control pose and framing more.
+            How strongly the character sheet locks identity. High is meant to
+            be used: in Character reference mode it locks hard; in Integrate in
+            scene it still bumps likeness without crushing pose and anatomy.
+            Lower it when the prompt should lead pose and framing.
           </p>
         </div>
       ) : null}
