@@ -625,6 +625,7 @@ describe("buildShotPlaceholderNegativePrompt", () => {
       applyShotReferenceModePromptExtras,
       SHOT_SCENE_EDIT_INSTRUCTION_PREFIX,
       SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX,
+      SHOT_SUBJECT_SCALE_SCENE_EDIT,
     } = await import("@/lib/services/prompt-preprocess");
     const result = applyShotReferenceModePromptExtras(
       "Wide establishing view of the full environment. Lisa opening the deli door and stepping inside",
@@ -633,12 +634,14 @@ describe("buildShotPlaceholderNegativePrompt", () => {
         effectiveMode: "scene_edit",
         useDualIpAdapter: false,
         useCompositingPipeline: false,
+        subjectScale: "medium",
       }
     );
     expect(result.processedPrompt.startsWith(SHOT_SCENE_EDIT_INSTRUCTION_PREFIX)).toBe(
       true
     );
     expect(result.processedPrompt).toContain(SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX);
+    expect(result.processedPrompt).toContain(SHOT_SUBJECT_SCALE_SCENE_EDIT.medium);
     expect(result.processedPrompt).toContain("opening the deli door");
     // Establishing-view framing line invites empty scenery; stripped like integrate.
     expect(result.processedPrompt).not.toContain("Wide establishing view");
@@ -647,7 +650,11 @@ describe("buildShotPlaceholderNegativePrompt", () => {
   });
 
   it("adds integrate-in-scene suffix and negatives for integrate mode", async () => {
-    const { applyShotReferenceModePromptExtras, SHOT_INTEGRATE_IN_SCENE_SUFFIX } =
+    const {
+      applyShotReferenceModePromptExtras,
+      SHOT_INTEGRATE_IN_SCENE_SUFFIX,
+      SHOT_SUBJECT_SCALE_PROMPT,
+    } =
       await import("@/lib/services/prompt-preprocess");
     const result = applyShotReferenceModePromptExtras(
       "Medium shot in the park",
@@ -656,14 +663,16 @@ describe("buildShotPlaceholderNegativePrompt", () => {
         effectiveMode: "integrate_in_scene",
         useDualIpAdapter: false,
         useCompositingPipeline: false,
+        subjectScale: "small",
       }
     );
     expect(result.processedPrompt).toContain(SHOT_INTEGRATE_IN_SCENE_SUFFIX);
-    expect(result.processedPrompt).toContain("natural human scale");
+    expect(result.processedPrompt).toContain(SHOT_SUBJECT_SCALE_PROMPT.small);
     expect(result.processedPrompt).toContain("one person present");
     expect(result.processedPrompt).toContain("not leaning on anything");
     expect(result.negativePrompt).toContain("pasted cutout");
     expect(result.negativePrompt).toContain("oversized subject");
+    expect(result.negativePrompt).toContain("giant person");
     expect(result.negativePrompt).toContain("leaning on empty air");
   });
 

@@ -39,6 +39,7 @@ export async function GET(req: NextRequest) {
     let imageDefaultNegative: string | undefined;
     let stillNegativePrompt: string | undefined;
     let stillReferenceMode: ShotStillReferenceMode = "auto";
+    let subjectScale: "small" | "medium" | "large" = "medium";
 
     if (projectId) {
       const db = getDb();
@@ -67,6 +68,7 @@ export async function GET(req: NextRequest) {
             (stillReferenceModeParam as ShotStillReferenceMode | null) ??
             overrides.stillReferenceMode ??
             "auto";
+          subjectScale = overrides.subjectScale ?? "medium";
         }
       }
     }
@@ -92,7 +94,7 @@ export async function GET(req: NextRequest) {
     const promptExtras = applyShotReferenceModePromptExtras(
       processedPrompt,
       negativePrompt,
-      referencePlan
+      { ...referencePlan, subjectScale }
     );
 
     const mergedNegative = mergeImageNegativePrompt(

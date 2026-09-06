@@ -33,7 +33,7 @@ const FACE_DETAIL_LABELS: Record<ShotFaceDetail, string> = {
 };
 
 const MODE_LABELS: Record<ShotStillReferenceMode, string> = {
-  auto: "Auto (Scene edit when Qwen is available, otherwise Integrate in scene)",
+  auto: "Auto (Integrate in scene for reliable subject scale)",
   scene_edit: "Scene edit: character interacts with the set (Qwen Image Edit)",
   integrate_in_scene:
     "Integrate in scene: paint into the plate, RemBG onto the set, then diffuse edges",
@@ -203,10 +203,11 @@ export function ShotStillReferenceControls({
             )}
           </Select>
           <p className="text-xs text-muted-foreground">
-            Sets how tall the character is painted relative to the location
-            plate. Medium aims for door and window scale on establishing sets.
-            Yard, lawn, and in-front-of-house prompts also shrink Medium
-            automatically. Pick Large for closer indoor framing.
+            Controls how tall the character is painted on the location plate.
+            Auto and Integrate use a real mask sized by this control. Small,
+            Medium, and Large are widely spaced so the difference is obvious.
+            Scene edit can only ask for scale in the instruction, so pick
+            Integrate when scale must be exact.
           </p>
         </div>
       ) : null}
@@ -271,13 +272,21 @@ export function ShotStillReferenceControls({
           Uses location reference only ({locationLabel}).
         </p>
       ) : null}
+      {mode === "auto" ? (
+        <p className="text-xs text-muted-foreground">
+          Uses Integrate in scene so Subject size and position control a real
+          mask on the location plate. Scene edit remains available as an
+          explicit choice when you want the character to interact with props.
+        </p>
+      ) : null}
       {mode === "scene_edit" ? (
         <p className="text-xs text-muted-foreground">
           Sends the location plate and character reference to an image editing
           model (Qwen Image Edit) with your shot prompt as the instruction. The
           character can interact with the scene: open doors, touch objects, be
-          partly hidden behind set pieces. Needs the Qwen Image Edit 2511
-          models installed on ComfyUI.
+          partly hidden behind set pieces. Subject size becomes instruction
+          language only here. Use Integrate in scene when scale must be exact.
+          Needs the Qwen Image Edit 2511 models installed on ComfyUI.
         </p>
       ) : null}
       {mode === "integrate_in_scene" ? (

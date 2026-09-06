@@ -89,9 +89,46 @@ export function detectIntegrateEnvironmentScale(prompt: string): number | null {
       prompt
     )
   ) {
-    return 0.3;
+    return 0.22;
   }
   return null;
+}
+
+/**
+ * Resolve the Integrate subject mask height from Subject size, with optional
+ * close-up framing growth and wide-exterior shrink. Subject size always wins
+ * over medium-shot language so the UI control is reliable.
+ */
+export function resolveIntegrateSubjectHeightFraction(input: {
+  subjectScale?: "small" | "medium" | "large";
+  prompt?: string;
+  scaleFractions: Record<"small" | "medium" | "large", number>;
+  defaultFraction: number;
+}): { heightFraction: number; groundY?: number } {
+  const scale = input.subjectScale ?? "medium";
+  const prompt = input.prompt ?? "";
+  const framing = detectIntegrateFramingIntent(prompt);
+  const environmentScale = detectIntegrateEnvironmentScale(prompt);
+
+  // Close-ups need an oversized mask or the crop lands mid-frame. Keep Small
+  // as a true distant figure even if the prompt says close-up.
+  if (
+    framing &&
+    framing.heightFraction >= 1.5 &&
+    scale !== "small"
+  ) {
+    return {
+      heightFraction: framing.heightFraction,
+      groundY: framing.groundY,
+    };
+  }
+
+  let heightFraction =
+    input.scaleFractions[scale] ?? input.defaultFraction;
+  if (scale !== "large" && environmentScale != null) {
+    heightFraction = Math.min(heightFraction, environmentScale);
+  }
+  return { heightFraction };
 }
 
 export function computeIntegrateSubjectMaskBox(

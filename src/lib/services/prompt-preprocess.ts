@@ -755,10 +755,47 @@ export const SHOT_COMPOSITED_NEGATIVE =
   "tiny figure, distant subject, small person in frame, environmental wide master, full scene establishing shot, sharp background, deep focus, everything in focus, pasted cutout, floating subject, bad composite, halo around subject, warm subject on cool background, cool subject on warm background, mismatched white balance, split color grading";
 
 export const SHOT_INTEGRATE_IN_SCENE_SUFFIX =
-  "the character clearly visible in the frame, one person present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at natural human scale for their distance from the camera, correctly proportioned to the doorways, windows, and street furniture around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
+  "the character clearly visible in the frame, one person present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, correctly proportioned to the doorways, windows, and street furniture around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
 
 export const SHOT_INTEGRATE_IN_SCENE_NEGATIVE =
   "empty scene, deserted street with no one present, missing subject, character absent from frame, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant person, subject too large for the scene, wrong scale, out of proportion with the environment";
+
+/** Prompt lock for Subject size on Integrate / Scene edit character+location stills. */
+export const SHOT_SUBJECT_SCALE_PROMPT: Record<
+  "small" | "medium" | "large",
+  string
+> = {
+  small:
+    "the subject is a small distant figure in the establishing set, head well below first-floor windows and any porch roof, architecture clearly taller than the subject",
+  medium:
+    "the subject is door-height scale against the architecture, head below the second story and porch roof, roughly as tall as a doorway is high",
+  large:
+    "the subject is a closer foreground figure, larger in frame, still correctly proportioned so nearby doors and windows stay taller than their head",
+};
+
+export const SHOT_SUBJECT_SCALE_SCENE_EDIT: Record<
+  "small" | "medium" | "large",
+  string
+> = {
+  small:
+    "Place the subject small in the scene like a distant figure on an establishing plate: their head must stay well below first-floor windows and any porch roof. Do not make them giant relative to the house or street.",
+  medium:
+    "Scale the subject to door height against the existing architecture: a doorway is taller than the subject, and their head stays below the top of the door frame and below the second story.",
+  large:
+    "Place the subject closer in the foreground, larger in frame, but keep doors and windows taller than their head. Do not enlarge or move the architecture.",
+};
+
+export const SHOT_SUBJECT_SCALE_NEGATIVE: Record<
+  "small" | "medium" | "large",
+  string
+> = {
+  small:
+    "giant person, oversized subject, subject filling the frame, head near the roofline, person as tall as the house",
+  medium:
+    "giant person, oversized subject, subject as tall as the house, head above the second story",
+  large:
+    "tiny distant speck, ant-sized figure, subject lost in the background",
+};
 
 /**
  * When a character reference image is attached, force the sampler to keep that
@@ -844,7 +881,7 @@ export const SHOT_SCENE_EDIT_INSTRUCTION_PREFIX =
   "Add the subject from image 2 into the scene from image 1.";
 
 export const SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX =
-  "The subject keeps the exact same species, anatomy, face or head, and appearance as in image 2, and interacts naturally with the scene, matching its lighting, shadows, and perspective. All architecture, doors, windows, signs, and objects in the scene keep their exact original size, position, and proportions from image 1; do not enlarge or move them. Scale the subject realistically to the existing architecture: a doorway is taller than the subject, and the subject's head stays below the top of the door frame. Photorealistic cinematic still.";
+  "The subject keeps the exact same species, anatomy, face or head, and appearance as in image 2, and interacts naturally with the scene, matching its lighting, shadows, and perspective. All architecture, doors, windows, signs, and objects in the scene keep their exact original size, position, and proportions from image 1; do not enlarge or move them. Photorealistic cinematic still.";
 
 /**
  * Suffix for instruction edits of a finished still (Qwen Image Edit): apply
@@ -861,11 +898,13 @@ export function applyShotReferenceModePromptExtras(
     useDualIpAdapter: boolean;
     useCompositingPipeline: boolean;
     characterPath?: string | null;
+    subjectScale?: "small" | "medium" | "large";
   }
 ): { processedPrompt: string; negativePrompt: string } {
   let nextPrompt = processedPrompt;
   let nextNegative = negativePrompt;
   const hasCharacterReference = Boolean(plan.characterPath);
+  const subjectScale = plan.subjectScale ?? "medium";
 
   if (plan.effectiveMode === "scene_edit") {
     for (const phrase of INTEGRATE_PROMPT_PHRASES_TO_STRIP) {
@@ -873,7 +912,7 @@ export function applyShotReferenceModePromptExtras(
     }
     nextPrompt = `${SHOT_SCENE_EDIT_INSTRUCTION_PREFIX} ${nextPrompt.trim()}`;
     if (!nextPrompt.endsWith(".")) nextPrompt = `${nextPrompt}.`;
-    nextPrompt = `${nextPrompt} ${SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX}`;
+    nextPrompt = `${nextPrompt} ${SHOT_SUBJECT_SCALE_SCENE_EDIT[subjectScale]} ${SHOT_SCENE_EDIT_INSTRUCTION_SUFFIX}`;
     // Sampler runs at CFG 1.0 (Lightning LoRA), so the negative prompt has no
     // effect; leave it untouched.
     return { processedPrompt: nextPrompt, negativePrompt: nextNegative };
@@ -897,6 +936,7 @@ export function applyShotReferenceModePromptExtras(
       nextPrompt = nextPrompt.replace(phrase, "").replace(/\s{2,}/g, " ");
     }
     suffixParts.push(SHOT_INTEGRATE_IN_SCENE_SUFFIX);
+    suffixParts.push(SHOT_SUBJECT_SCALE_PROMPT[subjectScale]);
     if (!integrateWantsSupportedPose) {
       suffixParts.push(SHOT_INTEGRATE_IN_SCENE_GROUNDED_POSE_SUFFIX);
     }
@@ -917,6 +957,13 @@ export function applyShotReferenceModePromptExtras(
   for (const part of suffixParts) {
     if (!nextPrompt.includes(part)) {
       nextPrompt = `${nextPrompt}. ${part}`;
+    }
+  }
+
+  if (plan.effectiveMode === "integrate_in_scene") {
+    const scaleNeg = SHOT_SUBJECT_SCALE_NEGATIVE[subjectScale];
+    if (!nextNegative.includes(scaleNeg.split(",")[0]!.trim())) {
+      nextNegative = nextNegative ? `${nextNegative}, ${scaleNeg}` : scaleNeg;
     }
   }
 

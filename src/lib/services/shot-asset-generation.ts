@@ -33,7 +33,7 @@ import {
   SHOT_SUBJECT_POSITION_ANCHORS,
   SHOT_SUBJECT_SCALE_FRACTIONS,
 } from "@/lib/shot-render-overrides";
-import { detectIntegrateFramingIntent, detectIntegrateEnvironmentScale } from "@/lib/integrate-subject-mask";
+import { resolveIntegrateSubjectHeightFraction } from "@/lib/integrate-subject-mask";
 import { resolveShotIdentityStrengthPreset } from "@/lib/ip-adapter-profiles";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings } from "@/lib/services/generation-stack";
@@ -488,33 +488,21 @@ export async function enqueueShotPlaceholderBatch(
     referencePlan.generationOptions.ipAdapterEndAt = preset.endAt;
   }
 
-  // Integrate in scene: subject scale drives the inpaint mask. Order:
-  // explicit Large wins; close-up / medium-shot language grows the mask;
-  // wide exterior prompts shrink the default Medium size; otherwise use the
-  // Subject size preset (or the shared default).
+  // Integrate in scene: Subject size drives the inpaint mask. Close-ups can
+  // still enlarge the mask; wide exterior prompts can shrink Small/Medium.
   if (referencePlan.effectiveMode === "integrate_in_scene") {
-    const subjectScale = shotOverrides.subjectScale;
-    const framing = detectIntegrateFramingIntent(shot.prompt ?? "");
-    const environmentScale = detectIntegrateEnvironmentScale(shot.prompt ?? "");
-
-    if (framing && subjectScale !== "small") {
-      referencePlan.generationOptions.integrateSubjectHeightFraction =
-        framing.heightFraction;
+    const subjectScale = shotOverrides.subjectScale ?? "medium";
+    const resolved = resolveIntegrateSubjectHeightFraction({
+      subjectScale,
+      prompt: shot.prompt ?? "",
+      scaleFractions: SHOT_SUBJECT_SCALE_FRACTIONS,
+      defaultFraction: SHOT_SUBJECT_SCALE_FRACTIONS.medium,
+    });
+    referencePlan.generationOptions.integrateSubjectHeightFraction =
+      resolved.heightFraction;
+    if (resolved.groundY != null) {
       referencePlan.generationOptions.integrateSubjectGroundY =
-        framing.groundY;
-    } else if (subjectScale && SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale] != null) {
-      let heightFraction = SHOT_SUBJECT_SCALE_FRACTIONS[subjectScale];
-      if (
-        (subjectScale === "medium" || subjectScale === "small") &&
-        environmentScale != null
-      ) {
-        heightFraction = Math.min(heightFraction, environmentScale);
-      }
-      referencePlan.generationOptions.integrateSubjectHeightFraction =
-        heightFraction;
-    } else if (environmentScale != null) {
-      referencePlan.generationOptions.integrateSubjectHeightFraction =
-        environmentScale;
+        resolved.groundY;
     }
 
     const subjectPosition = shotOverrides.subjectPosition;
@@ -591,7 +579,10 @@ export async function enqueueShotPlaceholderBatch(
       negativePrompt,
       collectShotCastNegativeTerms(cast)
     ),
-    referencePlan
+    {
+      ...referencePlan,
+      subjectScale: shotOverrides.subjectScale ?? "medium",
+    }
   );
   finalProcessedPrompt = promptExtras.processedPrompt;
   const renderSettingsParsed = JSON.parse(

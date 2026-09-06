@@ -221,7 +221,13 @@ export default function StoryboardPage({ params }: PageProps) {
     const showIdentityStrength =
       plan.effectiveMode === "integrate_in_scene" ||
       plan.effectiveMode === "character";
-    const showSubjectControls = plan.effectiveMode === "integrate_in_scene";
+    const showSubjectControls =
+      Boolean(refs.characterPath && refs.locationPath) &&
+      (stillReferenceMode === "auto" ||
+        stillReferenceMode === "integrate_in_scene" ||
+        stillReferenceMode === "scene_edit" ||
+        plan.effectiveMode === "integrate_in_scene" ||
+        plan.effectiveMode === "scene_edit");
     const showFaceDetail =
       Boolean(refs.characterPath) && plan.effectiveMode !== "prompt_only";
     const locationLabel = [refs.locationStateName, refs.locationAngleName]

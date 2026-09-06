@@ -3,6 +3,7 @@ import {
   computeIntegrateSubjectMaskBox,
   detectIntegrateFramingIntent,
   detectIntegrateEnvironmentScale,
+  resolveIntegrateSubjectHeightFraction,
 } from "@/lib/integrate-subject-mask";
 
 describe("integrate-subject-mask", () => {
@@ -10,10 +11,10 @@ describe("integrate-subject-mask", () => {
     const box = computeIntegrateSubjectMaskBox({
       frameWidth: 1216,
       frameHeight: 832,
-      heightFraction: 0.38,
+      heightFraction: 0.32,
       anchorX: 0.5,
     });
-    const subjectHeight = Math.round(832 * 0.38);
+    const subjectHeight = Math.round(832 * 0.32);
     // Box is taller than the subject: headroom keeps the head inside the
     // fully-denoised mask area instead of cropped by the hard edge.
     expect(box.boxHeight).toBe(Math.round(subjectHeight * 1.22));
@@ -53,7 +54,7 @@ describe("integrate-subject-mask", () => {
       frameWidth: 1216,
       frameHeight: 832,
     });
-    expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.38) * 1.22));
+    expect(box.boxHeight).toBe(Math.round(Math.round(832 * 0.32) * 1.22));
     expect(box.featherX).toBeGreaterThan(0);
     expect(box.featherBottom).toBeLessThan(box.featherTop);
   });
@@ -107,12 +108,12 @@ describe("integrate-subject-mask", () => {
         detectIntegrateEnvironmentScale(
           "Full body standing in the front yard of the suburban house at dusk"
         )
-      ).toBe(0.3);
+      ).toBe(0.22);
       expect(
         detectIntegrateEnvironmentScale(
           "He waits in front of the house with the lawnmower nearby"
         )
-      ).toBe(0.3);
+      ).toBe(0.22);
     });
 
     it("returns null for indoor or doorway framing without wide exterior cues", () => {
@@ -121,6 +122,48 @@ describe("integrate-subject-mask", () => {
           "Seated at a cafe table near the window, coffee cup in hand"
         )
       ).toBeNull();
+    });
+  });
+
+  describe("resolveIntegrateSubjectHeightFraction", () => {
+    const fractions = { small: 0.22, medium: 0.32, large: 0.5 };
+
+    it("honors Subject size over medium-shot language", () => {
+      const resolved = resolveIntegrateSubjectHeightFraction({
+        subjectScale: "small",
+        prompt: "Medium shot on the sidewalk outside the deli",
+        scaleFractions: fractions,
+        defaultFraction: 0.32,
+      });
+      expect(resolved.heightFraction).toBe(0.22);
+    });
+
+    it("still enlarges the mask for close-ups unless Small is selected", () => {
+      const closeUp = resolveIntegrateSubjectHeightFraction({
+        subjectScale: "medium",
+        prompt: "Close-up of his face in the doorway",
+        scaleFractions: fractions,
+        defaultFraction: 0.32,
+      });
+      expect(closeUp.heightFraction).toBeGreaterThan(1.5);
+
+      const smallCloseUp = resolveIntegrateSubjectHeightFraction({
+        subjectScale: "small",
+        prompt: "Close-up of his face in the doorway",
+        scaleFractions: fractions,
+        defaultFraction: 0.32,
+      });
+      expect(smallCloseUp.heightFraction).toBe(0.22);
+    });
+
+    it("shrinks medium on yard exteriors", () => {
+      const resolved = resolveIntegrateSubjectHeightFraction({
+        subjectScale: "medium",
+        prompt: "Standing in the front yard of the house",
+        scaleFractions: fractions,
+        defaultFraction: 0.32,
+      });
+      expect(resolved.heightFraction).toBe(0.22);
     });
   });
 });

@@ -42,6 +42,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Integrate no longer RemBG-pastes a cutout as the finish. It paints the subject with masked diffusion, then runs a second diffusion pass on a geometric edge ring only. Auto prefers Scene edit (Qwen) when that stack is installed. Hard paste without a diffusion finish is not an acceptable still.
 - Integrate in scene is restored to the morning-tuned graph that worked for human-in-set stills: masked paint, RemBG re-composite onto the plate, then diffusion harmonization. Redhead protection stays in look-text skip, no-X sanitizing, and body lock. Auto still prefers Scene edit when Qwen is available.
 - Integrate Subject size presets are retuned so Medium matches door and window scale on establishing plates. Yard, lawn, street, and in-front-of-house prompts shrink Medium further. Large stays for closer indoor framing.
+- Auto no longer silently routes to Scene edit when Qwen is installed. Subject size only resizes the Integrate mask, so Auto stays on Integrate. Small / Medium / Large are spread farther apart, and scale language is added to Integrate and Scene edit prompts.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

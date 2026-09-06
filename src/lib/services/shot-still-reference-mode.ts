@@ -139,7 +139,9 @@ export function resolveShotStillReferenceEffectiveMode(
   // character with a real diffusion edit of the plate, without RemBG paste
   // tradeoffs. Otherwise fall back to Integrate in scene.
   if (hasCharacter && hasLocation) {
-    if (options?.sceneEditAvailable) return "scene_edit";
+    // Prefer Integrate: Subject size / position drive a real inpaint mask.
+    // Scene edit (Qwen) is still available as an explicit mode, but Auto must
+    // not silently route there or those controls have no effect.
     return "integrate_in_scene";
   }
   if (hasCharacter) return "character";
