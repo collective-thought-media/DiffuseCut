@@ -766,11 +766,11 @@ export const SHOT_SUBJECT_SCALE_PROMPT: Record<
   string
 > = {
   small:
-    "the subject is a small distant figure in the establishing set, head well below first-floor windows and any porch roof, architecture clearly taller than the subject",
+    "the subject is a smaller figure in the establishing set, head below first-floor windows and any porch roof, architecture clearly taller than the subject, still clearly visible and fully formed",
   medium:
-    "the subject is door-height scale against the architecture, head below the second story and porch roof, roughly as tall as a doorway is high",
+    "the subject is door-height scale against the architecture, head below the second story and porch roof, clearly visible and fully formed in frame",
   large:
-    "the subject is a closer foreground figure, larger in frame, still correctly proportioned so nearby doors and windows stay taller than their head",
+    "the subject is a closer foreground figure, larger in frame, still correctly proportioned so nearby doors and windows stay taller than their head, clearly visible and fully formed",
 };
 
 export const SHOT_SUBJECT_SCALE_SCENE_EDIT: Record<

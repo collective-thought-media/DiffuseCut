@@ -89,7 +89,9 @@ export function detectIntegrateEnvironmentScale(prompt: string): number | null {
       prompt
     )
   ) {
-    return 0.22;
+    // Stay at Small's floor. Going lower leaves a mask too tiny for RemBG to
+    // keep, and the finish pass pastes an empty cutout (bare plate).
+    return 0.3;
   }
   return null;
 }
@@ -138,7 +140,7 @@ export function computeIntegrateSubjectMaskBox(
   const frameHeight = Math.max(64, Math.round(input.frameHeight));
   const heightFraction = clamp(
     input.heightFraction ?? DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION,
-    0.2,
+    0.28,
     1.9
   );
   const anchorX = clamp(

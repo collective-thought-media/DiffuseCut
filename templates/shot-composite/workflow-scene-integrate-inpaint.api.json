@@ -155,7 +155,7 @@
     "class_type": "GrowMask",
     "inputs": {
       "mask": ["31", 1],
-      "expand": -2,
+      "expand": 4,
       "tapered_corners": true
     }
   },

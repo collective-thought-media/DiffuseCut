@@ -48,12 +48,12 @@ export const SHOT_SUBJECT_POSITION_VALUES: ShotSubjectPosition[] = [
 ];
 
 /** Mask height as a fraction of frame height per subject scale preset.
- * Spread is wide on purpose so Small / Medium / Large are obvious in stills.
- * Medium targets door/window scale on establishing plates. */
+ * Floored high enough that masked inpaint + RemBG still form a person.
+ * Spread stays wide so Small / Medium / Large remain obvious. */
 export const SHOT_SUBJECT_SCALE_FRACTIONS: Record<ShotSubjectScale, number> = {
-  small: 0.22,
-  medium: 0.32,
-  large: 0.5,
+  small: 0.3,
+  medium: 0.4,
+  large: 0.58,
 };
 
 /** Mask horizontal center as a fraction of frame width per position preset. */
