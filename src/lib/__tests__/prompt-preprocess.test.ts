@@ -659,9 +659,8 @@ describe("buildShotPlaceholderNegativePrompt", () => {
       }
     );
     expect(result.processedPrompt).toContain(SHOT_INTEGRATE_IN_SCENE_SUFFIX);
-    expect(result.processedPrompt).toContain("natural scale");
-    expect(result.processedPrompt).not.toContain("natural human scale");
-    expect(result.processedPrompt).not.toContain("one person present");
+    expect(result.processedPrompt).toContain("natural human scale");
+    expect(result.processedPrompt).toContain("one person present");
     expect(result.processedPrompt).toContain("not leaning on anything");
     expect(result.negativePrompt).toContain("pasted cutout");
     expect(result.negativePrompt).toContain("oversized subject");
