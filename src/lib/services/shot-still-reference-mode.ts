@@ -85,7 +85,10 @@ function locationLabel(input: ShotStillReferenceInputs): string | null {
 
 export function resolveShotStillReferenceEffectiveMode(
   refs: ShotStillReferenceInputs,
-  mode: ShotStillReferenceMode = "auto"
+  mode: ShotStillReferenceMode = "auto",
+  options?: {
+    sceneEditAvailable?: boolean;
+  }
 ): ShotStillReferenceEffectiveMode {
   const hasCharacter = Boolean(refs.characterPath);
   const hasLocation = Boolean(refs.locationPath);
@@ -132,7 +135,13 @@ export function resolveShotStillReferenceEffectiveMode(
     return "none";
   }
 
-  if (hasCharacter && hasLocation) return "integrate_in_scene";
+  // Auto: prefer Scene edit when the Qwen stack is installed. It places the
+  // character with a real diffusion edit of the plate, without RemBG paste
+  // tradeoffs. Otherwise fall back to Integrate in scene.
+  if (hasCharacter && hasLocation) {
+    if (options?.sceneEditAvailable) return "scene_edit";
+    return "integrate_in_scene";
+  }
   if (hasCharacter) return "character";
   if (hasLocation) return "location";
   return "none";
@@ -144,9 +153,12 @@ export function resolveShotStillReferencePlan(
   options?: {
     virtualBackdrop?: boolean;
     compositingPipelineAvailable?: boolean;
+    sceneEditAvailable?: boolean;
   }
 ): ShotStillReferencePlan {
-  const effectiveMode = resolveShotStillReferenceEffectiveMode(refs, mode);
+  const effectiveMode = resolveShotStillReferenceEffectiveMode(refs, mode, {
+    sceneEditAvailable: options?.sceneEditAvailable,
+  });
   const useDualIpAdapter = effectiveMode === "dual";
   const useCompositingPipeline =
     effectiveMode === "composited" &&

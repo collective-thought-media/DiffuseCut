@@ -98,7 +98,7 @@ describe("shot-still-reference-mode", () => {
     expect(plan.hasLocationReferenceForPrompt).toBe(true);
     // Masked inpaint: denoise applies inside the subject region only, and must
     // be near 1.0 so the subject fully forms instead of ghost-blending.
-    expect(plan.generationOptions.locationPlateDenoise).toBe(0.9);
+    expect(plan.generationOptions.locationPlateDenoise).toBe(1);
     expect(plan.generationOptions.integrateSubjectHeightFraction).toBe(0.55);
     expect(plan.generationOptions.integrateSubjectAnchorX).toBe(0.5);
     expect(plan.generationOptions.stillReferenceMode).toBe("integrate_in_scene");
@@ -109,6 +109,13 @@ describe("shot-still-reference-mode", () => {
     expect(plan.generationOptions.ipAdapterEndAt).toBe(0.55);
     expect(plan.generationOptions.ipAdapterWeightType).toBe("style transfer");
     expect(plan.label).toContain("integrate in scene");
+  });
+
+  it("auto prefers scene edit when the Qwen stack is available", () => {
+    const plan = resolveShotStillReferencePlan(bothRefs, "auto", {
+      sceneEditAvailable: true,
+    });
+    expect(plan.effectiveMode).toBe("scene_edit");
   });
 
   it("lists scene edit when both references exist", () => {

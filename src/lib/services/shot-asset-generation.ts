@@ -50,6 +50,7 @@ import { listEndpoints } from "@/lib/services/comfyui-client";
 import {
   isCompositingPipelineAvailable,
   isFaceRefineAvailable,
+  isQwenSceneEditAvailable,
 } from "@/lib/services/compositing-pipeline";
 import {
   resolveCharacterSheetTemplateId,
@@ -95,6 +96,9 @@ export async function resolveShotPlaceholderTemplateId(
     (options?.endpointUrl
       ? await isCompositingPipelineAvailable(options.endpointUrl)
       : false);
+  const sceneEditAvailable = options?.endpointUrl
+    ? await isQwenSceneEditAvailable(options.endpointUrl)
+    : false;
 
   const plan = resolveShotStillReferencePlan(
     {
@@ -108,6 +112,7 @@ export async function resolveShotPlaceholderTemplateId(
     {
       virtualBackdrop: options?.virtualBackdrop,
       compositingPipelineAvailable,
+      sceneEditAvailable,
     }
   );
 
@@ -454,6 +459,7 @@ export async function enqueueShotPlaceholderBatch(
   const compositingPipelineAvailable = await isCompositingPipelineAvailable(
     endpointUrl
   );
+  const sceneEditAvailable = await isQwenSceneEditAvailable(endpointUrl);
   const referencePlan = resolveShotStillReferencePlan(
     {
       characterPath: referencePaths.characterPath,
@@ -463,7 +469,7 @@ export async function enqueueShotPlaceholderBatch(
       locationAngleName: referencePaths.locationAngleName,
     },
     stillReferenceMode,
-    { virtualBackdrop, compositingPipelineAvailable }
+    { virtualBackdrop, compositingPipelineAvailable, sceneEditAvailable }
   );
 
   // Per-shot character likeness. Balanced keeps the integrate / character mode

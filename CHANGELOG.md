@@ -39,6 +39,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Integrate prompts are back to the morning lighting and plate language (species-neutral, no human-forcing). RemBG uses isnet-general-use for cleaner creature cutouts. Redhead protection stays in look-text skip, no-X sanitizing, and body lock, not in knobs that wreck the finish pass.
 - Integrate paste mask grows outward to close RemBG holes in non-human bodies, with a thinner lighter harmonization band, so stone cannot show through a translucent torso or wing.
 - Integrate pastes the RemBG cutout (not the full first-pass frame) so a grown mask cannot pull a white fringe from invented background around the subject.
+- Integrate no longer RemBG-pastes a cutout as the finish. It paints the subject with masked diffusion, then runs a second diffusion pass on a geometric edge ring only. Auto prefers Scene edit (Qwen) when that stack is installed. Hard paste without a diffusion finish is not an acceptable still.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

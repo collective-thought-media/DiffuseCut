@@ -1334,21 +1334,17 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     if (
       workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID
     ) {
-      // Morning-tuned two-stage finish: masked paint, RemBG paste onto the
-      // original plate, then harmonization inpaint (plain checkpoint, not
-      // IP-Adapter) so edges and lighting match the set. RemBG must be general
-      // purpose, not human-only, or non-human subjects get punched full of holes.
+      // Masked diffusion into the plate, then a geometric edge-ring
+      // harmonization KSampler (plain checkpoint). No RemBG cutout paste:
+      // that path ping-ponged between translucent holes and white sticker
+      // fringes on non-human subjects, and a hard paste without diffusion is
+      // never an acceptable final still.
       await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
         "SolidMask",
         "MaskComposite",
         "FeatherMask",
         "SetLatentNoiseMask",
-        "RemBGSession+",
-        "ImageRemoveBackground+",
-        "ImageRemoveAlpha+",
         "GrowMask",
-        "MaskBlur+",
-        "ImageCompositeMasked",
         "IPAdapterModelLoader",
         "CLIPVisionLoader",
         "IPAdapterAdvanced",

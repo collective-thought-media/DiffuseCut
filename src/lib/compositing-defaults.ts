@@ -21,7 +21,7 @@ export const DEFAULT_LOCATION_PLATE_DENOISE = 0.42;
  * blended into the background. The plate outside the mask is pixel-locked by
  * the noise mask, so high denoise here does not drift the set.
  */
-export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 0.9;
+export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 1;
 
 /** Subject mask height as a fraction of frame height (medium preset). */
 export const DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION = 0.55;
@@ -43,11 +43,11 @@ export const INTEGRATE_SUBJECT_WIDTH_RATIO = 0.62;
 export const INTEGRATE_SUBJECT_HEADROOM_RATIO = 0.22;
 
 /**
- * Feather size relative to the mask box width. Keep thin: feathered pixels
- * are partially denoised, so a wide band reads as a ghosted halo where the
- * subject alpha-blends into the plate.
+ * First-pass subject mask feather. Keep at 0: soft first-pass feather leaves
+ * translucent limbs. Edge blending is handled by a geometric edge-ring
+ * harmonization pass, not by RemBG cutout paste.
  */
-export const INTEGRATE_MASK_FEATHER_RATIO = 0.08;
+export const INTEGRATE_MASK_FEATHER_RATIO = 0;
 
 /** img2img integration pass after rough paste (unifies lighting, depth, edges). */
 export const DEFAULT_COMPOSITE_INPAINT_DENOISE = 0.48;

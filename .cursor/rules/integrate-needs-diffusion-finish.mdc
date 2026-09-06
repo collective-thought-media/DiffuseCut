@@ -1,0 +1,14 @@
+---
+description: Integrate stills must finish with diffusion, never hard paste alone
+globs: templates/shot-composite/**,src/lib/compositing-defaults.ts,src/lib/integrate-subject-mask.ts,src/lib/services/shot-still-reference-mode.ts,src/lib/services/shot-asset-generation.ts,worker/index.ts
+alwaysApply: false
+---
+
+# Integrate / composite finishes need diffusion
+
+Never ship a storyboard still path that only hard-pastes a character cutout onto a location plate and saves that as the final image.
+
+A RemBG (or other) paste onto the plate is acceptable only as an intermediate step. The final output must run an AI diffusion pass afterward (edge-ring / harmonization inpaint, scene edit, or equivalent) so lighting, contact, and edges are painted by the model, not left as a sticker composite.
+
+Unacceptable: `ImageCompositeMasked` (or equivalent) → `SaveImage` with no sampler after the paste.
+Acceptable: masked inpaint into the plate, then a second diffusion pass on edges; or Qwen Scene edit; or paste then harmonization KSampler.
