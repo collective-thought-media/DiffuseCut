@@ -755,22 +755,21 @@ export const SHOT_COMPOSITED_NEGATIVE =
   "tiny figure, distant subject, small person in frame, environmental wide master, full scene establishing shot, sharp background, deep focus, everything in focus, pasted cutout, floating subject, bad composite, halo around subject, warm subject on cool background, cool subject on warm background, mismatched white balance, split color grading";
 
 export const SHOT_INTEGRATE_IN_SCENE_SUFFIX =
-  "the character clearly visible in the frame, opaque solid subject fully formed with no transparency, complete limbs and extremities fully opaque including tail wings and hands, hard silhouette against the background with no fading edges, subject present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at a natural scale for their distance from the camera, correctly proportioned to the doorways, windows, and set pieces around them, grounded on the visible floor plane, on-location cinematic storyboard still, not a cutout composite";
+  "the character clearly visible in the frame, subject present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, subject at a natural scale for their distance from the camera, correctly proportioned to the doorways, windows, and set pieces around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
 
 export const SHOT_INTEGRATE_IN_SCENE_NEGATIVE =
-  "empty scene, deserted street with no subject present, missing subject, character absent from frame, transparent subject, translucent body, ghosted figure, double exposure, see-through subject, subject blending into walls, morphing into background, pillar through subject, fading limbs, fading tail, dissolving extremities, soft alpha edges on the subject, pasted cutout, floating subject, green screen composite, sticker on background, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant subject, subject too large for the scene, wrong scale, out of proportion with the environment";
+  "empty scene, deserted street with no subject present, missing subject, character absent from frame, extra person, second character, random human companion, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant subject, subject too large for the scene, wrong scale, out of proportion with the environment";
 
 /**
  * When a character reference image is attached, force the sampler to keep that
- * sheet's species and body plan. Without this, integrate suffixes plus a
- * human-sounding name (for example Jasmine) invent a person even when the
- * reference is a dragon or other non-human.
+ * sheet's species and body plan. Without this, a human-sounding name can invent
+ * a person even when the reference is a dragon or other non-human.
  */
 export const SHOT_CHARACTER_REFERENCE_BODY_LOCK =
-  "exact same species, anatomy, silhouette, limb count, and body plan as the character reference image, match the reference proportions and features, keep one coherent solid body, do not replace the subject with a different species or invent a new creature shape";
+  "exact same species, anatomy, and body plan as the character reference image, match the reference silhouette and features, do not replace the subject with a different species";
 
 export const SHOT_CHARACTER_REFERENCE_BODY_LOCK_NEGATIVE =
-  "wrong species, replaced with a human, human woman, human man, redhead woman, human face on animal body, anthropomorphic redesign that ignores the reference, different creature than the character reference, melted anatomy, morphing body, inconsistent limb count, blob body, deformed silhouette";
+  "wrong species, replaced with a human, human woman, human man, redhead woman, extra person, second character, random human companion, human face on animal body, anthropomorphic redesign that ignores the reference, different creature than the character reference";
 
 /**
  * Inside a masked inpaint the plate already fixes the framing, and

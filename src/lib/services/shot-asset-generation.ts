@@ -466,10 +466,11 @@ export async function enqueueShotPlaceholderBatch(
     { virtualBackdrop, compositingPipelineAvailable }
   );
 
-  // Per-shot character likeness. High is mode-aware: stronger for character-only,
-  // a usable bump for Integrate without crossing into mushy anatomy.
+  // Per-shot character likeness. Balanced keeps the integrate / character mode
+  // default profile. Low and high send explicit IP-Adapter overrides.
   const identityStrength = shotOverrides.identityStrength ?? "balanced";
   if (
+    identityStrength !== "balanced" &&
     (referencePlan.effectiveMode === "integrate_in_scene" ||
       referencePlan.effectiveMode === "character")
   ) {

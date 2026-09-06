@@ -140,7 +140,7 @@
   "30": {
     "class_type": "RemBGSession+",
     "inputs": {
-      "model": "u2net: general purpose",
+      "model": "isnet-general-use: general purpose",
       "providers": "CPU"
     }
   },
