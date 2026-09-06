@@ -151,11 +151,17 @@
       "image": ["8", 0]
     }
   },
+  "41": {
+    "class_type": "ImageRemoveAlpha+",
+    "inputs": {
+      "image": ["31", 0]
+    }
+  },
   "32": {
     "class_type": "GrowMask",
     "inputs": {
       "mask": ["31", 1],
-      "expand": 12,
+      "expand": 4,
       "tapered_corners": true
     }
   },
@@ -163,7 +169,7 @@
     "class_type": "MaskBlur+",
     "inputs": {
       "mask": ["32", 0],
-      "amount": 2,
+      "amount": 1,
       "device": "auto"
     }
   },
@@ -171,7 +177,7 @@
     "class_type": "ImageCompositeMasked",
     "inputs": {
       "destination": ["11", 0],
-      "source": ["8", 0],
+      "source": ["41", 0],
       "mask": ["33", 0],
       "x": 0,
       "y": 0,
@@ -189,7 +195,7 @@
     "class_type": "GrowMask",
     "inputs": {
       "mask": ["32", 0],
-      "expand": 6,
+      "expand": 8,
       "tapered_corners": true
     }
   },
@@ -197,7 +203,7 @@
     "class_type": "MaskBlur+",
     "inputs": {
       "mask": ["36", 0],
-      "amount": 6,
+      "amount": 8,
       "device": "auto"
     }
   },
@@ -216,7 +222,7 @@
       "cfg": 7.5,
       "sampler_name": "euler",
       "scheduler": "normal",
-      "denoise": 0.15,
+      "denoise": 0.22,
       "model": ["4", 0],
       "positive": ["6", 0],
       "negative": ["7", 0],

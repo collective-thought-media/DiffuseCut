@@ -1345,6 +1345,7 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
         "SetLatentNoiseMask",
         "RemBGSession+",
         "ImageRemoveBackground+",
+        "ImageRemoveAlpha+",
         "GrowMask",
         "MaskBlur+",
         "ImageCompositeMasked",
