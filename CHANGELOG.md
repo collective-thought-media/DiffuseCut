@@ -37,6 +37,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Integrate in scene pastes the subject back onto the location plate with general-purpose RemBG (not human-only), and skips the soft second blend pass so the set stays locked without fading limbs into the background.
 - Integrate in scene is restored to the morning-tuned two-stage graph (masked paint, RemBG paste onto the plate, harmonization inpaint). RemBG uses general-purpose u2net instead of human-only segmentation so dragons are not punched full of holes, and the sticker-cutout path without harmonization is gone.
 - Integrate prompts are back to the morning lighting and plate language (species-neutral, no human-forcing). RemBG uses isnet-general-use for cleaner creature cutouts. Redhead protection stays in look-text skip, no-X sanitizing, and body lock, not in knobs that wreck the finish pass.
+- Integrate paste mask grows outward to close RemBG holes in non-human bodies, with a thinner lighter harmonization band, so stone cannot show through a translucent torso or wing.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.
