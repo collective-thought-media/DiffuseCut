@@ -3,6 +3,7 @@ import {
   detectDetailMacroShot,
   detectRearViewShot,
 } from "@/lib/services/shot-composition";
+import { splitPositiveNegationPhrases } from "@/lib/services/prompt-negation-sanitize";
 
 export function buildStateLookContext(
   character: Character,
@@ -11,7 +12,8 @@ export function buildStateLookContext(
   const parts = [character.name.trim()];
   if (state.name.trim()) parts.push(`(${state.name.trim()})`);
   if (state.lookDescription.trim()) {
-    parts.push(`: ${state.lookDescription.trim()}`);
+    const { cleaned } = splitPositiveNegationPhrases(state.lookDescription);
+    if (cleaned) parts.push(`: ${cleaned}`);
   }
   if (state.timelineNote.trim()) {
     parts.push(`[${state.timelineNote.trim()}]`);
@@ -21,8 +23,9 @@ export function buildStateLookContext(
 
 /**
  * Shot cast line when a character reference image is already attached.
- * Identity text only. Look description is omitted so an old redhead / dress
- * paragraph cannot override a regenerated dragon sheet.
+ * Name and look label only. Description and look text stay out so phrases
+ * like "no redhead" cannot activate the forbidden concept in the positive,
+ * and the reference image carries likeness instead.
  */
 export function buildStateIdentityContext(
   character: Character,
@@ -30,9 +33,6 @@ export function buildStateIdentityContext(
 ): string {
   const parts = [character.name.trim()];
   if (state.name.trim()) parts.push(`(${state.name.trim()})`);
-  if (character.description.trim()) {
-    parts.push(`: ${character.description.trim()}`);
-  }
   return parts.join(" ");
 }
 

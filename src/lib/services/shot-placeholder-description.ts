@@ -8,6 +8,21 @@ import {
   detectRearViewShot,
   detectWideShot,
 } from "@/lib/services/shot-composition";
+import { splitPositiveNegationPhrases } from "@/lib/services/prompt-negation-sanitize";
+
+export function collectShotCastNegativeTerms(
+  cast?: Array<{ character: Character; state: CharacterState }>
+): string[] {
+  if (!cast?.length) return [];
+  const terms: string[] = [];
+  for (const { character, state } of cast) {
+    for (const text of [character.description, state.lookDescription]) {
+      const { negativeTerms } = splitPositiveNegationPhrases(text ?? "");
+      terms.push(...negativeTerms);
+    }
+  }
+  return terms;
+}
 
 export function buildShotPlaceholderContextFromData(input: {
   prompt: string;

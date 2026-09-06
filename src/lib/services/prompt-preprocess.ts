@@ -24,6 +24,10 @@ import {
   mergeNegativePrompts,
   type VisualStyle,
 } from "@/lib/services/visual-style";
+import {
+  splitPositiveNegationPhrases,
+  mergeUniqueNegativeTerms,
+} from "@/lib/services/prompt-negation-sanitize";
 
 /** Turnaround model sheet layout for animation and stylized presets. */
 export const CHARACTER_SHEET_LAYOUT_PREFIX =
@@ -1123,7 +1127,11 @@ export function buildShotPlaceholderPromptTemplate(
   style: VisualStyle = DEFAULT_VISUAL_STYLE,
   options?: { context?: string; wardrobeLock?: string | null }
 ): string {
-  const desc = shotPrompt.trim();
+  const shotSanitized = splitPositiveNegationPhrases(shotPrompt);
+  const contextSanitized = splitPositiveNegationPhrases(
+    options?.context?.trim() ?? ""
+  );
+  const desc = shotSanitized.cleaned.trim();
   const def = getVisualStyleDefinition(style);
   let appearance = def.shotSuffix?.trim();
   if (!appearance && style.preset === "custom" && style.customSuffix?.trim()) {
@@ -1136,7 +1144,7 @@ export function buildShotPlaceholderPromptTemplate(
 
   const cameraDirective = buildShotCameraDirective(desc);
   const cameraLead = cameraDirective ? `${cameraDirective}. ` : "";
-  const contextBlock = options?.context?.trim();
+  const contextBlock = contextSanitized.cleaned.trim();
   const contextSuffix = contextBlock ? ` Context: ${contextBlock}.` : "";
   const wardrobeSuffix = options?.wardrobeLock?.trim()
     ? ` ${options.wardrobeLock.trim()}.`
@@ -1202,28 +1210,42 @@ export async function buildShotPlaceholderPrompts(
     hasLocationReference?: boolean;
   }
 ): Promise<CharacterSheetPrompts> {
+  const shotSanitized = splitPositiveNegationPhrases(shotPrompt);
+  const contextSanitized = splitPositiveNegationPhrases(
+    options?.context?.trim() ?? ""
+  );
+  const cleanShotPrompt = shotSanitized.cleaned;
+  const cleanContext = contextSanitized.cleaned || undefined;
   const lockWardrobe = Boolean(options?.wardrobeLock);
-  const negativePrompt = buildShotPlaceholderNegativePrompt(style, shotPrompt, {
-    lockWardrobe,
-    hasLocationReference: options?.hasLocationReference,
-  });
+  let negativePrompt = buildShotPlaceholderNegativePrompt(
+    style,
+    cleanShotPrompt,
+    {
+      lockWardrobe,
+      hasLocationReference: options?.hasLocationReference,
+    }
+  );
+  negativePrompt = mergeUniqueNegativeTerms(negativePrompt, [
+    ...shotSanitized.negativeTerms,
+    ...contextSanitized.negativeTerms,
+  ]);
   const templatePrompt = buildShotPlaceholderPromptTemplate(
     title,
-    shotPrompt,
+    cleanShotPrompt,
     style,
-    options
+    { ...options, context: cleanContext }
   );
 
   const llmResult = await expandPromptWithLlm({
     name: title,
-    userDescription: shotPrompt,
+    userDescription: cleanShotPrompt,
     templatePrompt,
     visualStyle: style,
     mode: "shot",
   });
 
   const processed = llmResult.prompt.trim();
-  const layoutSuffix = detectDetailMacroShot(shotPrompt)
+  const layoutSuffix = detectDetailMacroShot(cleanShotPrompt)
     ? SHOT_MACRO_LAYOUT_SUFFIX
     : SHOT_STILL_LAYOUT_SUFFIX;
 

@@ -59,9 +59,10 @@ describe("shot cast identity vs look", () => {
     expect(buildStateIdentityContext(jasmine, look).toLowerCase()).not.toContain(
       "redhead"
     );
-    expect(buildStateIdentityContext(jasmine, look).toLowerCase()).toContain(
+    expect(buildStateIdentityContext(jasmine, look).toLowerCase()).not.toContain(
       "blue dragon"
     );
+    expect(buildStateIdentityContext(jasmine, look)).toContain("Jasmine");
 
     const context = buildShotPlaceholderContextFromData({
       prompt: "Jasmine in the lair",
@@ -69,6 +70,25 @@ describe("shot cast identity vs look", () => {
       preferCharacterIdentityOverLook: true,
     });
     expect(context.toLowerCase()).not.toContain("redhead");
-    expect(context.toLowerCase()).toContain("blue dragon");
+    expect(context.toLowerCase()).not.toContain("blue dragon");
+    expect(context).toContain("Jasmine");
+  });
+
+  it("moves no-redhead look phrases out of look context positives", () => {
+    const jasmine = character({
+      id: "c1",
+      name: "Jasmine",
+      description: "blue dragon",
+    });
+    const look = state({
+      id: "s1",
+      characterId: "c1",
+      lookDescription:
+        "full anthropomorphic blue dragon, no redhead, no human face",
+    });
+    const ctx = buildStateLookContext(jasmine, look).toLowerCase();
+    expect(ctx).toContain("blue dragon");
+    expect(ctx).not.toContain("no redhead");
+    expect(ctx).not.toContain("no human face");
   });
 });

@@ -19,11 +19,13 @@ import {
   resolveCharacterStateForCast,
 } from "@/lib/services/character-states";
 import { buildShotPlaceholderDescription, buildShotPlaceholderContext, resolveShotVirtualBackdrop } from "@/lib/services/shot-prompt";
+import { collectShotCastNegativeTerms } from "@/lib/services/shot-placeholder-description";
 import {
   buildShotPlaceholderPrompts,
   applyShotReferenceModePromptExtras,
   SHOT_IMAGE_EDIT_INSTRUCTION_SUFFIX,
 } from "@/lib/services/prompt-preprocess";
+import { mergeUniqueNegativeTerms } from "@/lib/services/prompt-negation-sanitize";
 import { BUILTIN_SHOT_IMAGE_EDIT_QWEN_TEMPLATE_ID } from "@/lib/db/builtin-template-ids";
 import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
 import {
@@ -397,16 +399,11 @@ export async function enqueueShotPlaceholderBatch(
     { virtualBackdrop, compositingPipelineAvailable }
   );
 
-  // Per-shot character likeness. "balanced" keeps the mode default (integrate
-  // in scene ships a softer 0.55/0.7 profile so the casting sheet does not set
-  // subject scale); low and high send explicit IP-Adapter overrides. Only
-  // applied to modes where the character reference drives a single IP-Adapter
-  // node (integrate-in-scene location plate and character-only), so dual-chain
-  // tuning stays intact.
-  const identityStrength = shotOverrides.identityStrength;
+  // Per-shot character likeness. Balanced uses the strong integrate default.
+  // Low and high still override. Applied whenever character IP-Adapter drives
+  // a single chain (integrate / character-only).
+  const identityStrength = shotOverrides.identityStrength ?? "balanced";
   if (
-    identityStrength &&
-    identityStrength !== "balanced" &&
     SHOT_IDENTITY_STRENGTH_PRESETS[identityStrength] &&
     (referencePlan.effectiveMode === "integrate_in_scene" ||
       referencePlan.effectiveMode === "character")
@@ -507,7 +504,10 @@ export async function enqueueShotPlaceholderBatch(
   let finalProcessedPrompt = processedPrompt;
   const promptExtras = applyShotReferenceModePromptExtras(
     processedPrompt,
-    negativePrompt,
+    mergeUniqueNegativeTerms(
+      negativePrompt,
+      collectShotCastNegativeTerms(cast)
+    ),
     referencePlan
   );
   finalProcessedPrompt = promptExtras.processedPrompt;

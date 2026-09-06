@@ -105,8 +105,8 @@ describe("shot-still-reference-mode", () => {
     // Style-transfer character IP keeps identity and outfit but drops the
     // casting reference's pose/composition (a crouched reference must not
     // dictate the shot pose).
-    expect(plan.generationOptions.ipAdapterWeight).toBe(0.6);
-    expect(plan.generationOptions.ipAdapterEndAt).toBe(0.55);
+    expect(plan.generationOptions.ipAdapterWeight).toBe(0.78);
+    expect(plan.generationOptions.ipAdapterEndAt).toBe(0.88);
     expect(plan.generationOptions.ipAdapterWeightType).toBe("style transfer");
     expect(plan.label).toContain("integrate in scene");
   });
