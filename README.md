@@ -6,7 +6,16 @@ Local-first pre-production and generation studio for AI filmmakers. You write th
 
 A fresh clone on another computer does not use anyone else's machine, LAN, or projects. App data lives under that user's Documents folder. ComfyUI is whatever URL you type in Settings (default `http://127.0.0.1:8188`).
 
-This is an early alpha. The pipeline works end to end. Some finishing details (text overlays in the final file) are still preview-only.
+This is an early alpha. The pipeline works end to end. Some finishing details (text overlays in the final file) are still preview-only. License: [MIT](./LICENSE).
+
+## Known limitations (alpha)
+
+- Character identity can still fight the shot prompt, especially for non-human cast. Prefer a clear Front reference sheet, check Visual reference thumbnails before generating, and use Stop generation if a pack hangs.
+- ComfyUI, FFmpeg, and model weights are separate installs. DiffuseCut does not bundle GPUs or checkpoints. Setup warns when optional stacks are missing; it does not download them for you.
+- Shot still modes (Integrate, Dual, Scene edit) need matching ComfyUI custom nodes and models. Without them, those modes degrade or fail with setup-style errors.
+- Video render needs the LTX stack on ComfyUI. Still generation and storyboard writing work without it.
+- Text overlays in Finishing are still preview-oriented and may not land in the exported file the way the timeline shows.
+- This cut is for early testers. Expect sharp edges. File issues on GitHub rather than assuming a polished 1.0 product.
 
 ## How it works
 

@@ -1,7 +1,16 @@
 {
   "name": "diffusecut",
   "version": "0.1.0-alpha.1",
-  "private": true,
+  "description": "Local-first AI filmmaking studio. Storyboard shots, generate stills and video through ComfyUI, finish audio, and export MP4.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/collective-thought-media/DiffuseCut.git"
+  },
+  "bugs": {
+    "url": "https://github.com/collective-thought-media/DiffuseCut/issues"
+  },
+  "homepage": "https://github.com/collective-thought-media/DiffuseCut#readme",
   "engines": {
     "node": ">=20"
   },
