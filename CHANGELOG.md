@@ -47,6 +47,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - CI typecheck no longer fails on the Turbopack helper test. An ESLint config is checked in so `npm run lint` does not hang waiting for interactive setup.
 - Integrate no longer RemBG-pastes the subject. An empty RemBG cutout was wiping people and leaving a bare plate. The painted subject region is pasted with the same geometric mask, then diffusion harmonization still runs.
 - Storyboard reloads select the first shot automatically so generate controls are ready without an extra click.
+- Integrate first paint uses hard masks, full denoise, and linear IP-Adapter so a real figure forms in the subject region. Style transfer was only tinting the plate. Harmonization runs on that first paint with no RemBG or intermediate paste.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

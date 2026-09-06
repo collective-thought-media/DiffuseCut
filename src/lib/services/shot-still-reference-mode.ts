@@ -235,9 +235,8 @@ export function resolveShotStillReferencePlan(
     stillReferenceMode: mode,
     referenceFocus,
     useIpAdapter,
-    // Integrate in scene: masked paint, geometric mask paste onto the plate,
-    // then diffusion harmonization. RemBG is not used for the paste: an empty
-    // cutout was wiping subjects and leaving a bare location plate.
+    // Integrate in scene: linear IP so a real figure forms in the subject
+    // mask, then diffusion harmonization on that first paint (no RemBG paste).
     ipAdapterWeight: useIntegrateInScene
       ? INTEGRATE_IN_SCENE_CHARACTER_PROFILE.weight
       : undefined,

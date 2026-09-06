@@ -23,8 +23,5 @@ describe("resolveShotIdentityStrengthPreset", () => {
     );
     expect(high).toEqual(INTEGRATE_IDENTITY_STRENGTH_PRESETS.high);
     expect(high.weight).toBeGreaterThan(balanced.weight);
-    expect(high.weight).toBeLessThan(
-      CHARACTER_ONLY_IDENTITY_STRENGTH_PRESETS.high.weight
-    );
   });
 });

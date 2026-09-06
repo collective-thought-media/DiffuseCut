@@ -132,16 +132,15 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
   IP_ADAPTER_REFRAME_PROFILES.character_lock;
 
 /**
- * Integrate in scene: morning-tuned profile. Style transfer keeps casting-sheet
- * pose from locking every shot. The graph still RemBG-pastes onto the plate
- * and runs a diffusion harmonization pass afterward (paste alone is never the
- * final still).
+ * Integrate in scene: linear IP so the character body actually forms inside
+ * the subject mask. Style transfer was only tinting the plate, which looked
+ * like a bare location still. Harmonization still runs after the first paint.
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
-  weight: 0.6,
-  endAt: 0.55,
+  weight: 0.78,
+  endAt: 0.85,
   preset: "PLUS (high strength)",
-  weightType: "style transfer",
+  weightType: "linear",
 };
 
 /** Virtual backdrop dual chain: character first, location last so gray wins over sheet bg. */
@@ -179,9 +178,9 @@ export const INTEGRATE_IDENTITY_STRENGTH_PRESETS: Record<
   "low" | "balanced" | "high",
   { weight: number; endAt: number }
 > = {
-  low: { weight: 0.45, endAt: 0.45 },
-  balanced: { weight: 0.6, endAt: 0.55 },
-  high: { weight: 0.7, endAt: 0.65 },
+  low: { weight: 0.55, endAt: 0.7 },
+  balanced: { weight: 0.78, endAt: 0.85 },
+  high: { weight: 0.88, endAt: 0.92 },
 };
 
 /** @deprecated Prefer mode-specific tables via resolveShotIdentityStrengthPreset. */
