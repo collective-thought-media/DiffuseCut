@@ -1334,15 +1334,20 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     if (
       workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID
     ) {
-      // Masked inpaint only: core ComfyUI mask nodes plus IP-Adapter.
-      // Do not require RemBG here. A human-seg RemBG recomposite pass used to
-      // punch holes through non-human subjects (dragons) and paste them back
-      // onto the plate as translucent morphs.
+      // Masked paint, then general-purpose RemBG cutout pasted onto the
+      // original location plate. Must not use human-only RemBG (that punched
+      // holes through dragons). Soft second img2img pass is intentionally
+      // omitted so limbs do not fade back into the set.
       await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
         "SolidMask",
         "MaskComposite",
         "FeatherMask",
         "SetLatentNoiseMask",
+        "RemBGSession+",
+        "ImageRemoveBackground+",
+        "GrowMask",
+        "MaskBlur+",
+        "ImageCompositeMasked",
         "IPAdapterModelLoader",
         "CLIPVisionLoader",
         "IPAdapterAdvanced",

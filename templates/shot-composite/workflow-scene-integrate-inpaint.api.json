@@ -45,7 +45,7 @@
     "class_type": "SaveImage",
     "inputs": {
       "filename_prefix": "DiffuseCutShotIntegrate",
-      "images": ["8", 0]
+      "images": ["34", 0]
     }
   },
   "10": {
@@ -135,6 +135,47 @@
     "inputs": {
       "samples": ["16", 0],
       "mask": ["23", 0]
+    }
+  },
+  "30": {
+    "class_type": "RemBGSession+",
+    "inputs": {
+      "model": "u2net: general purpose",
+      "providers": "CPU"
+    }
+  },
+  "31": {
+    "class_type": "ImageRemoveBackground+",
+    "inputs": {
+      "rembg_session": ["30", 0],
+      "image": ["8", 0]
+    }
+  },
+  "32": {
+    "class_type": "GrowMask",
+    "inputs": {
+      "mask": ["31", 1],
+      "expand": 0,
+      "tapered_corners": true
+    }
+  },
+  "33": {
+    "class_type": "MaskBlur+",
+    "inputs": {
+      "mask": ["32", 0],
+      "amount": 2,
+      "device": "auto"
+    }
+  },
+  "34": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": ["11", 0],
+      "source": ["8", 0],
+      "mask": ["33", 0],
+      "x": 0,
+      "y": 0,
+      "resize_source": false
     }
   }
 }
