@@ -7,7 +7,7 @@
       "cfg": 7.5,
       "sampler_name": "euler",
       "scheduler": "normal",
-      "denoise": 0.9,
+      "denoise": 1.0,
       "model": ["14", 0],
       "positive": ["6", 0],
       "negative": ["7", 0],
@@ -45,7 +45,7 @@
     "class_type": "SaveImage",
     "inputs": {
       "filename_prefix": "DiffuseCutShotIntegrate",
-      "images": ["40", 0]
+      "images": ["8", 0]
     }
   },
   "10": {
@@ -124,10 +124,10 @@
     "class_type": "FeatherMask",
     "inputs": {
       "mask": ["22", 0],
-      "left": 24,
-      "top": 24,
-      "right": 24,
-      "bottom": 14
+      "left": 0,
+      "top": 0,
+      "right": 0,
+      "bottom": 0
     }
   },
   "24": {
@@ -135,99 +135,6 @@
     "inputs": {
       "samples": ["16", 0],
       "mask": ["23", 0]
-    }
-  },
-  "30": {
-    "class_type": "RemBGSession+",
-    "inputs": {
-      "model": "u2net_human_seg: human segmentation",
-      "providers": "CPU"
-    }
-  },
-  "31": {
-    "class_type": "ImageRemoveBackground+",
-    "inputs": {
-      "rembg_session": ["30", 0],
-      "image": ["8", 0]
-    }
-  },
-  "32": {
-    "class_type": "GrowMask",
-    "inputs": {
-      "mask": ["31", 1],
-      "expand": -2,
-      "tapered_corners": true
-    }
-  },
-  "33": {
-    "class_type": "MaskBlur+",
-    "inputs": {
-      "mask": ["32", 0],
-      "amount": 6,
-      "device": "auto"
-    }
-  },
-  "34": {
-    "class_type": "ImageCompositeMasked",
-    "inputs": {
-      "destination": ["11", 0],
-      "source": ["8", 0],
-      "mask": ["33", 0],
-      "x": 0,
-      "y": 0,
-      "resize_source": false
-    }
-  },
-  "35": {
-    "class_type": "VAEEncode",
-    "inputs": {
-      "pixels": ["34", 0],
-      "vae": ["4", 2]
-    }
-  },
-  "36": {
-    "class_type": "GrowMask",
-    "inputs": {
-      "mask": ["31", 1],
-      "expand": 20,
-      "tapered_corners": true
-    }
-  },
-  "37": {
-    "class_type": "MaskBlur+",
-    "inputs": {
-      "mask": ["36", 0],
-      "amount": 24,
-      "device": "auto"
-    }
-  },
-  "38": {
-    "class_type": "SetLatentNoiseMask",
-    "inputs": {
-      "samples": ["35", 0],
-      "mask": ["37", 0]
-    }
-  },
-  "39": {
-    "class_type": "KSampler",
-    "inputs": {
-      "seed": 0,
-      "steps": 26,
-      "cfg": 7.5,
-      "sampler_name": "euler",
-      "scheduler": "normal",
-      "denoise": 0.3,
-      "model": ["4", 0],
-      "positive": ["6", 0],
-      "negative": ["7", 0],
-      "latent_image": ["38", 0]
-    }
-  },
-  "40": {
-    "class_type": "VAEDecode",
-    "inputs": {
-      "samples": ["39", 0],
-      "vae": ["4", 2]
     }
   }
 }

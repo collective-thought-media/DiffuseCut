@@ -1334,20 +1334,18 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
     if (
       workflowTemplateId === BUILTIN_SHOT_SCENE_INTEGRATE_INPAINT_TEMPLATE_ID
     ) {
-      // Mask nodes are core ComfyUI; the rembg subject re-composite stage
-      // (discard invented background inside the mask, keep only the subject on
-      // the original plate) needs ComfyUI_essentials, same as the composited
-      // pipeline. Assert so a truncated install fails with a clear message.
+      // Masked inpaint only: core ComfyUI mask nodes plus IP-Adapter.
+      // Do not require RemBG here. A human-seg RemBG recomposite pass used to
+      // punch holes through non-human subjects (dragons) and paste them back
+      // onto the plate as translucent morphs.
       await assertComfyuiNodeClasses(batch.comfyuiEndpointUrl, [
         "SolidMask",
         "MaskComposite",
         "FeatherMask",
         "SetLatentNoiseMask",
-        "RemBGSession+",
-        "ImageRemoveBackground+",
-        "GrowMask",
-        "MaskBlur+",
-        "ImageCompositeMasked",
+        "IPAdapterModelLoader",
+        "CLIPVisionLoader",
+        "IPAdapterAdvanced",
       ]);
     }
 
