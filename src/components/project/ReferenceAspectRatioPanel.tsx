@@ -6,6 +6,7 @@ import {
   REFERENCE_ASPECT_RATIO_PRESETS,
   getReferenceAspectRatioLabel,
   parseReferenceAspectRatio,
+  resolveVideoDimensionsForAspectRatio,
   type ReferenceAspectRatioPreset,
 } from "@/lib/services/reference-aspect-ratio";
 import type { RenderSettings } from "@/types";
@@ -59,6 +60,7 @@ export function ReferenceAspectRatioPanel({
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Failed to load render settings");
         const existing = (data.renderSettings ?? {}) as RenderSettings;
+        const videoSize = resolveVideoDimensionsForAspectRatio(nextPreset);
 
         const saveRes = await fetch(`/api/projects/${projectId}/render-settings`, {
           method: "PATCH",
@@ -67,6 +69,8 @@ export function ReferenceAspectRatioPanel({
             renderSettings: {
               ...existing,
               referenceAspectRatio: nextPreset,
+              videoWidth: videoSize.width,
+              videoHeight: videoSize.height,
             },
           }),
         });
@@ -93,8 +97,8 @@ export function ReferenceAspectRatioPanel({
         <div>
           <h2 className="entity-card-header">Reference Aspect Ratio</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Every character sheet and location reference option in this project
-            uses the same canvas size.
+            Whatever ratio you pick here is the canvas for character sheets,
+            location references, storyboard stills, and rendered video.
           </p>
         </div>
         {saving ? (

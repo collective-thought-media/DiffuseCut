@@ -6,6 +6,7 @@ import type { Project, WorkflowTemplate } from "@/lib/db/schema";
 import type { RenderSettings } from "@/types";
 import { Button, Card, Input, Label, Select, Textarea, Badge } from "@/components/ui/button";
 import { PageLoadingSkeleton } from "@/components/ui/PageLoadingSkeleton";
+import { ReferenceAspectRatioPanel } from "@/components/project/ReferenceAspectRatioPanel";
 import { deleteProjectRequest } from "@/lib/api/delete-project";
 
 type PageProps = { params: Promise<{ projectId: string }> };
@@ -216,6 +217,10 @@ export default function ProjectSettingsPage({ params }: PageProps) {
           Per-project overrides for {project?.name ?? "this project"}.
         </p>
       </div>
+
+      <Card>
+        <ReferenceAspectRatioPanel projectId={projectId} />
+      </Card>
 
       <Card>
         <form onSubmit={handleSave} className="space-y-5">

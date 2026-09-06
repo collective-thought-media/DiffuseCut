@@ -10,6 +10,7 @@ import { getDb, schema } from "@/lib/db";
 import { nowMs } from "@/lib/utils";
 import { hydrateProjectRenderSettings, mergeRenderSettings } from "@/lib/services/render-settings-resolver";
 import { normalizeRenderSettings } from "@/lib/services/image-sampler";
+import { applyProjectAspectRatioToRenderSettings } from "@/lib/services/reference-aspect-ratio";
 import { getDefaultRenderSettings, saveDefaultRenderSettings } from "@/lib/services/settings";
 import type { RenderSettings } from "@/types";
 
@@ -52,9 +53,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         updateAppDefaults: true,
       });
 
+      const aligned = applyProjectAspectRatioToRenderSettings(renderSettings);
       return jsonOk({
-        renderSettings,
-        renderSettingsJson: JSON.stringify(renderSettings),
+        renderSettings: aligned,
+        renderSettingsJson: JSON.stringify(aligned),
         hydrated: true,
       });
     }
@@ -68,9 +70,10 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
       renderSettings = {};
     }
 
+    renderSettings = applyProjectAspectRatioToRenderSettings(renderSettings);
     return jsonOk({
       renderSettings,
-      renderSettingsJson: project.renderSettingsJson,
+      renderSettingsJson: JSON.stringify(renderSettings),
     });
   } catch (err) {
     return handleApiError(err);
@@ -101,15 +104,16 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
       return jsonError("renderSettings or renderSettingsJson is required", 400);
     }
 
+    const renderSettings = applyProjectAspectRatioToRenderSettings(
+      normalizeRenderSettings(JSON.parse(renderSettingsJson) as RenderSettings)
+    );
+    renderSettingsJson = JSON.stringify(renderSettings);
+
     db.update(schema.projects)
       .set({ renderSettingsJson, updatedAt: nowMs() })
       .where(eq(schema.projects.id, projectId))
       .run();
 
-    const renderSettings = normalizeRenderSettings(
-      JSON.parse(renderSettingsJson) as RenderSettings
-    );
-    renderSettingsJson = JSON.stringify(renderSettings);
     const appDefaults = await getDefaultRenderSettings();
     await saveDefaultRenderSettings(
       mergeRenderSettings(appDefaults, renderSettings)

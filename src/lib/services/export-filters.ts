@@ -3,6 +3,8 @@
  * Kept free of fs/db so they are easy to unit test.
  */
 
+import { alignVideoSizeToReferenceAspect } from "@/lib/services/reference-aspect-ratio";
+
 /** Streaming-friendly loudness target for the final export mix. */
 export const EXPORT_LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1.5:LRA=11";
 
@@ -20,18 +22,28 @@ export function buildExactSizeVideoFilter(
 export function resolveOutputFrameSize(settings: {
   videoWidth?: number;
   videoHeight?: number;
+  referenceAspectRatio?: string | null;
 }): { width: number; height: number } | null {
-  const width = Number(settings.videoWidth);
-  const height = Number(settings.videoHeight);
-  if (
-    !Number.isFinite(width) ||
-    !Number.isFinite(height) ||
-    width < 64 ||
-    height < 64
-  ) {
+  const rawWidth = Number(settings.videoWidth);
+  const rawHeight = Number(settings.videoHeight);
+  const widthProvided =
+    settings.videoWidth != null && Number.isFinite(rawWidth);
+  const heightProvided =
+    settings.videoHeight != null && Number.isFinite(rawHeight);
+  if (widthProvided !== heightProvided) return null;
+  if (widthProvided && heightProvided && (rawWidth < 64 || rawHeight < 64)) {
     return null;
   }
-  return { width: Math.round(width), height: Math.round(height) };
+
+  const aligned = alignVideoSizeToReferenceAspect({
+    referenceAspectRatio: settings.referenceAspectRatio,
+    videoWidth: widthProvided ? rawWidth : null,
+    videoHeight: heightProvided ? rawHeight : null,
+  });
+  return {
+    width: Math.round(aligned.videoWidth),
+    height: Math.round(aligned.videoHeight),
+  };
 }
 
 /**

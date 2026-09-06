@@ -6,6 +6,7 @@ import {
   type VisualStyle,
 } from "@/lib/services/visual-style";
 import {
+  alignVideoSizeToReferenceAspect,
   resolveReferenceAspectRatio,
   type ReferenceAspectRatioPreset,
 } from "@/lib/services/reference-aspect-ratio";
@@ -168,9 +169,9 @@ function resolveControlValue(
     case "text_encoder":
       return renderSettings.videoTextEncoder;
     case "video_width":
-      return renderSettings.videoWidth;
+      return alignVideoSizeToReferenceAspect(renderSettings).videoWidth;
     case "video_height":
-      return renderSettings.videoHeight;
+      return alignVideoSizeToReferenceAspect(renderSettings).videoHeight;
     case "model_device":
     case "vae_device":
       return renderSettings.comfyGpuDevice ?? "default";
@@ -314,8 +315,9 @@ export function buildWorkflowPayload(
     shot.durationFrames / fps
   );
 
-  let latentWidth = renderSettings.videoWidth;
-  let latentHeight = renderSettings.videoHeight;
+  const alignedVideo = alignVideoSizeToReferenceAspect(renderSettings);
+  let latentWidth = alignedVideo.videoWidth;
+  let latentHeight = alignedVideo.videoHeight;
   const areaBudget = mergedBindings.latentVideoAreaBudget;
   if (
     areaBudget != null &&

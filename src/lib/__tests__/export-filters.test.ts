@@ -113,4 +113,38 @@ describe("resolveOutputFrameSize", () => {
       resolveOutputFrameSize({ videoWidth: 32, videoHeight: 18 })
     ).toBeNull();
   });
+
+  it("follows a 9:16 still preset instead of leftover landscape video size", () => {
+    expect(
+      resolveOutputFrameSize({
+        videoWidth: 1920,
+        videoHeight: 1080,
+        referenceAspectRatio: "9_16",
+      })
+    ).toEqual({ width: 768, height: 1344 });
+  });
+
+  it("follows square and ultrawide still presets too", () => {
+    expect(
+      resolveOutputFrameSize({
+        videoWidth: 1920,
+        videoHeight: 1080,
+        referenceAspectRatio: "1_1",
+      })
+    ).toEqual({ width: 1024, height: 1024 });
+    expect(
+      resolveOutputFrameSize({
+        videoWidth: 1920,
+        videoHeight: 1080,
+        referenceAspectRatio: "21_9",
+      })
+    ).toEqual({ width: 1344, height: 576 });
+    expect(
+      resolveOutputFrameSize({
+        videoWidth: 1920,
+        videoHeight: 1080,
+        referenceAspectRatio: "2_1",
+      })
+    ).toEqual({ width: 1536, height: 768 });
+  });
 });

@@ -8,6 +8,11 @@ import {
   DEFAULT_IMAGE_SAMPLER,
   DEFAULT_VIDEO_SAMPLER,
 } from "@/lib/services/image-sampler";
+import {
+  applyProjectAspectRatioToRenderSettings,
+  getReferenceAspectRatioLabel,
+  resolveVideoDimensionsForAspectRatio,
+} from "@/lib/services/reference-aspect-ratio";
 
 interface RenderSettingsPanelProps {
   settings: RenderSettings;
@@ -47,6 +52,10 @@ export function RenderSettingsPanel({
     ...settings.sampler,
   };
   const compact = variant === "sidebar";
+  const projectVideoSize = resolveVideoDimensionsForAspectRatio(
+    settings.referenceAspectRatio
+  );
+  const videoSize = applyProjectAspectRatioToRenderSettings(settings);
 
   const fields = (
     <>
@@ -328,6 +337,11 @@ export function RenderSettingsPanel({
           </div>
 
           <SectionLabel>Video output</SectionLabel>
+          <p className="text-xs text-muted-foreground">
+            Defaults to {getReferenceAspectRatioLabel(settings.referenceAspectRatio)}.
+            Set the project aspect ratio once. You do not need to enter these
+            again unless you want a custom size.
+          </p>
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
@@ -336,16 +350,16 @@ export function RenderSettingsPanel({
                 id="video-width"
                 type="number"
                 min={64}
-                value={settings.videoWidth ?? ""}
+                value={videoSize.videoWidth ?? ""}
                 onChange={(e) =>
                   onChange({
                     ...settings,
                     videoWidth: e.target.value
                       ? Number(e.target.value)
-                      : undefined,
+                      : projectVideoSize.width,
                   })
                 }
-                placeholder="1920"
+                placeholder={String(projectVideoSize.width)}
               />
             </div>
             <div className="space-y-1.5">
@@ -354,16 +368,16 @@ export function RenderSettingsPanel({
                 id="video-height"
                 type="number"
                 min={64}
-                value={settings.videoHeight ?? ""}
+                value={videoSize.videoHeight ?? ""}
                 onChange={(e) =>
                   onChange({
                     ...settings,
                     videoHeight: e.target.value
                       ? Number(e.target.value)
-                      : undefined,
+                      : projectVideoSize.height,
                   })
                 }
-                placeholder="1080"
+                placeholder={String(projectVideoSize.height)}
               />
             </div>
           </div>

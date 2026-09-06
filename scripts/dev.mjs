@@ -3,6 +3,10 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  isTurbopackManifestRace,
+  shouldEnableTurbopack,
+} from "./dev-runtime.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
@@ -71,14 +75,47 @@ function killOrphanWorkers() {
   }
 }
 
+function stopExistingAppOnPort() {
+  if (process.platform === "win32") {
+    try {
+      execSync(
+        `powershell -NoProfile -Command "$conns = Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue; $pids = @($conns | Select-Object -ExpandProperty OwningProcess -Unique); foreach ($procId in $pids) { $p = Get-CimInstance Win32_Process -Filter \\"ProcessId=$procId\\"; if ($p.CommandLine -match 'start-server.js' -or $p.CommandLine -match 'next/dist/bin/next') { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } }"`,
+        { stdio: "ignore" }
+      );
+    } catch {
+      /* ignore */
+    }
+    return;
+  }
+
+  try {
+    const out = execSync(`lsof -t -iTCP:${port} -sTCP:LISTEN || true`, {
+      encoding: "utf8",
+    });
+    for (const pid of out.split(/\s+/).map((value) => value.trim()).filter(Boolean)) {
+      try {
+        process.kill(Number(pid), "SIGTERM");
+      } catch {
+        /* ignore */
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearNextCache(reason) {
+  const nextDir = path.join(root, ".next");
+  if (!fs.existsSync(nextDir)) return;
+  fs.rmSync(nextDir, { recursive: true, force: true });
+  console.log("[app] Cleared .next cache" + (reason ? ` (${reason})` : ""));
+}
+
+stopExistingAppOnPort();
 killOrphanWorkers();
 
 if (shouldClean) {
-  const nextDir = path.join(root, ".next");
-  if (fs.existsSync(nextDir)) {
-    fs.rmSync(nextDir, { recursive: true, force: true });
-    console.log("[dev] Cleared .next cache");
-  }
+  clearNextCache("dev:clean");
 }
 
 function hasProductionBuild() {
@@ -108,6 +145,12 @@ if (!nextIsInstalled()) {
   process.exit(1);
 }
 
+const useTurbo = shouldEnableTurbopack({
+  isProd,
+  argv: process.argv,
+  env: process.env,
+});
+
 if (isProd) {
   process.env.NODE_ENV = "production";
   if (!hasProductionBuild()) {
@@ -119,14 +162,15 @@ if (isProd) {
     });
   }
   console.log("[app] Starting DiffuseCut in production mode on port", port);
+} else if (useTurbo) {
+  console.log(
+    "[app] Starting DiffuseCut in developer mode on port",
+    port,
+    "(Turbopack)"
+  );
 } else {
   console.log("[app] Starting DiffuseCut in developer mode on port", port);
 }
-
-const nextCmd = isProd ? "start" : "dev";
-const nextArgs = isProd
-  ? [nextBin, nextCmd, "-p", port]
-  : [nextBin, nextCmd, "-p", port, "--turbo"];
 
 const nextEnv = {
   ...process.env,
@@ -134,15 +178,69 @@ const nextEnv = {
   NODE_ENV: isProd ? "production" : process.env.NODE_ENV,
 };
 
-const next = spawn(process.execPath, nextArgs, {
-  cwd: root,
-  stdio: "inherit",
-  env: nextEnv,
-});
+function buildNextArgs() {
+  if (isProd) return [nextBin, "start", "-p", port];
+  return useTurbo
+    ? [nextBin, "dev", "-p", port, "--turbo"]
+    : [nextBin, "dev", "-p", port];
+}
 
+let next = null;
 let worker = null;
 let shutdownRequested = false;
 let workerRestartTimer = null;
+let recoveringNext = false;
+let nextRecoveries = 0;
+let manifestRaceHits = 0;
+const MAX_NEXT_RECOVERIES = 1;
+
+function considerManifestRace(chunk) {
+  if (isProd || recoveringNext || nextRecoveries >= MAX_NEXT_RECOVERIES) return;
+  if (!isTurbopackManifestRace(String(chunk))) return;
+  manifestRaceHits += 1;
+  if (manifestRaceHits < 3) return;
+  recoveringNext = true;
+  nextRecoveries += 1;
+  console.error(
+    "[app] The web server lost its client manifest. Clearing .next and restarting once."
+  );
+  next?.kill();
+}
+
+function startNext() {
+  next = spawn(process.execPath, buildNextArgs(), {
+    cwd: root,
+    stdio: ["inherit", "pipe", "pipe"],
+    env: nextEnv,
+  });
+  next.stdout.on("data", (chunk) => {
+    process.stdout.write(chunk);
+    considerManifestRace(chunk);
+  });
+  next.stderr.on("data", (chunk) => {
+    process.stderr.write(chunk);
+    considerManifestRace(chunk);
+  });
+  next.on("exit", (code) => {
+    if (shutdownRequested) {
+      if (workerRestartTimer) clearTimeout(workerRestartTimer);
+      worker?.kill();
+      process.exit(code ?? 0);
+      return;
+    }
+    if (recoveringNext) {
+      recoveringNext = false;
+      manifestRaceHits = 0;
+      clearNextCache("manifest race");
+      startNext();
+      return;
+    }
+    shutdownRequested = true;
+    if (workerRestartTimer) clearTimeout(workerRestartTimer);
+    worker?.kill();
+    process.exit(code ?? 0);
+  });
+}
 
 function startWorker() {
   if (shutdownRequested) return;
@@ -177,22 +275,16 @@ function startWorker() {
   });
 }
 
+startNext();
 startWorker();
 
 function shutdown() {
   shutdownRequested = true;
   if (workerRestartTimer) clearTimeout(workerRestartTimer);
-  next.kill();
+  next?.kill();
   worker?.kill();
   process.exit(0);
 }
 
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
-
-next.on("exit", (code) => {
-  shutdownRequested = true;
-  if (workerRestartTimer) clearTimeout(workerRestartTimer);
-  worker?.kill();
-  process.exit(code ?? 0);
-});

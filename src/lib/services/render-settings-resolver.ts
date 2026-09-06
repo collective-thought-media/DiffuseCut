@@ -16,6 +16,7 @@ import {
   resolveTemplateVideoHints,
 } from "@/lib/db/builtin-template-ids";
 import type { RenderSettings, WorkflowBindings } from "@/types";
+import { alignVideoSizeToReferenceAspect } from "@/lib/services/reference-aspect-ratio";
 
 const VIDEO_STACK_KEYS = [
   "videoCheckpoint",
@@ -530,8 +531,6 @@ export async function resolveRenderSettingsFromComfyUI(
   }
 
   if (minimaxOnly || isMinimaxVideoStack(resolved)) {
-    if (resolved.videoWidth == null) resolved.videoWidth = 1344;
-    if (resolved.videoHeight == null) resolved.videoHeight = 768;
     resolved.sampler = {
       ...resolved.sampler,
       steps: resolved.sampler?.steps ?? 20,
@@ -542,8 +541,6 @@ export async function resolveRenderSettingsFromComfyUI(
   }
 
   if (ltxOnly || isLtxVideoStack(resolved)) {
-    if (resolved.videoWidth == null) resolved.videoWidth = 1920;
-    if (resolved.videoHeight == null) resolved.videoHeight = 1080;
     resolved.sampler = {
       ...resolved.sampler,
       steps: resolved.sampler?.steps ?? 20,
@@ -551,6 +548,17 @@ export async function resolveRenderSettingsFromComfyUI(
       sampler_name: resolved.sampler?.sampler_name ?? "euler",
       scheduler: resolved.sampler?.scheduler ?? "normal",
     };
+  }
+
+  if (
+    minimaxOnly ||
+    isMinimaxVideoStack(resolved) ||
+    ltxOnly ||
+    isLtxVideoStack(resolved)
+  ) {
+    const aligned = alignVideoSizeToReferenceAspect(resolved);
+    resolved.videoWidth = aligned.videoWidth;
+    resolved.videoHeight = aligned.videoHeight;
   }
 
   return resolved;
@@ -641,6 +649,9 @@ export async function hydrateProjectRenderSettings(
   }
 
   merged = normalizeRenderSettings(merged);
+  const alignedVideo = alignVideoSizeToReferenceAspect(merged);
+  merged.videoWidth = alignedVideo.videoWidth;
+  merged.videoHeight = alignedVideo.videoHeight;
 
   const changed = !renderSettingsEqual(projectSettings, merged);
 
