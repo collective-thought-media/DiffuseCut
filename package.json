@@ -1,7 +1,7 @@
 {
   "name": "diffusecut",
   "version": "0.1.0-alpha.1",
-  "description": "Local-first AI filmmaking studio. Storyboard shots, generate stills and video through ComfyUI, finish audio, and export MP4.",
+  "description": "Local-first AI filmmaking studio for ComfyUI. Storyboard, stills, LTX/MiniMax video, audio finish, MP4 export. Model and workflow agnostic: import any ComfyUI API workflow into the UI.",
   "license": "MIT",
   "repository": {
     "type": "git",
