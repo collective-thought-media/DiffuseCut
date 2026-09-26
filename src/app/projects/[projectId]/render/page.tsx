@@ -1,6 +1,9 @@
 "use client";
 
-import { use, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
+import { SequenceSwitcher } from "@/components/project/SequenceSwitcher";
+import { useActiveSequence } from "@/lib/hooks/useActiveSequence";
+import { withSequenceId } from "@/lib/sequence-api-url";
 import type { RenderJob, Shot, WorkflowTemplate } from "@/lib/db/schema";
 import {
   BUILTIN_LTX_I2V_TEMPLATE_ID,
@@ -64,8 +67,14 @@ function resolvePreferredVideoTemplateId(
   );
 }
 
-export default function RenderPage({ params }: PageProps) {
-  const { projectId } = use(params);
+function RenderPageContent({ projectId }: { projectId: string }) {
+  const {
+    sequences,
+    activeSequenceId,
+    sequencesLoading,
+    setActiveSequenceId,
+    reloadSequences,
+  } = useActiveSequence(projectId);
   const [shots, setShots] = useState<Shot[]>([]);
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
@@ -86,14 +95,58 @@ export default function RenderPage({ params }: PageProps) {
     string[]
   >([]);
   const [krea2Available, setKrea2Available] = useState(false);
+  const [syncingComfy, setSyncingComfy] = useState(false);
   const settingsHydratedRef = useRef(false);
   const templateHydratedRef = useRef<string | null>(null);
+
+  const refreshComfyAndHydrateSettings = useCallback(
+    async (templateId: string) => {
+      const [depsRes, settingsRes] = await Promise.all([
+        fetch("/api/system/dependencies/recheck", { method: "POST" }),
+        fetch(
+          `/api/projects/${projectId}/render-settings?hydrate=1&templateId=${encodeURIComponent(templateId)}`
+        ),
+      ]);
+
+      let comfyReachable = false;
+      let comfyMessage: string | undefined;
+      let hydratedSettings: RenderSettings | undefined;
+
+      if (depsRes.ok) {
+        const depsData = await depsRes.json();
+        const comfy = (
+          depsData.dependencies as DependencyStatus[] | undefined
+        )?.find((dep) => dep.id === "comfyui");
+        setComfyDependency(comfy ?? null);
+        comfyReachable = comfy?.status === "ok";
+        comfyMessage = comfy?.message;
+      }
+
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.renderSettings) {
+          hydratedSettings = settingsData.renderSettings as RenderSettings;
+          setRenderSettings(hydratedSettings);
+        }
+        if (typeof settingsData.comfyReachable === "boolean") {
+          comfyReachable = settingsData.comfyReachable;
+        }
+      }
+
+      return {
+        comfyReachable,
+        comfyMessage,
+        renderSettings: hydratedSettings,
+      };
+    },
+    [projectId]
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [shotsRes, jobsRes, templatesRes, depsRes, stackRes] = await Promise.all([
-        fetch(`/api/projects/${projectId}/shots`),
+        fetch(withSequenceId(`/api/projects/${projectId}/shots`, activeSequenceId)),
         fetch(`/api/render-jobs?projectId=${projectId}`),
         fetch("/api/workflow-templates?purpose=shot_video"),
         fetch("/api/system/dependencies"),
@@ -187,11 +240,17 @@ export default function RenderPage({ params }: PageProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, activeSequenceId]);
 
   useEffect(() => {
+    if (sequencesLoading) return;
+    if (!activeSequenceId) {
+      setLoading(false);
+      setError("No sequence found for this project.");
+      return;
+    }
     void loadData();
-  }, [loadData]);
+  }, [loadData, activeSequenceId, sequencesLoading]);
 
   useEffect(() => {
     if (loading) return;
@@ -205,21 +264,10 @@ export default function RenderPage({ params }: PageProps) {
     if (templateHydratedRef.current === selectedTemplateId) return;
     templateHydratedRef.current = selectedTemplateId;
 
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/projects/${projectId}/render-settings?hydrate=1&templateId=${encodeURIComponent(selectedTemplateId)}`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.renderSettings) {
-          setRenderSettings(data.renderSettings);
-        }
-      } catch {
-        /* keep current settings */
-      }
-    })();
-  }, [projectId, selectedTemplateId, loading]);
+    void refreshComfyAndHydrateSettings(selectedTemplateId).catch(() => {
+      /* keep current settings */
+    });
+  }, [projectId, selectedTemplateId, loading, refreshComfyAndHydrateSettings]);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -239,7 +287,11 @@ export default function RenderPage({ params }: PageProps) {
             shots?: Shot[];
           };
           if (data.jobs) setJobs(data.jobs);
-          if (data.shots) setShots(data.shots);
+          if (data.shots && activeSequenceId) {
+            setShots(
+              data.shots.filter((shot: Shot) => shot.sequenceId === activeSequenceId)
+            );
+          }
         } catch {
           /* ignore malformed events */
         }
@@ -261,7 +313,7 @@ export default function RenderPage({ params }: PageProps) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       es?.close();
     };
-  }, [projectId]);
+  }, [projectId, activeSequenceId]);
 
   async function handleQueue() {
     if (selectedShotIds.length === 0) return;
@@ -283,33 +335,42 @@ export default function RenderPage({ params }: PageProps) {
       return;
     }
 
-    if (selectedTemplate) {
-      let bindings: WorkflowBindings = {};
-      try {
-        bindings = JSON.parse(
-          selectedTemplate.bindingsJson || "{}"
-        ) as WorkflowBindings;
-      } catch {
-        bindings = {};
-      }
-      const missing = getMissingRenderSettingsForBindings(
-        bindings,
-        renderSettings
-      );
-      if (missing.length > 0) {
-        setError(formatMissingRenderSettingsMessage(missing));
-        return;
-      }
-    }
-    if (comfyDependency && comfyDependency.status !== "ok") {
-      setError(
-        "ComfyUI is not reachable. Set your ComfyUI URL in Settings or project settings, then recheck dependencies."
-      );
-      return;
-    }
     setQueueing(true);
     setError(null);
     try {
+      const {
+        comfyReachable,
+        comfyMessage,
+        renderSettings: hydratedSettings,
+      } = await refreshComfyAndHydrateSettings(selectedTemplateId);
+      const settingsForQueue = hydratedSettings ?? renderSettings;
+
+      if (!comfyReachable) {
+        setError(
+          comfyMessage ??
+            "ComfyUI is not reachable. Set your ComfyUI URL in Settings or project settings, then use Sync ComfyUI."
+        );
+        return;
+      }
+
+      if (selectedTemplate) {
+        let bindings: WorkflowBindings = {};
+        try {
+          bindings = JSON.parse(
+            selectedTemplate.bindingsJson || "{}"
+          ) as WorkflowBindings;
+        } catch {
+          bindings = {};
+        }
+        const missing = getMissingRenderSettingsForBindings(
+          bindings,
+          settingsForQueue
+        );
+        if (missing.length > 0) {
+          setError(formatMissingRenderSettingsMessage(missing));
+          return;
+        }
+      }
       const res = await fetch("/api/render-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -388,6 +449,9 @@ export default function RenderPage({ params }: PageProps) {
     }
   }
 
+  const comfyReady = !comfyDependency || comfyDependency.status === "ok";
+  const settingsReady = missingRenderSettings.length === 0;
+
   const shotTitleMap = Object.fromEntries(
     shots.map((s) => [s.id, s.title || "Untitled"])
   );
@@ -398,6 +462,14 @@ export default function RenderPage({ params }: PageProps) {
 
   return (
     <div className="flex min-h-[calc(100vh-9rem)] flex-col gap-4">
+      <SequenceSwitcher
+        projectId={projectId}
+        sequences={sequences}
+        activeSequenceId={activeSequenceId}
+        onSelect={setActiveSequenceId}
+        onChanged={() => void reloadSequences()}
+      />
+
       <div className="shrink-0">
         <h1 className="text-2xl font-semibold">Render</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -423,6 +495,22 @@ export default function RenderPage({ params }: PageProps) {
                 {comfyDependency.installHint}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={syncingComfy || !selectedTemplateId}
+                  onClick={() => {
+                    if (!selectedTemplateId) return;
+                    setSyncingComfy(true);
+                    void refreshComfyAndHydrateSettings(selectedTemplateId)
+                      .catch(() =>
+                        setError("Could not sync with ComfyUI. Try again.")
+                      )
+                      .finally(() => setSyncingComfy(false));
+                  }}
+                >
+                  {syncingComfy ? "Syncing…" : "Sync ComfyUI"}
+                </Button>
                 <Link href="/settings">
                   <Button size="sm" variant="outline">
                     App settings
@@ -437,7 +525,7 @@ export default function RenderPage({ params }: PageProps) {
             </Card>
           )}
 
-          {missingRenderSettings.length > 0 && (
+          {comfyReady && missingRenderSettings.length > 0 && (
             <Card className="border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-200">
               {formatMissingRenderSettingsMessage(missingRenderSettings)}
             </Card>
@@ -480,14 +568,32 @@ export default function RenderPage({ params }: PageProps) {
                     folders.
                   </p>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setWizardOpen(true)}
-                  disabled={!selectedTemplate}
-                >
-                  Edit bindings
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setWizardOpen(true)}
+                    disabled={!selectedTemplate}
+                  >
+                    Edit bindings
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={syncingComfy || !selectedTemplateId}
+                    onClick={() => {
+                      if (!selectedTemplateId) return;
+                      setSyncingComfy(true);
+                      void refreshComfyAndHydrateSettings(selectedTemplateId)
+                        .catch(() =>
+                          setError("Could not sync with ComfyUI. Try again.")
+                        )
+                        .finally(() => setSyncingComfy(false));
+                    }}
+                  >
+                    {syncingComfy ? "Syncing…" : "Sync ComfyUI"}
+                  </Button>
+                </div>
               </>
             )}
           </Card>
@@ -516,8 +622,8 @@ export default function RenderPage({ params }: PageProps) {
             onQueue={() => void handleQueue()}
             queueing={queueing}
             templateSelected={Boolean(selectedTemplateId)}
-            settingsReady={missingRenderSettings.length === 0}
-            comfyReady={!comfyDependency || comfyDependency.status === "ok"}
+            settingsReady={settingsReady}
+            comfyReady={comfyReady}
             fillHeight
           />
 
@@ -567,5 +673,16 @@ export default function RenderPage({ params }: PageProps) {
         onSave={handleSaveBindings}
       />
     </div>
+  );
+}
+
+export default function RenderPage({ params }: PageProps) {
+  const { projectId } = use(params);
+  return (
+    <Suspense
+      fallback={<p className="text-sm text-muted-foreground">Loading render…</p>}
+    >
+      <RenderPageContent projectId={projectId} />
+    </Suspense>
   );
 }

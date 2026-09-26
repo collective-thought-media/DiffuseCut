@@ -13,6 +13,7 @@ import { nanoid, nowMs } from "@/lib/utils";
 
 interface CreateExportBody {
   projectId: string;
+  sequenceId?: string;
   settings?: ExportSettings;
 }
 
@@ -34,11 +35,16 @@ export async function POST(req: NextRequest) {
 
     const id = nanoid();
     const ts = nowMs();
-    const settingsJson = JSON.stringify(body.settings ?? {});
+    const settings = {
+      ...(body.settings ?? {}),
+      ...(body.sequenceId ? { sequenceId: body.sequenceId } : {}),
+    };
+    const settingsJson = JSON.stringify(settings);
 
     const row = {
       id,
       projectId: body.projectId,
+      sequenceId: body.sequenceId ?? body.settings?.sequenceId ?? null,
       status: "queued" as const,
       outputPath: null,
       settingsJson,

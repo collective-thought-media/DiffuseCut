@@ -15,7 +15,7 @@ const projectTabs: ProjectTab[] = [
   { segment: "locations", label: "Locations" },
   { segment: "storyboard", label: "Storyboard" },
   { segment: "render", label: "Render" },
-  { segment: "finishing", label: "Finishing" },
+  { segment: "finishing", label: "Edit" },
   { segment: "export", label: "Export" },
   { segment: "settings", label: "Project Settings" },
 ];

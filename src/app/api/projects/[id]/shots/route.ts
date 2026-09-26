@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   jsonOk,
   jsonError,
@@ -9,11 +9,13 @@ import {
 import { getDb, schema } from "@/lib/db";
 import { nanoid, nowMs } from "@/lib/utils";
 import {
-  getShotCharacterCast,
   normalizeLegacyCharacterIds,
   syncShotCharacterCast,
   type ShotCharacterCastEntry,
 } from "@/lib/services/shot-cast";
+import { getShotsWithCast } from "@/lib/services/shot-list";
+import { resolveSequenceId } from "@/lib/services/sequence-scope";
+import { listShotsForSequence } from "@/lib/services/sequences";
 
 interface CreateShotBody {
   title?: string;
@@ -21,6 +23,7 @@ interface CreateShotBody {
   locationId?: string | null;
   characterIds?: string[];
   characterCast?: ShotCharacterCastEntry[];
+  sequenceId?: string;
 }
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -34,34 +37,16 @@ function getProjectOrNull(projectId: string) {
     .get();
 }
 
-function getShotsWithCast(projectId: string) {
-  const db = getDb();
-  const shots = db
-    .select()
-    .from(schema.shots)
-    .where(eq(schema.shots.projectId, projectId))
-    .orderBy(asc(schema.shots.sortOrder), asc(schema.shots.createdAt))
-    .all();
-
-  return shots.map((shot) => {
-    const characterCast = getShotCharacterCast(shot.id);
-    return {
-      ...shot,
-      characterCast,
-      characterIds: characterCast.map((entry) => entry.characterId),
-    };
-  });
-}
-
-export async function GET(_req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     const { id: projectId } = await params;
     if (!getProjectOrNull(projectId)) {
       return jsonError("Project not found", 404);
     }
 
-    const shots = getShotsWithCast(projectId);
-    return jsonOk({ shots });
+    const sequenceId = req.nextUrl.searchParams.get("sequenceId");
+    const shots = getShotsWithCast(projectId, sequenceId);
+    return jsonOk({ shots, sequenceId: resolveSequenceId(projectId, sequenceId) });
   } catch (err) {
     return handleApiError(err);
   }
@@ -75,6 +60,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
 
     const body = await parseJson<CreateShotBody>(req);
     const db = getDb();
+    const sequenceId = resolveSequenceId(projectId, body.sequenceId);
 
     if (body.locationId) {
       const location = db
@@ -87,11 +73,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       }
     }
 
-    const existing = db
-      .select()
-      .from(schema.shots)
-      .where(eq(schema.shots.projectId, projectId))
-      .all();
+    const existing = listShotsForSequence(projectId, sequenceId);
     const sortOrder = existing.length;
 
     const id = nanoid();
@@ -99,6 +81,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
     const row = {
       id,
       projectId,
+      sequenceId,
       sortOrder,
       title: body.title?.trim() ?? "",
       prompt: body.prompt?.trim() ?? "",
@@ -106,6 +89,9 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       durationFrames: project.defaultDurationFrames,
       fps: null,
       locationId: body.locationId ?? null,
+      locationStateId: null,
+      locationAngleId: null,
+      visualReferenceFocus: "location" as const,
       placeholderPath: null,
       placeholderKind: null,
       videoPath: null,
@@ -129,7 +115,7 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       );
     }
 
-    const shot = getShotsWithCast(projectId).find((s) => s.id === id)!;
+    const shot = getShotsWithCast(projectId, sequenceId).find((s) => s.id === id)!;
     return jsonOk({ shot }, 201);
   } catch (err) {
     return handleApiError(err);

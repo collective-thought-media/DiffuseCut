@@ -3,6 +3,11 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";
 import { getAppDataDir, getDbPath } from "@/lib/paths/app-paths";
 import { seedBuiltinWorkflowTemplates } from "@/lib/db/seed-builtin-templates";
+import {
+  createEmptyTimelineState,
+  serializeTimelineState,
+} from "@/lib/timeline/defaults";
+import { nanoid } from "@/lib/utils";
 import fs from "fs";
 import path from "path";
 
@@ -368,7 +373,122 @@ function migrate(db: Database.Database) {
     );
   }
 
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS sequences (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      name TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      timeline_json TEXT NOT NULL DEFAULT '{}',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+  `);
+
+  const shotSeqCols = db.prepare("PRAGMA table_info(shots)").all() as {
+    name: string;
+  }[];
+  if (!shotSeqCols.some((c) => c.name === "sequence_id")) {
+    db.exec(
+      `ALTER TABLE shots ADD COLUMN sequence_id TEXT REFERENCES sequences(id) ON DELETE CASCADE`
+    );
+  }
+
+  const audioSeqCols = db.prepare("PRAGMA table_info(audio_tracks)").all() as {
+    name: string;
+  }[];
+  if (!audioSeqCols.some((c) => c.name === "sequence_id")) {
+    db.exec(
+      `ALTER TABLE audio_tracks ADD COLUMN sequence_id TEXT REFERENCES sequences(id) ON DELETE CASCADE`
+    );
+  }
+
+  const overlaySeqCols = db
+    .prepare("PRAGMA table_info(text_overlays)")
+    .all() as { name: string }[];
+  if (!overlaySeqCols.some((c) => c.name === "sequence_id")) {
+    db.exec(
+      `ALTER TABLE text_overlays ADD COLUMN sequence_id TEXT REFERENCES sequences(id) ON DELETE CASCADE`
+    );
+  }
+
+  const exportSeqCols = db.prepare("PRAGMA table_info(export_jobs)").all() as {
+    name: string;
+  }[];
+  if (!exportSeqCols.some((c) => c.name === "sequence_id")) {
+    db.exec(
+      `ALTER TABLE export_jobs ADD COLUMN sequence_id TEXT REFERENCES sequences(id) ON DELETE SET NULL`
+    );
+  }
+
+  backfillSequences(db);
+
   seedBuiltinWorkflowTemplates(db);
+}
+
+function backfillSequences(db: Database.Database) {
+  const projects = db
+    .prepare(`SELECT id, default_fps FROM projects`)
+    .all() as { id: string; default_fps: number }[];
+
+  const countForProject = db.prepare(
+    `SELECT COUNT(*) as count FROM sequences WHERE project_id = ?`
+  );
+  const insertSequence = db.prepare(
+    `INSERT INTO sequences (
+      id, project_id, name, sort_order, timeline_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)`
+  );
+  const assignShots = db.prepare(
+    `UPDATE shots SET sequence_id = ? WHERE project_id = ? AND (sequence_id IS NULL OR sequence_id = '')`
+  );
+  const assignAudio = db.prepare(
+    `UPDATE audio_tracks SET sequence_id = ? WHERE project_id = ? AND (sequence_id IS NULL OR sequence_id = '')`
+  );
+  const assignOverlaysFromShots = db.prepare(
+    `UPDATE text_overlays SET sequence_id = (
+      SELECT sequence_id FROM shots WHERE shots.id = text_overlays.shot_id
+    ) WHERE project_id = ? AND sequence_id IS NULL AND shot_id IS NOT NULL`
+  );
+  const assignOverlaysDefault = db.prepare(
+    `UPDATE text_overlays SET sequence_id = ? WHERE project_id = ? AND sequence_id IS NULL`
+  );
+
+  const ts = Date.now();
+
+  const firstSequenceForProject = db.prepare(
+    `SELECT id FROM sequences WHERE project_id = ? ORDER BY sort_order ASC, created_at ASC LIMIT 1`
+  );
+
+  for (const project of projects) {
+    const existing = countForProject.get(project.id) as { count: number };
+    let sequenceId: string;
+
+    if (existing.count > 0) {
+      const row = firstSequenceForProject.get(project.id) as { id: string } | undefined;
+      if (!row) continue;
+      sequenceId = row.id;
+    } else {
+      sequenceId = nanoid();
+      const timelineJson = serializeTimelineState(
+        createEmptyTimelineState(project.default_fps ?? 24)
+      );
+      insertSequence.run(
+        sequenceId,
+        project.id,
+        "Storyboard",
+        0,
+        timelineJson,
+        ts,
+        ts
+      );
+    }
+
+    assignShots.run(sequenceId, project.id);
+    assignAudio.run(sequenceId, project.id);
+    assignOverlaysFromShots.run(project.id);
+    assignOverlaysDefault.run(sequenceId, project.id);
+  }
 }
 
 function backfillCharacterStates(db: Database.Database) {

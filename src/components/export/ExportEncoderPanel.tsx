@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 
 type ExportEncoderPanelProps = {
   projectId: string;
+  sequenceId?: string | null;
   fps: number;
   renderedCount: number;
   shotCount: number;
@@ -19,7 +20,7 @@ type ExportOutputMeta = {
   height?: number | null;
   durationSeconds?: number | null;
   overlayCount?: number;
-  audioSource?: "shots" | "shots+tracks" | "none";
+  audioSource?: "shots" | "shots+tracks" | "timeline" | "none";
 };
 
 function parseOutputMeta(json: string | null | undefined): ExportOutputMeta | null {
@@ -56,6 +57,7 @@ function statusLabel(status: ExportJob["status"]): string {
 
 export function ExportEncoderPanel({
   projectId,
+  sequenceId,
   fps,
   renderedCount,
   shotCount,
@@ -129,7 +131,14 @@ export function ExportEncoderPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          settings: { fps, format, includeAudio: true },
+          sequenceId: sequenceId ?? undefined,
+          settings: {
+            fps,
+            format,
+            includeAudio: true,
+            sequenceId: sequenceId ?? undefined,
+            useTimeline: true,
+          },
         }),
       });
       const data = await res.json();
@@ -143,6 +152,7 @@ export function ExportEncoderPanel({
         created ?? {
           id: jobId,
           projectId,
+          sequenceId: sequenceId ?? null,
           status: "queued",
           progress: 0,
           progressMessage: "Queued…",

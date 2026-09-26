@@ -10,7 +10,8 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     const { id: projectId } = await params;
     const shotId = req.nextUrl.searchParams.get("shotId");
-    const packet = collectStoryboardPacket(projectId, shotId);
+    const sequenceId = req.nextUrl.searchParams.get("sequenceId");
+    const packet = collectStoryboardPacket(projectId, shotId, sequenceId);
 
     const zip = new JSZip();
     for (const entry of packet.entries) {

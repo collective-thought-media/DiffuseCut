@@ -209,12 +209,12 @@ async function checkComfyui(endpoints: string[]): Promise<DependencyStatus> {
   const lastCheckedAt = Date.now();
   const url = endpoints[0] ?? "http://127.0.0.1:8188";
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${normalizeUrl(url)}/system_stats`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const { fetchWithComfyuiTimeout, comfyuiHttpTimeoutMs } = await import(
+      "@/lib/services/comfyui-timeout"
+    );
+    const res = await fetchWithComfyuiTimeout(
+      `${normalizeUrl(url)}/system_stats`
+    );
     if (!res.ok) {
       return {
         id: "comfyui",
@@ -241,9 +241,11 @@ async function checkComfyui(endpoints: string[]): Promise<DependencyStatus> {
       lastCheckedAt,
     };
   } catch (err) {
+    const { comfyuiHttpTimeoutMs } = await import("@/lib/services/comfyui-timeout");
+    const timeoutSec = Math.round(comfyuiHttpTimeoutMs() / 1000);
     const msg =
       err instanceof Error && err.name === "AbortError"
-        ? "Connection timed out"
+        ? `Connection timed out after ${timeoutSec}s`
         : "Connection refused or host unreachable";
     return {
       id: "comfyui",
@@ -252,7 +254,7 @@ async function checkComfyui(endpoints: string[]): Promise<DependencyStatus> {
       requiredFor: ["render"],
       message: `${msg} at ${url}`,
       installHint:
-        "Start ComfyUI on your GPU machine. For LAN: python main.py --listen 0.0.0.0 --port 8188",
+        "Start ComfyUI on your GPU machine. For LAN: python main.py --listen 0.0.0.0 --port 8188. If the host is slow to answer, raise DIFFUSECUT_COMFYUI_TIMEOUT_MS in .env.",
       docsUrl: "https://github.com/comfyanonymous/ComfyUI",
       lastCheckedAt,
     };

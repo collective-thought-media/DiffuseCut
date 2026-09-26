@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AudioTrack, RenderJob, Shot } from "@/lib/db/schema";
-import { FinishingTimeline } from "@/components/finishing/FinishingTimeline";
+import { EditWorkspace } from "@/components/edit/EditWorkspace";
+import { useActiveSequence } from "@/lib/hooks/useActiveSequence";
+import { withSequenceId } from "@/lib/sequence-api-url";
 import {
   FinishingDeskTabs,
   type FinishingDeskTab,
@@ -25,17 +27,21 @@ import {
   type ShotAudioPolicy,
 } from "@/lib/shot-render-overrides";
 import { globalFrameFromVideoTime } from "@/lib/finishing/video-sync";
-import { shotUsesRenderedVideo } from "@/lib/finishing/shot-preview-media";
 import {
-  frameAtTrimmedTimelinePosition,
   totalTimelineFrames,
   trimmedShotStartFrame,
 } from "@/lib/timing/frames";
 
 type PageProps = { params: Promise<{ projectId: string }> };
 
-export default function FinishingPage({ params }: PageProps) {
-  const { projectId } = use(params);
+function FinishingPageContent({ projectId }: { projectId: string }) {
+  const {
+    activeSequenceId,
+    sequencesLoading,
+    sequences,
+    setActiveSequenceId,
+    reloadSequences,
+  } = useActiveSequence(projectId);
   const [shots, setShots] = useState<Shot[]>([]);
   const [jobs, setJobs] = useState<RenderJob[]>([]);
   const [overlays, setOverlays] = useState<TextOverlayDraft[]>([]);
@@ -56,6 +62,8 @@ export default function FinishingPage({ params }: PageProps) {
   >(new Map());
 
   const totalFrames = useMemo(() => totalTimelineFrames(shots), [shots]);
+  const [nlePlaybackFrames, setNlePlaybackFrames] = useState(360);
+  const playbackTotalFrames = Math.max(1, nlePlaybackFrames);
 
   const renderedCount = useMemo(
     () => shots.filter((s) => Boolean(s.videoPath)).length,
@@ -68,9 +76,9 @@ export default function FinishingPage({ params }: PageProps) {
     try {
       const [projRes, shotsRes, overlaysRes, audioRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
-        fetch(`/api/projects/${projectId}/shots`),
+        fetch(withSequenceId(`/api/projects/${projectId}/shots`, activeSequenceId)),
         fetch(`/api/projects/${projectId}/overlays`),
-        fetch(`/api/projects/${projectId}/audio`),
+        fetch(withSequenceId(`/api/projects/${projectId}/audio`, activeSequenceId)),
       ]);
       const projData = await projRes.json();
       const shotsData = await shotsRes.json();
@@ -94,11 +102,25 @@ export default function FinishingPage({ params }: PageProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, activeSequenceId]);
 
   useEffect(() => {
+    if (sequencesLoading) return;
+    if (!activeSequenceId) {
+      setLoading(false);
+      setError(
+        "No sequence is available for this project. If the project was removed, open it from the dashboard."
+      );
+      return;
+    }
     void loadAll();
-  }, [loadAll]);
+  }, [loadAll, activeSequenceId, sequencesLoading]);
+
+  useEffect(() => {
+    setCurrentFrame(0);
+    setPlaying(false);
+    setSelectedShotId(null);
+  }, [activeSequenceId]);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -191,39 +213,16 @@ export default function FinishingPage({ params }: PageProps) {
   }, []);
 
   useEffect(() => {
-    if (totalFrames > 0 && currentFrame >= totalFrames) {
-      setCurrentFrame(Math.max(0, totalFrames - 1));
+    if (currentFrame >= playbackTotalFrames) {
+      setCurrentFrame(Math.max(0, playbackTotalFrames - 1));
     }
-  }, [totalFrames, currentFrame]);
+  }, [playbackTotalFrames, currentFrame]);
+
+  /** Edit desk preview drives the playhead from the video element (AIMovie-style NLE). */
+  const nleDrivenPlayback = true;
 
   useEffect(() => {
-    if (!playing || shots.length === 0) return;
-    const { shotIndex } = frameAtTrimmedTimelinePosition(shots, currentFrame);
-    const shot = shots[shotIndex];
-    if (shot && shot.id !== selectedShotId) {
-      setSelectedShotId(shot.id);
-    }
-  }, [playing, currentFrame, shots, selectedShotId]);
-
-  const playShotIndex = frameAtTrimmedTimelinePosition(
-    shots,
-    currentFrame
-  ).shotIndex;
-
-  useEffect(() => {
-    if (!playing) {
-      if (playRef.current) clearInterval(playRef.current);
-      playRef.current = null;
-      return;
-    }
-
-    const shot = shots[playShotIndex];
-    const layerUsesVideo =
-      shot &&
-      (shotUsesRenderedVideo(shot) ||
-        (shot.placeholderKind === "video" && Boolean(shot.placeholderPath)));
-
-    if (layerUsesVideo) {
+    if (!playing || nleDrivenPlayback) {
       if (playRef.current) clearInterval(playRef.current);
       playRef.current = null;
       return;
@@ -231,7 +230,7 @@ export default function FinishingPage({ params }: PageProps) {
 
     playRef.current = setInterval(() => {
       setCurrentFrame((f) => {
-        if (f >= totalFrames - 1) {
+        if (f >= playbackTotalFrames - 1) {
           setPlaying(false);
           return 0;
         }
@@ -243,13 +242,13 @@ export default function FinishingPage({ params }: PageProps) {
       if (playRef.current) clearInterval(playRef.current);
       playRef.current = null;
     };
-  }, [playing, fps, totalFrames, shots, playShotIndex]);
+  }, [playing, fps, playbackTotalFrames, nleDrivenPlayback]);
 
   async function handleReorder(orderedIds: string[]) {
     const res = await fetch(`/api/projects/${projectId}/shots/reorder`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderedIds }),
+      body: JSON.stringify({ orderedIds, sequenceId: activeSequenceId }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -404,9 +403,9 @@ export default function FinishingPage({ params }: PageProps) {
     setSelectedShotId(shotId);
   }
 
-  if (loading) {
+  if (loading || sequencesLoading) {
     return (
-      <p className="text-sm text-muted-foreground">Loading finishing page…</p>
+      <p className="text-sm text-muted-foreground">Loading edit page…</p>
     );
   }
 
@@ -414,10 +413,10 @@ export default function FinishingPage({ params }: PageProps) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Finishing</h1>
+          <h1 className="text-2xl font-semibold">Edit</h1>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Preview rendered clips, trim on the timeline, then add text and audio
-            before export.
+            Multi-track timeline per sequence. Preview clips, trim, sync from
+            storyboard, then add text and audio before export.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -440,8 +439,13 @@ export default function FinishingPage({ params }: PageProps) {
       )}
 
       <section className="space-y-4">
-        <FinishingTimeline
+        <EditWorkspace
           projectId={projectId}
+          sequences={sequences}
+          activeSequenceId={activeSequenceId}
+          onSelectSequence={setActiveSequenceId}
+          onSequencesChanged={() => void reloadSequences()}
+          onNlePlaybackExtentChange={setNlePlaybackFrames}
           shots={shots}
           fps={fps}
           selectedShotId={selectedShotId}
@@ -457,7 +461,7 @@ export default function FinishingPage({ params }: PageProps) {
           onSelectShot={setSelectedShotId}
           onReorder={(ids) => void handleReorder(ids)}
           onPlayPause={() => {
-            if (!playing && totalFrames === 0) return;
+            if (!playing && playbackTotalFrames <= 1) return;
             setPlaying((p) => !p);
           }}
           onStop={() => {
@@ -467,41 +471,40 @@ export default function FinishingPage({ params }: PageProps) {
           onSeek={(frame) => {
             const clamped = Math.max(
               0,
-              Math.min(frame, Math.max(totalFrames - 1, 0))
+              Math.min(frame, Math.max(playbackTotalFrames - 1, 0))
             );
             setCurrentFrame(clamped);
-            const { shotIndex } = frameAtTrimmedTimelinePosition(
-              shots,
-              clamped
-            );
-            const shot = shots[shotIndex];
-            if (shot) setSelectedShotId(shot.id);
           }}
           onVideoTimeUpdate={handleVideoTimeUpdate}
           onVideoShotEnd={handleVideoShotEnd}
+          onTimelineFrameChange={setCurrentFrame}
+          onTimelinePlaybackEnd={() => setPlaying(false)}
         />
       </section>
 
-      {selectedShotId ? (
-        <Card className="mb-0 space-y-0 p-4">
-          <InstallShotClip
-            projectId={projectId}
-            shotId={selectedShotId}
-            onInstalled={(shot) => {
-              setShots((prev) =>
-                prev.map((item) => (item.id === shot.id ? { ...item, ...shot } : item))
-              );
-            }}
-          />
-        </Card>
-      ) : null}
+      <section className="flex flex-col gap-6">
+        {selectedShotId ? (
+          <Card className="space-y-0 p-4">
+            <InstallShotClip
+              projectId={projectId}
+              shotId={selectedShotId}
+              onInstalled={(shot) => {
+                setShots((prev) =>
+                  prev.map((item) =>
+                    item.id === shot.id ? { ...item, ...shot } : item
+                  )
+                );
+              }}
+            />
+          </Card>
+        ) : null}
 
-      <section className="space-y-3">
-        <FinishingDeskTabs
-          activeTab={activeDeskTab}
-          onChange={setActiveDeskTab}
-        />
-        <Card className="mb-0 space-y-4 p-4">
+        <div className="flex flex-col gap-3">
+          <FinishingDeskTabs
+            activeTab={activeDeskTab}
+            onChange={setActiveDeskTab}
+          />
+          <Card className="space-y-4 p-4">
           {activeDeskTab === "overlays" ? (
             <OverlayEditor
               overlays={overlays}
@@ -544,8 +547,18 @@ export default function FinishingPage({ params }: PageProps) {
               variant="dialog"
             />
           )}
-        </Card>
+          </Card>
+        </div>
       </section>
     </div>
+  );
+}
+
+export default function FinishingPage({ params }: PageProps) {
+  const { projectId } = use(params);
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading edit…</p>}>
+      <FinishingPageContent projectId={projectId} />
+    </Suspense>
   );
 }

@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import {
   jsonOk,
   jsonError,
@@ -8,6 +8,7 @@ import {
 } from "@/lib/api-helpers";
 import { getDb, schema } from "@/lib/db";
 import { nanoid, nowMs } from "@/lib/utils";
+import { resolveSequenceId } from "@/lib/services/sequence-scope";
 
 interface CreateAudioTrackBody {
   kind: "music" | "voiceover" | "sfx";
@@ -19,6 +20,7 @@ interface CreateAudioTrackBody {
   targetShotId?: string | null;
   promptText?: string | null;
   volume?: number;
+  sequenceId?: string;
 }
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -32,22 +34,31 @@ function getProjectOrNull(projectId: string) {
     .get();
 }
 
-export async function GET(_req: NextRequest, { params }: RouteParams) {
+export async function GET(req: NextRequest, { params }: RouteParams) {
   try {
     const { id: projectId } = await params;
     if (!getProjectOrNull(projectId)) {
       return jsonError("Project not found", 404);
     }
 
+    const sequenceId = resolveSequenceId(
+      projectId,
+      req.nextUrl.searchParams.get("sequenceId")
+    );
     const db = getDb();
     const tracks = db
       .select()
       .from(schema.audioTracks)
-      .where(eq(schema.audioTracks.projectId, projectId))
+      .where(
+        and(
+          eq(schema.audioTracks.projectId, projectId),
+          eq(schema.audioTracks.sequenceId, sequenceId)
+        )
+      )
       .orderBy(asc(schema.audioTracks.createdAt))
       .all();
 
-    return jsonOk({ tracks });
+    return jsonOk({ tracks, sequenceId });
   } catch (err) {
     return handleApiError(err);
   }
@@ -70,11 +81,13 @@ export async function POST(req: NextRequest, { params }: RouteParams) {
       return jsonError("kind must be one of: music, voiceover, sfx", 400);
     }
 
+    const sequenceId = resolveSequenceId(projectId, body.sequenceId);
     const id = nanoid();
     const ts = nowMs();
     const row = {
       id,
       projectId,
+      sequenceId,
       kind: body.kind,
       label: body.label.trim(),
       filePath: body.filePath.trim(),

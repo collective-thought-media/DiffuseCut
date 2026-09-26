@@ -1,6 +1,9 @@
 "use client";
 
-import { use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { SequenceSwitcher } from "@/components/project/SequenceSwitcher";
+import { useActiveSequence } from "@/lib/hooks/useActiveSequence";
+import { withSequenceId } from "@/lib/sequence-api-url";
 import type {
   Location,
   LocationAngle,
@@ -66,6 +69,17 @@ type LocationWithStates = Location & {
   states: Array<LocationState & { angles: LocationAngle[] }>;
 };
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  );
+}
+
 function defaultLocationRef(location: LocationWithStates) {
   const state = location.states[0];
   if (!state) {
@@ -86,8 +100,14 @@ function defaultLocationRef(location: LocationWithStates) {
   };
 }
 
-export default function StoryboardPage({ params }: PageProps) {
-  const { projectId } = use(params);
+function StoryboardPageInner({ projectId }: { projectId: string }) {
+  const {
+    sequences,
+    activeSequenceId,
+    sequencesLoading,
+    setActiveSequenceId,
+    reloadSequences,
+  } = useActiveSequence(projectId);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [locations, setLocations] = useState<LocationWithStates[]>([]);
   const [characters, setCharacters] = useState<CharacterWithStates[]>([]);
@@ -100,6 +120,7 @@ export default function StoryboardPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [exportingBoard, setExportingBoard] = useState(false);
   const [exportingShot, setExportingShot] = useState(false);
+  const [deletingShot, setDeletingShot] = useState(false);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedShot = shots.find((s) => s.id === selectedShotId) ?? null;
@@ -345,7 +366,7 @@ export default function StoryboardPage({ params }: PageProps) {
     try {
       const [projRes, shotsRes, locsRes, charsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
-        fetch(`/api/projects/${projectId}/shots`),
+        fetch(withSequenceId(`/api/projects/${projectId}/shots`, activeSequenceId)),
         fetch(`/api/projects/${projectId}/locations`),
         fetch(`/api/projects/${projectId}/characters`),
       ]);
@@ -365,11 +386,17 @@ export default function StoryboardPage({ params }: PageProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, activeSequenceId]);
 
   useEffect(() => {
+    if (sequencesLoading) return;
+    if (!activeSequenceId) {
+      setLoading(false);
+      setError("No sequence found for this project.");
+      return;
+    }
     void loadAll();
-  }, [loadAll]);
+  }, [loadAll, activeSequenceId, sequencesLoading]);
 
   // Always have an active shot after load/reload. A null selection hides the
   // generate controls and forces a manual click on shot 1 every refresh.
@@ -428,7 +455,10 @@ export default function StoryboardPage({ params }: PageProps) {
       const res = await fetch(`/api/projects/${projectId}/shots`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: `Shot ${shots.length + 1}` }),
+        body: JSON.stringify({
+          title: `Shot ${shots.length + 1}`,
+          sequenceId: activeSequenceId,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to add shot");
@@ -443,7 +473,7 @@ export default function StoryboardPage({ params }: PageProps) {
     const res = await fetch(`/api/projects/${projectId}/shots/reorder`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orderedIds }),
+      body: JSON.stringify({ orderedIds, sequenceId: activeSequenceId }),
     });
     if (res.ok) {
       const reordered = orderedIds
@@ -452,6 +482,61 @@ export default function StoryboardPage({ params }: PageProps) {
       setShots(reordered);
     }
   }
+
+  const handleDeleteSelectedShot = useCallback(async () => {
+    if (!selectedShotId) return;
+    const shot = shots.find((s) => s.id === selectedShotId);
+    if (!shot) return;
+    const label = shot.title?.trim() || "Untitled";
+    if (
+      !window.confirm(
+        `Delete "${label}" from this sequence? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingShot(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/shots/${selectedShotId}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Delete failed");
+
+      const idx = shots.findIndex((s) => s.id === selectedShotId);
+      const remaining = shots.filter((s) => s.id !== selectedShotId);
+      setShots(remaining);
+
+      if (remaining.length > 0) {
+        const next = remaining[Math.min(idx, remaining.length - 1)];
+        setSelectedShotId(next.id);
+        const orderedIds = remaining.map((s) => s.id);
+        await handleReorder(orderedIds);
+      } else {
+        setSelectedShotId(null);
+        setCurrentFrame(0);
+        setPlaying(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeletingShot(false);
+    }
+  }, [projectId, selectedShotId, shots]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (isTextEntryTarget(event.target)) return;
+      if (!selectedShotId || deletingShot) return;
+      event.preventDefault();
+      void handleDeleteSelectedShot();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deletingShot, handleDeleteSelectedShot, selectedShotId]);
 
   const saveShot = useCallback(
     async (patch: Partial<StoryboardShot>, ctx: DebouncedSaveContext) => {
@@ -510,7 +595,7 @@ export default function StoryboardPage({ params }: PageProps) {
     setBusy(true);
     setError(null);
     try {
-      await downloadStoryboardPacket(projectId, shotId);
+      await downloadStoryboardPacket(projectId, shotId, activeSequenceId);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Could not export storyboard"
@@ -520,12 +605,21 @@ export default function StoryboardPage({ params }: PageProps) {
     }
   }
 
-  if (loading) {
+  if (loading || sequencesLoading) {
     return <p className="text-sm text-muted-foreground">Loading storyboard…</p>;
   }
 
   return (
     <div className="space-y-6">
+      <SequenceSwitcher
+        projectId={projectId}
+        sequences={sequences}
+        activeSequenceId={activeSequenceId}
+        onSelect={setActiveSequenceId}
+        onChanged={() => void reloadSequences()}
+        variant="storyboard"
+      />
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Storyboard</h1>
@@ -616,6 +710,15 @@ export default function StoryboardPage({ params }: PageProps) {
                   onClick={() => void handleExportStoryboard(selectedShot.id)}
                 >
                   {exportingShot ? "Exporting…" : "Export this shot"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={deletingShot}
+                  onClick={() => void handleDeleteSelectedShot()}
+                >
+                  {deletingShot ? "Deleting…" : "Delete shot"}
                 </Button>
                 {saving ? (
                   <Badge variant="warning">Saving…</Badge>
@@ -743,6 +846,38 @@ export default function StoryboardPage({ params }: PageProps) {
                 schedule({ characterCast });
               }}
             />
+            {sequences.length > 1 ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="move-sequence">Move to sequence</Label>
+                <select
+                  id="move-sequence"
+                  className="w-full rounded-md border border-neutral-800 bg-neutral-950 px-2 py-2 text-sm"
+                  value={activeSequenceId ?? ""}
+                  onChange={async (e) => {
+                    const targetId = e.target.value;
+                    if (!selectedShotId || targetId === activeSequenceId) return;
+                    const res = await fetch(
+                      `/api/projects/${projectId}/shots/${selectedShotId}`,
+                      {
+                        method: "PATCH",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ sequenceId: targetId }),
+                      }
+                    );
+                    if (res.ok) {
+                      await loadAll();
+                      setActiveSequenceId(targetId);
+                    }
+                  }}
+                >
+                  {sequences.map((seq) => (
+                    <option key={seq.id} value={seq.id}>
+                      {seq.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <ShotStillReferenceControls
               mode={shotReferenceMeta.stillReferenceMode}
               availableModes={shotReferenceMeta.availableReferenceModes}
@@ -917,6 +1052,15 @@ export default function StoryboardPage({ params }: PageProps) {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function StoryboardPage({ params }: PageProps) {
+  const { projectId } = use(params);
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading storyboard…</p>}>
+      <StoryboardPageInner projectId={projectId} />
+    </Suspense>
   );
 }
 

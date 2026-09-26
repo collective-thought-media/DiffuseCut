@@ -18,11 +18,13 @@ import {
   type ShotCharacterCastEntry,
 } from "@/lib/services/shot-cast";
 import { getLocationAngle, getLocationState } from "@/lib/services/location-states";
+import { moveShotToSequence } from "@/lib/services/sequences";
 
 interface UpdateShotBody {
   title?: string;
   prompt?: string;
   durationFrames?: number;
+  sequenceId?: string;
   locationId?: string | null;
   locationStateId?: string | null;
   locationAngleId?: string | null;
@@ -81,6 +83,10 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const body = await parseJson<UpdateShotBody>(req);
     const db = getDb();
     const ts = nowMs();
+
+    if (body.sequenceId !== undefined && body.sequenceId !== existing.sequenceId) {
+      moveShotToSequence(projectId, shotId, body.sequenceId);
+    }
 
     if (body.locationId) {
       const location = db
