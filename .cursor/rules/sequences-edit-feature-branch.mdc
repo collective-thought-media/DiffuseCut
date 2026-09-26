@@ -1,0 +1,25 @@
+---
+description: Sequences and Edit desk (NLE) work must stay on feat/sequences-edit-desk
+alwaysApply: true
+---
+
+# Sequences + Edit desk feature branch
+
+Work for **multiple storyboard sequences** and the **multi-track Edit desk** belongs only on branch `feat/sequences-edit-desk` (worktree: `DiffuseCut-sequences-edit`).
+
+## Before editing product code
+
+1. Run `git branch --show-current`. It must be `feat/sequences-edit-desk`.
+2. If the branch is `main` or `master`, **stop**. Switch to the feature worktree or branch before changing:
+   - `src/`
+   - `worker/`
+   - `src/lib/db/index.ts` (migrations)
+   - New `src/lib/timeline/` or `src/components/edit/`
+
+## Allowed on main
+
+- Unrelated fixes only when the user explicitly asks and the change is not part of the sequences/NLE feature.
+
+## Commits
+
+Do not commit sequences/NLE implementation files on `main`. Use PR from `feat/sequences-edit-desk` when the feature is ready.

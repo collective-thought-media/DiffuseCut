@@ -28,6 +28,8 @@ import { TrimEditor, type TrimUpdateOptions } from "@/components/export/TrimEdit
 import type { ShotAudioPolicy } from "@/lib/shot-render-overrides";
 import { TransportControls } from "@/components/storyboard/TransportControls";
 import { FinishingPreview } from "./FinishingPreview";
+import { TimelinePreviewPlayer } from "@/components/edit/TimelinePreviewPlayer";
+import type { TimelineState } from "@/lib/timeline/types";
 import type { TextOverlayDraft } from "@/components/export/OverlayEditor";
 
 interface FinishingTimelineProps {
@@ -56,6 +58,14 @@ interface FinishingTimelineProps {
   ) => void;
   onUpdateAudioPolicy?: (shotId: string, policy: ShotAudioPolicy | "") => void;
   onSelectShotFromTrim: (shotId: string, frameInShot: number) => void;
+  /** Edit desk: preview + trim only; storyboard strip and transport live on the NLE below. */
+  editDeskLayout?: boolean;
+  editTimeline?: TimelineState | null;
+  editTimelineLoading?: boolean;
+  /** Remount NLE preview when the active sequence changes. */
+  editSequenceId?: string | null;
+  onTimelineFrameChange?: (frame: number) => void;
+  onTimelinePlaybackEnd?: () => void;
 }
 
 const PIXELS_PER_FRAME = 3;
@@ -81,6 +91,12 @@ export function FinishingTimeline({
   onUpdateTrim,
   onUpdateAudioPolicy,
   onSelectShotFromTrim,
+  editDeskLayout = false,
+  editTimeline = null,
+  editTimelineLoading = false,
+  editSequenceId = null,
+  onTimelineFrameChange,
+  onTimelinePlaybackEnd,
 }: FinishingTimelineProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -135,28 +151,44 @@ export function FinishingTimeline({
 
   return (
     <div className="space-y-3">
-      <FinishingPreview
-        projectId={projectId}
-        shots={shots}
-        currentFrame={currentFrame}
-        fps={fps}
-        playing={playing}
-        overlays={overlays}
-        audioTracks={audioTracks}
-        onVideoTimeUpdate={onVideoTimeUpdate}
-        onVideoShotEnd={onVideoShotEnd}
-      />
+      {editDeskLayout ? (
+        <TimelinePreviewPlayer
+          key={editSequenceId ?? "no-sequence"}
+          timeline={editTimeline}
+          timelineLoading={editTimelineLoading}
+          currentFrame={currentFrame}
+          fps={fps}
+          playing={playing}
+          onTimelineFrameChange={onTimelineFrameChange ?? (() => undefined)}
+          onPlaybackEnd={onTimelinePlaybackEnd}
+        />
+      ) : (
+        <FinishingPreview
+          projectId={projectId}
+          shots={shots}
+          currentFrame={currentFrame}
+          fps={fps}
+          playing={playing}
+          overlays={overlays}
+          audioTracks={audioTracks}
+          onVideoTimeUpdate={onVideoTimeUpdate}
+          onVideoShotEnd={onVideoShotEnd}
+        />
+      )}
 
-      <TransportControls
-        playing={playing}
-        currentFrame={currentFrame}
-        totalFrames={totalFrames}
-        fps={fps}
-        onPlayPause={onPlayPause}
-        onStop={onStop}
-        onSeek={onSeek}
-      />
+      {!editDeskLayout ? (
+        <TransportControls
+          playing={playing}
+          currentFrame={currentFrame}
+          totalFrames={totalFrames}
+          fps={fps}
+          onPlayPause={onPlayPause}
+          onStop={onStop}
+          onSeek={onSeek}
+        />
+      ) : null}
 
+      {!editDeskLayout ? (
       <div ref={viewportRef} className="relative overflow-hidden px-1 py-2">
         {shots.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
@@ -214,23 +246,26 @@ export function FinishingTimeline({
           </>
         )}
       </div>
+      ) : null}
 
-      <TrimEditor
-        shots={shots}
-        fps={fps}
-        selectedShotId={selectedShotId}
-        showAllShots={showAllTrimShots}
-        onToggleShowAll={onToggleShowAllTrim}
-        onSelectShot={(shotId, frameInShot) => {
-          const index = shots.findIndex((shot) => shot.id === shotId);
-          if (index < 0) return;
-          onSeek(trimmedShotStartFrame(shots, index) + frameInShot);
-          onSelectShot(shotId);
-          onSelectShotFromTrim(shotId, frameInShot);
-        }}
-        onUpdateTrim={onUpdateTrim}
-        onUpdateAudioPolicy={onUpdateAudioPolicy}
-      />
+      {!editDeskLayout ? (
+        <TrimEditor
+          shots={shots}
+          fps={fps}
+          selectedShotId={selectedShotId}
+          showAllShots={showAllTrimShots}
+          onToggleShowAll={onToggleShowAllTrim}
+          onSelectShot={(shotId, frameInShot) => {
+            const index = shots.findIndex((shot) => shot.id === shotId);
+            if (index < 0) return;
+            onSeek(trimmedShotStartFrame(shots, index) + frameInShot);
+            onSelectShot(shotId);
+            onSelectShotFromTrim(shotId, frameInShot);
+          }}
+          onUpdateTrim={onUpdateTrim}
+          onUpdateAudioPolicy={onUpdateAudioPolicy}
+        />
+      ) : null}
     </div>
   );
 }

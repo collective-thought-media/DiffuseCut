@@ -1,14 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { use, useCallback, useEffect, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useState } from "react";
 import type { ExportJob, Shot } from "@/lib/db/schema";
 import { ExportEncoderPanel } from "@/components/export/ExportEncoderPanel";
+import { SequenceSwitcher } from "@/components/project/SequenceSwitcher";
+import { useActiveSequence } from "@/lib/hooks/useActiveSequence";
+import { withSequenceId } from "@/lib/sequence-api-url";
 
 type PageProps = { params: Promise<{ projectId: string }> };
 
-export default function ExportPage({ params }: PageProps) {
-  const { projectId } = use(params);
+function ExportPageContent({ projectId }: { projectId: string }) {
+  const {
+    sequences,
+    activeSequenceId,
+    sequencesLoading,
+    setActiveSequenceId,
+    reloadSequences,
+  } = useActiveSequence(projectId);
   const [shots, setShots] = useState<Shot[]>([]);
   const [fps, setFps] = useState(24);
   const [activeJob, setActiveJob] = useState<ExportJob | null>(null);
@@ -22,7 +31,7 @@ export default function ExportPage({ params }: PageProps) {
     try {
       const [projRes, shotsRes, exportsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}`),
-        fetch(`/api/projects/${projectId}/shots`),
+        fetch(withSequenceId(`/api/projects/${projectId}/shots`, activeSequenceId)),
         fetch(`/api/projects/${projectId}/export`),
       ]);
       const projData = await projRes.json();
@@ -46,29 +55,43 @@ export default function ExportPage({ params }: PageProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectId]);
+  }, [projectId, activeSequenceId]);
 
   useEffect(() => {
+    if (sequencesLoading) return;
+    if (!activeSequenceId) {
+      setLoading(false);
+      setError("No sequence found for this project.");
+      return;
+    }
     void loadAll();
-  }, [loadAll]);
+  }, [loadAll, activeSequenceId, sequencesLoading]);
 
-  if (loading) {
+  if (loading || sequencesLoading) {
     return <p className="text-sm text-muted-foreground">Loading export page…</p>;
   }
 
   return (
     <div className="space-y-8">
+      <SequenceSwitcher
+        projectId={projectId}
+        sequences={sequences}
+        activeSequenceId={activeSequenceId}
+        onSelect={setActiveSequenceId}
+        onChanged={() => void reloadSequences()}
+      />
+
       <div>
         <h1 className="text-2xl font-semibold">Export</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Encode the final video with trim and audio from{" "}
+          Encode the active sequence from the{" "}
           <Link
             href={`/projects/${projectId}/finishing`}
             className="text-primary hover:underline"
           >
-            Finishing
-          </Link>
-          .
+            Edit
+          </Link>{" "}
+          desk (timeline or storyboard order).
         </p>
       </div>
 
@@ -82,17 +105,27 @@ export default function ExportPage({ params }: PageProps) {
         <p className="text-sm text-amber-400">
           {shots.length - renderedCount} shot
           {shots.length - renderedCount === 1 ? "" : "s"} still need renders before
-          export can include the full film.
+          export can include the full sequence.
         </p>
       ) : null}
 
       <ExportEncoderPanel
         projectId={projectId}
+        sequenceId={activeSequenceId}
         fps={fps}
         renderedCount={renderedCount}
         shotCount={shots.length}
         initialJob={activeJob}
       />
     </div>
+  );
+}
+
+export default function ExportPage({ params }: PageProps) {
+  const { projectId } = use(params);
+  return (
+    <Suspense fallback={<p className="text-sm text-muted-foreground">Loading export…</p>}>
+      <ExportPageContent projectId={projectId} />
+    </Suspense>
   );
 }

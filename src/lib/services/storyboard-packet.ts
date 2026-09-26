@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import {
   resolveMediaPath,
@@ -73,7 +73,8 @@ export function buildShotNotes(input: ShotNotesInput): string {
 
 export function collectStoryboardPacket(
   projectId: string,
-  shotId?: string | null
+  shotId?: string | null,
+  sequenceId?: string | null
 ): { fileName: string; entries: StoryboardPacketEntry[] } {
   const db = getDb();
   const project = db
@@ -83,10 +84,14 @@ export function collectStoryboardPacket(
     .get();
   if (!project) throw new Error("Project not found");
 
+  const shotFilters = [eq(schema.shots.projectId, projectId)];
+  if (sequenceId) {
+    shotFilters.push(eq(schema.shots.sequenceId, sequenceId));
+  }
   const allShots = db
     .select()
     .from(schema.shots)
-    .where(eq(schema.shots.projectId, projectId))
+    .where(and(...shotFilters))
     .orderBy(asc(schema.shots.sortOrder), asc(schema.shots.createdAt))
     .all();
 

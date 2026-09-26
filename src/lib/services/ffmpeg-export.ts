@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import ffmpeg from "fluent-ffmpeg";
 import { nanoid } from "nanoid";
 import { getDb, schema } from "@/lib/db";
@@ -29,6 +29,9 @@ import {
 } from "@/lib/services/export-filters";
 import { parseProjectRenderSettings } from "@/lib/services/render-settings-resolver";
 import { writeSilentWav } from "@/lib/services/silent-wav";
+import { resolveSequenceId } from "@/lib/services/sequence-scope";
+import { getTimelineState } from "@/lib/services/sequences";
+import { exportFromTimelineState } from "@/lib/services/timeline-export";
 
 /** Bundled font used to burn text overlays into the export. */
 export function resolveExportOverlayFontPath(): string {
@@ -50,6 +53,8 @@ export interface ExportSettings {
   outputFileName?: string;
   /** Used to persist frame previews for the export UI. */
   exportJobId?: string;
+  sequenceId?: string;
+  useTimeline?: boolean;
 }
 
 export interface ExportProgressUpdate {
@@ -125,7 +130,7 @@ export interface ExportOutputMeta {
   height: number | null;
   durationSeconds: number | null;
   overlayCount: number;
-  audioSource: "shots" | "shots+tracks" | "none";
+  audioSource: "shots" | "shots+tracks" | "timeline" | "none";
 }
 
 const VIDEO_RENDER_EXTENSIONS = new Set([
@@ -294,16 +299,42 @@ export async function runExport(
   await configureFfmpeg(await getFfmpegPathSetting());
 
   const fps = settings.fps ?? project.defaultFps;
+  const sequenceId = resolveSequenceId(projectId, settings.sequenceId);
   const frameSize = resolveOutputFrameSize(
     parseProjectRenderSettings(project.renderSettingsJson)
   );
   const dirs = ensureProjectDirs(project);
   const projectRoot = resolveProjectRoot(project);
 
+  const timeline = getTimelineState(projectId, sequenceId, {
+    syncFromStoryboardIfEmpty: true,
+    fps,
+  });
+  const timelineVideoClips =
+    timeline?.videoTracks.flatMap((track) => track.clips) ?? [];
+  if (
+    settings.useTimeline !== false &&
+    timeline &&
+    timelineVideoClips.length > 0
+  ) {
+    return exportFromTimelineState({
+      project,
+      sequenceId,
+      timeline,
+      settings: { ...settings, fps, exportJobId: settings.exportJobId },
+      onProgress: report,
+    });
+  }
+
   const shots = db
     .select()
     .from(schema.shots)
-    .where(eq(schema.shots.projectId, projectId))
+    .where(
+      and(
+        eq(schema.shots.projectId, projectId),
+        eq(schema.shots.sequenceId, sequenceId)
+      )
+    )
     .all()
     .sort((a, b) => a.sortOrder - b.sortOrder);
 
@@ -390,7 +421,12 @@ export async function runExport(
     ? db
         .select()
         .from(schema.audioTracks)
-        .where(eq(schema.audioTracks.projectId, projectId))
+        .where(
+          and(
+            eq(schema.audioTracks.projectId, projectId),
+            eq(schema.audioTracks.sequenceId, sequenceId)
+          )
+        )
         .all()
         .filter((track) => {
           if (!track.filePath || track.filePath.includes("pending")) return false;

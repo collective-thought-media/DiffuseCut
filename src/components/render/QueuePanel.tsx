@@ -175,8 +175,8 @@ export function QueuePanel({
             queueing ||
             selectedShotIds.length === 0 ||
             !templateSelected ||
-            !settingsReady ||
-            !comfyReady
+            !comfyReady ||
+            !settingsReady
           }
           className="w-full"
         >
@@ -184,10 +184,10 @@ export function QueuePanel({
             ? "Queueing…"
             : !templateSelected
               ? "Select a workflow template first"
-              : !settingsReady
-                ? "Waiting for render settings"
-                : !comfyReady
-                  ? "Configure ComfyUI endpoint first"
+              : !comfyReady
+                ? "Connect to ComfyUI first"
+                : !settingsReady
+                  ? "Waiting for render settings"
                   : `Queue ${selectedShotIds.length} shot${selectedShotIds.length === 1 ? "" : "s"}`}
         </Button>
         {queueableShots.length === 0 && shots.length > 0 && (
@@ -200,18 +200,22 @@ export function QueuePanel({
             Import a shot video workflow template before queueing renders.
           </p>
         )}
-        {templateSelected && !settingsReady && selectedShotIds.length > 0 && (
-          <p className="text-xs text-amber-400">
-            Still missing models ComfyUI could not auto-detect. Check Render
-            settings on the right.
-          </p>
-        )}
         {templateSelected &&
-          settingsReady &&
           !comfyReady &&
           selectedShotIds.length > 0 && (
             <p className="text-xs text-amber-400">
-              Add a reachable ComfyUI URL in Settings before queueing.
+              DiffuseCut must reach your ComfyUI server to load models and queue
+              renders. Check the URL in Settings, then use Sync ComfyUI.
+            </p>
+          )}
+        {templateSelected &&
+          comfyReady &&
+          !settingsReady &&
+          selectedShotIds.length > 0 && (
+            <p className="text-xs text-amber-400">
+              ComfyUI is connected but required weights are still missing. Check
+              Render settings on the right or install the models on the Comfy
+              machine.
             </p>
           )}
       </div>

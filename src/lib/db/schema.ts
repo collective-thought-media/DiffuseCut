@@ -74,6 +74,18 @@ export const characterAngles = sqliteTable("character_angles", {
   updatedAt: integer("updated_at").notNull(),
 });
 
+export const sequences = sqliteTable("sequences", {
+  id: text("id").primaryKey(),
+  projectId: text("project_id")
+    .notNull()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  timelineJson: text("timeline_json").notNull().default("{}"),
+  createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
 export const locations = sqliteTable("locations", {
   id: text("id").primaryKey(),
   projectId: text("project_id")
@@ -131,6 +143,9 @@ export const shots = sqliteTable("shots", {
   projectId: text("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  sequenceId: text("sequence_id").references(() => sequences.id, {
+    onDelete: "cascade",
+  }),
   sortOrder: integer("sort_order").notNull().default(0),
   title: text("title").notNull().default(""),
   prompt: text("prompt").notNull().default(""),
@@ -190,6 +205,9 @@ export const audioTracks = sqliteTable("audio_tracks", {
   projectId: text("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  sequenceId: text("sequence_id").references(() => sequences.id, {
+    onDelete: "cascade",
+  }),
   kind: text("kind", { enum: ["music", "voiceover", "sfx"] }).notNull(),
   label: text("label").notNull(),
   filePath: text("file_path").notNull(),
@@ -338,6 +356,9 @@ export const textOverlays = sqliteTable("text_overlays", {
   projectId: text("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  sequenceId: text("sequence_id").references(() => sequences.id, {
+    onDelete: "cascade",
+  }),
   shotId: text("shot_id").references(() => shots.id, { onDelete: "cascade" }),
   text: text("text").notNull(),
   startFrame: integer("start_frame").notNull(),
@@ -352,6 +373,9 @@ export const exportJobs = sqliteTable("export_jobs", {
   projectId: text("project_id")
     .notNull()
     .references(() => projects.id, { onDelete: "cascade" }),
+  sequenceId: text("sequence_id").references(() => sequences.id, {
+    onDelete: "set null",
+  }),
   status: text("status", {
     enum: ["queued", "running", "completed", "failed", "cancelled"],
   })
@@ -376,6 +400,7 @@ export const appSettings = sqliteTable("app_settings", {
   value: text("value").notNull(),
 });
 
+export type Sequence = typeof sequences.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Character = typeof characters.$inferSelect;
 export type CharacterState = typeof characterStates.$inferSelect;

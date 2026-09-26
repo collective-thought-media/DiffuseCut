@@ -7,6 +7,7 @@ function makeShot(overrides: Partial<Shot> = {}): Shot {
   return {
     id: "shot-1",
     projectId: "proj-1",
+    sequenceId: null,
     sortOrder: 0,
     title: "Opening",
     prompt: "A demon descends through storm clouds over a burning city.",

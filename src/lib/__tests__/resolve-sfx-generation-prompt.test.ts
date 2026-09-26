@@ -10,6 +10,7 @@ function makeShot(overrides: Partial<Shot> = {}): Shot {
   return {
     id: "shot-4",
     projectId: "proj-1",
+    sequenceId: null,
     sortOrder: 3,
     title: "Shot 4: The Ascent Begins",
     prompt:
@@ -38,6 +39,7 @@ function makeTrack(overrides: Partial<AudioTrack> = {}): AudioTrack {
   return {
     id: "track-1",
     projectId: "proj-1",
+    sequenceId: null,
     kind: "sfx",
     label: "SFX: Shot 4",
     filePath: "audio/tracks/pending",

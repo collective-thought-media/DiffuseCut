@@ -575,7 +575,12 @@ export async function hydrateProjectRenderSettings(
     persist?: boolean;
     updateAppDefaults?: boolean;
   }
-): Promise<{ renderSettings: RenderSettings; changed: boolean }> {
+): Promise<{
+  renderSettings: RenderSettings;
+  changed: boolean;
+  comfyEndpoint: string | null;
+  comfyModelsResolved: boolean;
+}> {
   const db = getDb();
   const project = db
     .select()
@@ -610,17 +615,165 @@ export async function hydrateProjectRenderSettings(
       : undefined;
   const hasImageHints = Boolean(imageHints && imageHints.length > 0);
   const hasVideoHints = Boolean(videoHints && videoHints.length > 0);
+  const switchingVideoTemplate =
+    templateScoped &&
+    hasVideoHints &&
+    Boolean(
+      options?.template?.id &&
+        projectSettings.workflowTemplateId &&
+        projectSettings.workflowTemplateId !== options.template.id
+    );
+  const switchingImageTemplate =
+    templateScoped &&
+    hasImageHints &&
+    Boolean(
+      options?.template?.id &&
+        projectSettings.workflowTemplateId &&
+        projectSettings.workflowTemplateId !== options.template.id
+    );
 
   let merged = mergeRenderSettings(appDefaults, projectSettings);
 
   if (templateScoped && hasVideoHints) {
-    merged = stripVideoStackSettings(merged);
-    merged = mergeRenderSettings(templateDefaults, merged);
-  } else if (templateScoped && hasImageHints) {
-    merged = stripImageStackSettings(merged);
-    merged = mergeRenderSettings(templateDefaults, merged);
-  } else if (templateScoped) {
-    merged = mergeRenderSettings(templateDefaults, merged);
+    merged = mergeRenderSettings(merged, templateDefaults);
+
+    const appEndpoints = await getDefaultComfyuiEndpoints();
+    const endpoints = resolveComfyuiEndpoints(
+      project.comfyuiEndpointsJson,
+      appEndpoints
+    );
+    const endpointUrl = await listEndpoints(endpoints);
+    let comfyModelsResolved = false;
+
+    if (endpointUrl) {
+      const resolveBase = switchingVideoTemplate
+        ? mergeRenderSettings(stripVideoStackSettings(merged), templateDefaults)
+        : merged;
+      try {
+        merged = await resolveRenderSettingsFromComfyUI(endpointUrl, resolveBase, {
+          videoHints,
+          requireHintMatch: templateScoped,
+        });
+        comfyModelsResolved = true;
+      } catch {
+        /* keep merged; do not strip saved models when Comfy errors mid-resolve */
+      }
+    }
+
+    if (!comfyModelsResolved) {
+      const base = switchingVideoTemplate
+        ? mergeRenderSettings(stripVideoStackSettings(merged), templateDefaults)
+        : merged;
+      merged = mergeRenderSettings(
+        base,
+        switchingVideoTemplate ? undefined : projectSettings,
+        knownGoodVideo,
+        appDefaults
+      );
+    }
+
+    merged = normalizeRenderSettings(merged);
+    const alignedVideo = alignVideoSizeToReferenceAspect(merged);
+    merged.videoWidth = alignedVideo.videoWidth;
+    merged.videoHeight = alignedVideo.videoHeight;
+
+    if (options?.template?.id) {
+      merged.workflowTemplateId = options.template.id;
+    }
+
+    const changed = !renderSettingsEqual(projectSettings, merged);
+
+    if (changed && options?.persist !== false) {
+      db.update(schema.projects)
+        .set({
+          renderSettingsJson: JSON.stringify(merged),
+          updatedAt: nowMs(),
+        })
+        .where(eq(schema.projects.id, projectId))
+        .run();
+    }
+
+    if (options?.updateAppDefaults !== false && changed) {
+      await saveDefaultRenderSettings(mergeRenderSettings(appDefaults, merged));
+    }
+
+    return {
+      renderSettings: merged,
+      changed,
+      comfyEndpoint: endpointUrl ?? null,
+      comfyModelsResolved,
+    };
+  }
+
+  if (templateScoped && hasImageHints) {
+    merged = mergeRenderSettings(merged, templateDefaults);
+
+    const appEndpoints = await getDefaultComfyuiEndpoints();
+    const endpoints = resolveComfyuiEndpoints(
+      project.comfyuiEndpointsJson,
+      appEndpoints
+    );
+    const endpointUrl = await listEndpoints(endpoints);
+    let comfyModelsResolved = false;
+
+    if (endpointUrl) {
+      const resolveBase = switchingImageTemplate
+        ? mergeRenderSettings(stripImageStackSettings(merged), templateDefaults)
+        : merged;
+      try {
+        merged = await resolveRenderSettingsFromComfyUI(endpointUrl, resolveBase, {
+          imageHints,
+          requireHintMatch: templateScoped,
+        });
+        comfyModelsResolved = true;
+      } catch {
+        /* keep merged */
+      }
+    }
+
+    if (!comfyModelsResolved) {
+      const base = switchingImageTemplate
+        ? mergeRenderSettings(stripImageStackSettings(merged), templateDefaults)
+        : merged;
+      merged = mergeRenderSettings(
+        base,
+        switchingImageTemplate ? undefined : projectSettings,
+        appDefaults
+      );
+    }
+
+    merged = normalizeRenderSettings(merged);
+
+    if (options?.template?.id) {
+      merged.workflowTemplateId = options.template.id;
+    }
+
+    const changed = !renderSettingsEqual(projectSettings, merged);
+
+    if (changed && options?.persist !== false) {
+      db.update(schema.projects)
+        .set({
+          renderSettingsJson: JSON.stringify(merged),
+          updatedAt: nowMs(),
+        })
+        .where(eq(schema.projects.id, projectId))
+        .run();
+    }
+
+    if (options?.updateAppDefaults !== false && changed) {
+      await saveDefaultRenderSettings(mergeRenderSettings(appDefaults, merged));
+    }
+
+    return {
+      renderSettings: merged,
+      changed,
+      comfyEndpoint: endpointUrl ?? null,
+      comfyModelsResolved,
+    };
+  }
+
+  if (templateScoped) {
+    merged = mergeRenderSettings(merged, templateDefaults);
   } else {
     merged = mergeRenderSettings(knownGoodVideo, templateDefaults, merged);
   }
@@ -635,6 +788,7 @@ export async function hydrateProjectRenderSettings(
     appEndpoints
   );
   const endpointUrl = await listEndpoints(endpoints);
+  let comfyModelsResolved = false;
 
   if (endpointUrl) {
     try {
@@ -643,6 +797,7 @@ export async function hydrateProjectRenderSettings(
         imageHints: hasImageHints ? imageHints : undefined,
         requireHintMatch: templateScoped && (hasVideoHints || hasImageHints),
       });
+      comfyModelsResolved = true;
     } catch {
       /* ComfyUI unreachable: keep merged defaults without model auto-pick */
     }
@@ -669,7 +824,12 @@ export async function hydrateProjectRenderSettings(
     await saveDefaultRenderSettings(mergeRenderSettings(appDefaults, merged));
   }
 
-  return { renderSettings: merged, changed };
+  return {
+    renderSettings: merged,
+    changed,
+    comfyEndpoint: endpointUrl,
+    comfyModelsResolved,
+  };
 }
 
 export function parseProjectRenderSettings(

@@ -10,6 +10,7 @@ import {
   writeProjectMeta,
 } from "@/lib/paths/project-paths";
 import { getDefaultRenderSettings } from "@/lib/services/settings";
+import { createDefaultSequenceForProject } from "@/lib/services/sequences";
 
 export async function createProject(input: {
   name: string;
@@ -46,6 +47,7 @@ export async function createProject(input: {
 
   ensureProjectDirs(project);
   writeProjectMeta(project);
+  createDefaultSequenceForProject(project.id, project.defaultFps);
   return project;
 }
 

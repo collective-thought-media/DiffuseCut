@@ -28,13 +28,15 @@ If a bundled mode needs a specific custom node pack (for example IP-Adapter, LTX
 | Dashboard | Logline, plot, visual style phrase, reference aspect ratio, project FPS |
 | Characters | Cast with visual states, upload or generate reference sheets, batch options, pick winners |
 | Locations | Establishing plates, IP-Adapter or txt2img angles, optical punch-in crops, uploads |
-| Storyboard | Shot list, still modes and controls, animatic, stop hung packs, hybrid outside-clip path |
-| Render | Queue shot video (bundled LTX or MiniMax, or any imported shot-video template) |
-| Finishing | Trims, text overlay preview, musical score, sound effects, dialog / VO, lip sync |
-| Export | Conformed MP4 or WebM via FFmpeg (mixes score, dialog, and SFX) |
+| Storyboard | Per-sequence shot lists, still modes and controls, animatic, stop hung packs, hybrid outside-clip path |
+| Render | Queue shot video for the active sequence (bundled LTX or MiniMax, or any imported shot-video template) |
+| Edit | Per-sequence NLE-style timeline (V1–V3, A1–A3), transport, trims, sync from storyboard, embedded clip audio, score on A2, SFX on A3, dialog / VO, lip sync |
+| Export | Conformed MP4 or WebM via FFmpeg from the active sequence timeline (or storyboard order when the timeline is empty) |
 | Setup / Settings | Dependency checks, ComfyUI endpoints, FFmpeg path, workflow imports, ACE-Step, LLM, API keys |
 
-**Hybrid path:** export a storyboard packet (stills + shot notes), generate clips in another video tool, then **Install clip** so Finishing and Export treat them like native takes.
+**Hybrid path:** export a storyboard packet (stills + shot notes), generate clips in another video tool, then **Install clip** so Edit and Export treat them like native takes.
+
+**Sequences:** each project can hold multiple storyboard sequences (for example a main reel and a B-roll bin). Characters and locations are shared. Duplicate a sequence to fork edits, or move shots between sequences from the storyboard inspector. The **Edit** desk stores a timeline per sequence. Use **Re-sync from storyboard** to fill V1 from rendered shots for that sequence, then rearrange clips on V1–V3, trim, split, and place score on A2 and SFX on A3 (A1 mirrors muxed audio from video clips when present) before export.
 
 ## Known limitations (alpha)
 
@@ -43,7 +45,7 @@ If a bundled mode needs a specific custom node pack (for example IP-Adapter, LTX
 - Bundled shot still modes (Integrate, Dual, Scene edit, face refine, instruction edit) need matching ComfyUI custom nodes and models. Without them, those modes degrade or fail with setup-style errors. Custom imported workflows follow whatever those graphs need instead.
 - Bundled Render video templates are **LTX 2.3 I2V** and **MiniMax H3 I2V**. Each needs its matching stack on ComfyUI. Still generation and storyboard writing work without either. Import another I2V / T2V workflow if you prefer a different video model.
 - A separate bundled **LTX lip sync** graph (image + dialog audio to video) is used from Finishing → Dialog, not as the everyday Render template.
-- Text overlays in Finishing are still preview-oriented and may not land in the exported file the way the timeline shows.
+- Text overlays in Edit are still preview-oriented and may not land in the exported file the way the timeline shows.
 - This cut is for early testers. File issues on GitHub. Feedback from real Comfy setups is welcome.
 
 ## How it works
@@ -52,7 +54,7 @@ The browser UI and API run on your editing machine. A background worker polls ge
 
 Timing is frame-quantized at the project FPS. Shot durations, trims, overlays, and audio spans are all in frames, not milliseconds.
 
-Project tabs, in order: **Dashboard, Characters, Locations, Storyboard, Render, Finishing, Export, Project Settings**.
+Project tabs, in order: **Dashboard, Characters, Locations, Storyboard, Render, Edit, Export, Project Settings**.
 
 | Layer | Role |
 |-------|------|

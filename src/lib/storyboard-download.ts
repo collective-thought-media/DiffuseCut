@@ -1,8 +1,12 @@
 export async function downloadStoryboardPacket(
   projectId: string,
-  shotId?: string
+  shotId?: string,
+  sequenceId?: string | null
 ): Promise<void> {
-  const query = shotId ? `?shotId=${encodeURIComponent(shotId)}` : "";
+  const params = new URLSearchParams();
+  if (shotId) params.set("shotId", shotId);
+  if (sequenceId) params.set("sequenceId", sequenceId);
+  const query = params.toString() ? `?${params.toString()}` : "";
   const res = await fetch(
     `/api/projects/${projectId}/storyboard/export${query}`
   );

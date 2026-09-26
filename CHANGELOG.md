@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Sequences:** multiple named storyboard sequences per project with shared cast and locations. Duplicate a sequence or move shots between sequences.
+- **Edit desk:** Finishing is now **Edit**, with a per-sequence NLE-style timeline (V1–V3, A1–A3), SMPTE transport, snap, split, per-lane mute, gapless preview playback (dual video decode), and timeline-first export when V1 has clips.
+- **Timeline hygiene:** loading a sequence reconciles V1 with that sequence’s shots only (no foreign clips), refreshes render URLs, and maps Finishing score/SFX to A2/A3 with embedded clip audio on A1.
+- Database migration creates a **Storyboard** sequence for existing projects and assigns existing shots, audio, and overlays to it.
+
 ## 0.1.0-alpha.1
 
 First cut for a small tester group. Install from a fresh clone on any machine. App data, ComfyUI URL, and FFmpeg path are local to that install.

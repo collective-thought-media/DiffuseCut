@@ -5,6 +5,10 @@ import {
   hasAceStepModels,
   type ComfyModelFolders,
 } from "@/lib/services/comfyui-workflow-requirements";
+import {
+  comfyuiHttpTimeoutMs,
+  fetchWithComfyuiTimeout,
+} from "@/lib/services/comfyui-timeout";
 
 export interface ComfyUIPromptResponse {
   prompt_id: string;
@@ -41,17 +45,15 @@ export function toWsUrl(baseUrl: string, clientId?: string): string {
 
 export async function healthCheck(baseUrl: string): Promise<boolean> {
   const url = `${normalizeUrl(baseUrl)}/system_stats`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 3000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
+    const res = await fetchWithComfyuiTimeout(url);
     return res.ok;
   } catch {
-    clearTimeout(timeout);
     return false;
   }
 }
+
+export { comfyuiHttpTimeoutMs };
 
 export async function listEndpoints(endpoints: string[]): Promise<string | null> {
   for (const endpoint of endpoints) {
@@ -418,7 +420,7 @@ export async function getModels(
   baseUrl: string,
   folder: string
 ): Promise<string[]> {
-  const res = await fetch(
+  const res = await fetchWithComfyuiTimeout(
     `${normalizeUrl(baseUrl)}/models/${encodeURIComponent(folder)}`
   );
 

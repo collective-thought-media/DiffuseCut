@@ -47,7 +47,11 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
             .get() ?? null;
       }
 
-      const { renderSettings } = await hydrateProjectRenderSettings(projectId, {
+      const {
+        renderSettings,
+        comfyEndpoint,
+        comfyModelsResolved,
+      } = await hydrateProjectRenderSettings(projectId, {
         template,
         persist: true,
         updateAppDefaults: true,
@@ -58,6 +62,9 @@ export async function GET(req: NextRequest, { params }: RouteParams) {
         renderSettings: aligned,
         renderSettingsJson: JSON.stringify(aligned),
         hydrated: true,
+        comfyReachable: Boolean(comfyEndpoint),
+        comfyEndpoint,
+        comfyModelsResolved,
       });
     }
 
