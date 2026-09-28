@@ -45,8 +45,10 @@ if ((Test-Path $pip) -and (Test-Path $impactReq)) {
 }
 
 if (Test-Path $pip) {
-  Log "pip install rembg CPU backend (onnxruntime)"
-  & $pip install "rembg[cpu]" onnxruntime
+  # onnxruntime 1.29+ Python calls is_webgpu_graph_capture_enabled on every
+  # session.run(); some wheels omit that pybind and rembg/Composited shots fail.
+  Log "pip install rembg CPU backend (onnxruntime pinned below 1.29)"
+  & $pip install "rembg[cpu]" "onnxruntime>=1.17,<1.29"
 }
 
 try {

@@ -88,6 +88,9 @@ export async function loadSettings() {
         : "local",
     aceStepRemoteUrl: (await getSetting("ace_step_remote_url")) ?? "",
     aceStepCheckpoint: (await getSetting("ace_step_checkpoint")) ?? "",
+    dialogEdgeTtsVoice:
+      (await getSetting("dialog_edge_tts_voice"))?.trim() ||
+      "en-US-ChristopherNeural",
   };
 }
 

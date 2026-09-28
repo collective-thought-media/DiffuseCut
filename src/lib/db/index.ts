@@ -238,6 +238,7 @@ function migrate(db: Database.Database) {
       location_state_id TEXT NOT NULL REFERENCES location_states(id) ON DELETE CASCADE,
       name TEXT NOT NULL,
       view_description TEXT NOT NULL DEFAULT '',
+      generation_overrides_json TEXT,
       reference_path TEXT,
       reference_kind TEXT,
       reference_source TEXT,
@@ -246,6 +247,15 @@ function migrate(db: Database.Database) {
       updated_at INTEGER NOT NULL
     );
   `);
+
+  const locationAngleCols = db
+    .prepare("PRAGMA table_info(location_angles)")
+    .all() as { name: string }[];
+  if (!locationAngleCols.some((c) => c.name === "generation_overrides_json")) {
+    db.exec(
+      `ALTER TABLE location_angles ADD COLUMN generation_overrides_json TEXT`
+    );
+  }
 
   backfillLocationStates(db);
 

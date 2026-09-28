@@ -10,6 +10,7 @@ import {
   getLocationAngle,
   updateLocationAngle,
 } from "@/lib/services/location-states";
+import { mergeLocationAngleGenerationOverrides } from "@/lib/location-angle-generation-overrides";
 
 type RouteParams = {
   params: Promise<{
@@ -26,15 +27,40 @@ export async function PATCH(req: NextRequest, { params }: RouteParams) {
     const body = await parseJson<{
       name?: string;
       viewDescription?: string;
+      stillNegativePrompt?: string;
+      generationOverridesJson?: string | null;
     }>(req);
 
-    const angle = updateLocationAngle(
-      projectId,
-      locationId,
-      stateId,
-      angleId,
-      body
-    );
+    const existing = getLocationAngle(projectId, locationId, stateId, angleId);
+    if (!existing) return jsonError("Location angle not found", 404);
+
+    let generationOverridesJson = body.generationOverridesJson;
+    if (body.stillNegativePrompt !== undefined) {
+      generationOverridesJson = mergeLocationAngleGenerationOverrides(
+        existing.generationOverridesJson,
+        { stillNegativePrompt: body.stillNegativePrompt }
+      );
+    }
+    if (
+      generationOverridesJson !== undefined &&
+      generationOverridesJson !== null
+    ) {
+      try {
+        JSON.parse(generationOverridesJson);
+      } catch {
+        return jsonError("generationOverridesJson must be valid JSON", 400);
+      }
+    }
+
+    const angle = updateLocationAngle(projectId, locationId, stateId, angleId, {
+      ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.viewDescription !== undefined
+        ? { viewDescription: body.viewDescription }
+        : {}),
+      ...(generationOverridesJson !== undefined
+        ? { generationOverridesJson }
+        : {}),
+    });
     return jsonOk({ angle });
   } catch (err) {
     return handleApiError(err);

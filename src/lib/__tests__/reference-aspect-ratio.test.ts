@@ -37,8 +37,19 @@ describe("reference aspect ratio", () => {
     expect(dims).toEqual({ width: 1344, height: 768 });
   });
 
-  it("uses the same canvas for stills and leftover LTX video on every preset", () => {
-    const leftoverLtx = { videoWidth: 1920, videoHeight: 1080 };
+  it("delivers video at 1080-line sizes that match each preset shape", () => {
+    expect(resolveVideoDimensionsForAspectRatio("16_9")).toEqual({
+      width: 1920,
+      height: 1080,
+    });
+    expect(resolveVideoDimensionsForAspectRatio("9_16")).toEqual({
+      width: 1080,
+      height: 1920,
+    });
+    expect(resolveVideoDimensionsForAspectRatio("1_1")).toEqual({
+      width: 1080,
+      height: 1080,
+    });
     for (const id of Object.keys(
       REFERENCE_ASPECT_RATIO_PRESETS
     ) as ReferenceAspectRatioPreset[]) {
@@ -46,22 +57,29 @@ describe("reference aspect ratio", () => {
         DEFAULT_VISUAL_STYLE,
         id
       );
-      const videoFromPreset = resolveVideoDimensionsForAspectRatio(id);
-      expect(videoFromPreset).toEqual(stills);
-
-      const aligned = alignVideoSizeToReferenceAspect({
-        referenceAspectRatio: id,
-        ...leftoverLtx,
-      });
-      if (id === "16_9") {
-        expect(aligned).toEqual({ videoWidth: 1920, videoHeight: 1080 });
-      } else {
-        expect(aligned).toEqual({
-          videoWidth: stills.width,
-          videoHeight: stills.height,
-        });
-      }
+      const video = resolveVideoDimensionsForAspectRatio(id);
+      expect(Math.min(video.width, video.height)).toBe(1080);
+      expect(
+        Math.abs(video.width / video.height - stills.width / stills.height)
+      ).toBeLessThan(0.05);
     }
+  });
+
+  it("upgrades a saved still-canvas video size to the delivery size", () => {
+    expect(
+      alignVideoSizeToReferenceAspect({
+        referenceAspectRatio: "16_9",
+        videoWidth: 1344,
+        videoHeight: 768,
+      })
+    ).toEqual({ videoWidth: 1920, videoHeight: 1080 });
+    expect(
+      alignVideoSizeToReferenceAspect({
+        referenceAspectRatio: "9_16",
+        videoWidth: 768,
+        videoHeight: 1344,
+      })
+    ).toEqual({ videoWidth: 1080, videoHeight: 1920 });
   });
 
   it("replaces leftover landscape video size on a 9:16 project", () => {
@@ -71,7 +89,7 @@ describe("reference aspect ratio", () => {
         videoWidth: 1920,
         videoHeight: 1080,
       })
-    ).toEqual({ videoWidth: 768, videoHeight: 1344 });
+    ).toEqual({ videoWidth: 1080, videoHeight: 1920 });
   });
 
   it("keeps 1920x1080 on a 16:9 project", () => {
@@ -91,8 +109,8 @@ describe("reference aspect ratio", () => {
       videoHeight: 1080,
       checkpoint: "kept.safetensors",
     });
-    expect(next.videoWidth).toBe(1024);
-    expect(next.videoHeight).toBe(1024);
+    expect(next.videoWidth).toBe(1080);
+    expect(next.videoHeight).toBe(1080);
     expect(next.checkpoint).toBe("kept.safetensors");
   });
 

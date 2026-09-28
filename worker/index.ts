@@ -77,11 +77,16 @@ import { COMPOSITING_NODE_CLASSES } from "@/lib/services/compositing-pipeline";
 import { buildPortraitPayload } from "@/lib/services/workflow-builder";
 import {
   resolveCharacterAnchorReframeIntensity,
-  resolveLocationAnchorReframeIntensity,
   extractAnchoredViewDescription,
 } from "@/lib/anchor-reframe";
-import { getLocationIpAdapterProfile } from "@/lib/ip-adapter-profiles";
-import { resolveShotReframeIntensity } from "@/lib/services/prompt-preprocess";
+import {
+  LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE,
+  LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE,
+} from "@/lib/ip-adapter-profiles";
+import {
+  resolveShotReframeIntensity,
+  resolveLocationTightFraming,
+} from "@/lib/services/prompt-preprocess";
 import type { LocationReferenceGenerationOptions } from "@/types";
 import {
   resolveLocationAnchorReferencePathForBatch,
@@ -391,7 +396,12 @@ async function resolveBatchAnchorReferenceImages(
   const uploads: BatchAnchorUploads = {};
 
   if (batch.entityType === "location_angle") {
-    const anchorRelative = resolveLocationAnchorReferencePathForBatch(batch);
+    const generationOptions = parseBatchGenerationOptions(
+      batch.generationOptionsJson
+    );
+    const punchRelative = generationOptions.ipAdapterAnchorPath?.trim();
+    const anchorRelative =
+      punchRelative || resolveLocationAnchorReferencePathForBatch(batch);
     if (anchorRelative) {
       const anchorAbs = resolveMediaPath(projectRoot, anchorRelative);
       if (fs.existsSync(anchorAbs)) {
@@ -916,9 +926,16 @@ async function processRenderJobs(): Promise<void> {
   if (activeCount > 0) return;
 
   const next = getNextQueuedRenderJob();
-  if (next) {
-    await startRenderJob(next);
+  if (!next) return;
+
+  const { isComfyGpuLeaseBlocking } = await import(
+    "@/lib/services/comfy-gpu-gate"
+  );
+  if (isComfyGpuLeaseBlocking(next.comfyuiEndpointUrl)) {
+    return;
   }
+
+  await startRenderJob(next);
 }
 
 function getNextQueuedExportJob(): ExportJob | null {
@@ -1139,9 +1156,16 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
       if (referenceImage || secondaryReferenceImage) {
         const usingIpAdapter =
           workflowTemplateId === BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID;
+        const usingPunch =
+          Boolean(
+            parseBatchGenerationOptions(batch.generationOptionsJson)
+              .ipAdapterAnchorPath
+          );
         updateAssetOption(option.id, {
           statusMessage: usingIpAdapter
-            ? "Using establishing reference via IP-Adapter"
+            ? usingPunch
+              ? "Using punched close crop via IP-Adapter"
+              : "Using establishing reference via IP-Adapter"
             : "Using establishing reference for img2img",
           lastHeartbeatAt: now(),
         });
@@ -1391,9 +1415,9 @@ async function startAssetOption(option: AssetGenerationOption): Promise<void> {
             workflowTemplateId ===
               BUILTIN_LOCATION_REFERENCE_IPADAPTER_TEMPLATE_ID &&
             referenceImage
-          ? getLocationIpAdapterProfile(
-              resolveLocationAnchorReframeIntensity(batch.rawPrompt ?? "")
-            )
+          ? resolveLocationTightFraming(batch.rawPrompt ?? "")
+            ? LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE
+            : LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE
           : undefined;
 
     const useDualIpAdapterProfiles =
@@ -1831,9 +1855,23 @@ async function processAssetGenerationJobs(): Promise<void> {
   if (getRunningRenderJobs().length > 0) return;
 
   const next = getNextQueuedAssetOption();
-  if (next) {
-    await startAssetOption(next);
+  if (!next) return;
+
+  const batch = getDb()
+    .select({ comfyuiEndpointUrl: schema.assetGenerationBatches.comfyuiEndpointUrl })
+    .from(schema.assetGenerationBatches)
+    .where(eq(schema.assetGenerationBatches.id, next.batchId))
+    .get();
+  if (!batch?.comfyuiEndpointUrl) return;
+
+  const { isComfyGpuLeaseBlocking } = await import(
+    "@/lib/services/comfy-gpu-gate"
+  );
+  if (isComfyGpuLeaseBlocking(batch.comfyuiEndpointUrl)) {
+    return;
   }
+
+  await startAssetOption(next);
 }
 
 async function tick(): Promise<void> {

@@ -56,6 +56,8 @@ interface SettingsUpdateBody {
 
   aceStepRemoteUrl?: string | null;
 
+  dialogEdgeTtsVoice?: string | null;
+
 }
 
 
@@ -253,6 +255,14 @@ export async function PUT(req: NextRequest) {
     if (body.aceStepRemoteUrl !== undefined) {
 
       await setSetting("ace_step_remote_url", body.aceStepRemoteUrl ?? "");
+
+    }
+
+
+
+    if (body.dialogEdgeTtsVoice !== undefined) {
+
+      await setSetting("dialog_edge_tts_voice", body.dialogEdgeTtsVoice ?? "");
 
     }
 

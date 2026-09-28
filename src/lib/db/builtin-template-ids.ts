@@ -77,3 +77,11 @@ export function resolveTemplateVideoEngine(
   }
   return "generic";
 }
+
+/** Short label for video generation cards (LTX vs MiniMax packs). */
+export function videoEngineLabelForTemplate(templateId: string): string {
+  if (templateId === BUILTIN_MINIMAX_I2V_TEMPLATE_ID) return "MiniMax";
+  if (templateId === BUILTIN_LTX_I2V_AUDIO_TEMPLATE_ID) return "LTX lip sync";
+  if (templateId === BUILTIN_LTX_I2V_TEMPLATE_ID) return "LTX";
+  return "Video";
+}

@@ -18,6 +18,8 @@ const ZOOM_OPTIONS = [
   { value: 2, label: "2x" },
   { value: 2.5, label: "2.5x" },
   { value: 3, label: "3x (tight)" },
+  { value: 4, label: "4x (detail)" },
+  { value: 5, label: "5x (macro crop)" },
 ];
 
 interface LocationPunchInControlsProps {
@@ -67,7 +69,8 @@ export function LocationPunchInControls({
           Optical crop of{" "}
           {anchorAngleName ? `"${anchorAngleName}"` : "the establishing plate"},
           then scaled back up. Same pixels, tighter framing. No diffusion, so
-          the room cannot drift.
+          the room cannot drift. For a true macro detail crop, use 4x or 5x on
+          the subject already in frame.
         </p>
       </div>
 

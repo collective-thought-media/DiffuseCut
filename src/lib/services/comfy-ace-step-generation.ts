@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import { randomInt } from "crypto";
 import { aceStepPromptForKind, resolveAceStepSourceDuration } from "@/lib/services/ace-step-prompt";
+import { ACE_STEP_CONTROL_GATE } from "@/lib/services/ace-step-control-gate";
 import {
   downloadOutput,
   extractAudioOutputFiles,
@@ -32,11 +33,11 @@ function loadWorkflowTemplate(): Record<string, unknown> {
 function parseKeyscale(keyscale: string): { key: string; timesignature: string } {
   const match = keyscale.match(/^([A-G](?:#|b)?)\s+(major|minor)$/i);
   if (!match) {
-    return { key: "A minor", timesignature: "4" };
+    return { key: "A minor", timesignature: ACE_STEP_CONTROL_GATE.timesignature };
   }
   return {
     key: `${match[1]} ${match[2].toLowerCase()}`,
-    timesignature: "4",
+    timesignature: ACE_STEP_CONTROL_GATE.timesignature,
   };
 }
 
@@ -56,6 +57,7 @@ export async function generateComfyAceStepAudioFile(options: {
   provider: string;
   sourceSeconds: number;
   comfyUrl: string;
+  writtenPath: string;
   aceStepPrompt?: {
     tags: string;
     lyrics: string;
@@ -86,7 +88,7 @@ export async function generateComfyAceStepAudioFile(options: {
   const tags = acePrompt.tags;
   const lyrics =
     options.kind === "music"
-      ? acePrompt.lyrics?.trim() || ""
+      ? ACE_STEP_CONTROL_GATE.lyrics
       : options.kind === "voiceover"
         ? options.prompt.trim()
         : "";
@@ -96,6 +98,9 @@ export async function generateComfyAceStepAudioFile(options: {
     string,
     { class_type?: string; inputs?: Record<string, unknown> }
   >;
+  const gate = ACE_STEP_CONTROL_GATE;
+
+  graph["2"]!.inputs!.shift = gate.modelShift;
 
   graph["3"]!.inputs!.tags = tags;
   graph["3"]!.inputs!.lyrics = lyrics;
@@ -104,11 +109,27 @@ export async function generateComfyAceStepAudioFile(options: {
   graph["3"]!.inputs!.duration = sourceSeconds;
   graph["3"]!.inputs!.keyscale = parsedKey.key;
   graph["3"]!.inputs!.timesignature = parsedKey.timesignature;
-  graph["3"]!.inputs!.generate_audio_codes = true;
-  graph["3"]!.inputs!.temperature = 0.0;
+  graph["3"]!.inputs!.language = gate.language;
+  graph["3"]!.inputs!.generate_audio_codes = gate.generateAudioCodes;
+  graph["3"]!.inputs!.top_k = gate.topK;
+  graph["3"]!.inputs!.min_p = gate.minP;
+
+  if (options.kind === "music") {
+    graph["3"]!.inputs!.cfg_scale = gate.cfgScale;
+    graph["3"]!.inputs!.temperature = gate.temperature;
+    graph["3"]!.inputs!.top_p = gate.topP;
+  } else {
+    graph["3"]!.inputs!.cfg_scale = 2.0;
+    graph["3"]!.inputs!.temperature = 0.85;
+    graph["3"]!.inputs!.top_p = 0.9;
+  }
 
   graph["5"]!.inputs!.seconds = sourceSeconds;
   graph["6"]!.inputs!.seed = seed;
+  graph["6"]!.inputs!.steps = gate.steps;
+  graph["6"]!.inputs!.cfg = gate.samplerCfg;
+  graph["6"]!.inputs!.sampler_name = gate.samplerName;
+  graph["6"]!.inputs!.scheduler = gate.scheduler;
   graph["8"]!.inputs!.filename_prefix = `diffusecut/ace_step_${Date.now()}`;
 
   const queued = await queuePrompt(baseUrl, graph);
@@ -133,7 +154,7 @@ export async function generateComfyAceStepAudioFile(options: {
     ? options.outputAbsolutePath
     : path.join(
         path.dirname(options.outputAbsolutePath),
-        `.gen-comfy-${Date.now()}.mp3`
+        `${path.basename(options.outputAbsolutePath, path.extname(options.outputAbsolutePath))}.mp3`
       );
 
   await downloadOutput(baseUrl, audioFiles[0], scratchPath);
@@ -142,6 +163,7 @@ export async function generateComfyAceStepAudioFile(options: {
     provider: "ace_step_comfy",
     sourceSeconds,
     comfyUrl: baseUrl,
+    writtenPath: scratchPath,
     aceStepPrompt: {
       tags,
       lyrics,

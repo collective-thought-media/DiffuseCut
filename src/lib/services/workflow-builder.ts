@@ -31,7 +31,11 @@ import {
   IP_ADAPTER_SDXL_PLUS_FILENAME,
 } from "@/lib/services/comfyui-workflow-requirements";
 import { applyFrameCountTransform } from "@/lib/services/frame-count-transform";
-import { resolveImageSampler, resolveVideoSampler } from "@/lib/services/image-sampler";
+import {
+  DEFAULT_IMAGE_SAMPLER,
+  resolveImageSampler,
+  resolveVideoSampler,
+} from "@/lib/services/image-sampler";
 
 export interface UploadedRefs {
   image?: string;
@@ -86,6 +90,8 @@ function collectBindingNodeIds(bindings: WorkflowBindings): string[] {
   add(bindings.subjectMaskBoxNodeId);
   add(bindings.subjectMaskCompositeNodeId);
   add(bindings.subjectMaskFeatherNodeId);
+  add(bindings.subjectMaskClearFillNodeId);
+  add(bindings.subjectMaskClearCompositeNodeId);
   add(bindings.secondaryReferenceImageNodeId);
   add(bindings.characterIpAdapterNodeId);
   add(bindings.locationIpAdapterNodeId);
@@ -575,6 +581,44 @@ function applyIpAdapterSettingsToNode(
   node.inputs.weight_type = profile.weightType;
 }
 
+/**
+ * Krea 2 turbo is 8 steps at CFG 1. Location and character anchor graphs are
+ * still SDXL checkpoints plus IP-Adapter. Those settings leave SDXL half
+ * denoised, which reads as latent noise. Full SDXL sampler settings belong
+ * on any graph whose model comes from a checkpoint loader.
+ */
+function samplerModelComesFromCheckpoint(
+  workflow: Record<string, WorkflowNode>,
+  samplerNodeId: string
+): boolean {
+  const seen = new Set<string>();
+
+  function walk(nodeId: string, depth: number): boolean {
+    if (depth > 8 || seen.has(nodeId)) return false;
+    seen.add(nodeId);
+    const node = workflow[nodeId];
+    if (!node) return false;
+    if (
+      node.class_type === "CheckpointLoaderSimple" ||
+      node.class_type === "CheckpointLoader"
+    ) {
+      return true;
+    }
+    if (node.class_type === "UNETLoader") return false;
+    const model = node.inputs.model;
+    if (Array.isArray(model) && typeof model[0] === "string") {
+      return walk(model[0], depth + 1);
+    }
+    return false;
+  }
+
+  const model = workflow[samplerNodeId]?.inputs.model;
+  if (Array.isArray(model) && typeof model[0] === "string") {
+    return walk(model[0], 0);
+  }
+  return false;
+}
+
 function applyIpAdapterReframeProfile(
   workflow: Record<string, WorkflowNode>,
   intensity: AnchorReframeIntensity
@@ -792,7 +836,11 @@ export function buildPortraitPayload(
       (control) => control.type === "sampler"
     );
     if (samplerControl?.inputs) {
-      const imageSampler = resolveImageSampler(renderSettings);
+      const imageSampler =
+        renderSettings.imageEngine === "krea2" &&
+        samplerModelComesFromCheckpoint(workflow, samplerControl.nodeId)
+          ? DEFAULT_IMAGE_SAMPLER
+          : resolveImageSampler(renderSettings);
       for (const [inputKey, valueKey] of Object.entries(samplerControl.inputs)) {
         const value = imageSampler[valueKey as keyof typeof imageSampler];
         if (value != null) {
@@ -988,6 +1036,62 @@ export function buildPortraitPayload(
           mergedBindings.subjectMaskCompositeNodeId,
           "y",
           subjectMask.y
+        );
+      }
+      if (mergedBindings.subjectMaskClearFillNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskClearFillNodeId,
+          "width",
+          subjectMask.boxWidth
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskClearFillNodeId,
+          "height",
+          subjectMask.boxHeight
+        );
+      }
+      if (mergedBindings.subjectMaskClearCompositeNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskClearCompositeNodeId,
+          "x",
+          subjectMask.x
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.subjectMaskClearCompositeNodeId,
+          "y",
+          subjectMask.y
+        );
+      }
+      if (mergedBindings.characterScaleNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.characterScaleNodeId,
+          mergedBindings.characterScaleWidthInputKey ?? "width",
+          subjectMask.pasteWidth
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.characterScaleNodeId,
+          mergedBindings.characterScaleHeightInputKey ?? "height",
+          subjectMask.pasteHeight
+        );
+      }
+      if (mergedBindings.compositeNodeId) {
+        setNodeInput(
+          workflow,
+          mergedBindings.compositeNodeId,
+          mergedBindings.compositeXInputKey ?? "x",
+          subjectMask.pasteX
+        );
+        setNodeInput(
+          workflow,
+          mergedBindings.compositeNodeId,
+          mergedBindings.compositeYInputKey ?? "y",
+          subjectMask.pasteY
         );
       }
       if (mergedBindings.subjectMaskFeatherNodeId) {

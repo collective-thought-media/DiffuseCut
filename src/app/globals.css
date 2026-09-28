@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Keep class detection inside the repo (avoids Windows EPERM on profile junctions). */
+@source "../**/*.{js,ts,jsx,tsx,mdx}";
+@source "../../components/**/*.{js,ts,jsx,tsx,mdx}";
+@source "../../worker/**/*.{js,ts,jsx,tsx,mdx}";
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

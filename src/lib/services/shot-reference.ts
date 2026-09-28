@@ -15,6 +15,7 @@ import {
   type ShotReferencePaths,
   type ShotVisualReferenceFocus,
 } from "@/lib/services/shot-reference-core";
+import { parseShotRenderOverrides } from "@/lib/shot-render-overrides";
 
 export type { ShotReferencePaths, ShotVisualReferenceFocus };
 
@@ -105,12 +106,15 @@ export function resolveShotReferencePaths(shot: Shot): ShotReferencePaths {
     ];
   });
 
+  const overrides = parseShotRenderOverrides(shot.renderOverridesJson);
+
   return resolveShotReferencePathsFromData({
     shot,
     locationStates,
     legacyLocationPath,
     legacyLocationKind,
     cast,
+    characterAngleId: overrides.characterAngleId ?? null,
   });
 }
 

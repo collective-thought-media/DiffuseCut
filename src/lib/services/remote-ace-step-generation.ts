@@ -74,6 +74,7 @@ export async function generateRemoteAceStepAudioFile(options: {
   provider: string;
   sourceSeconds: number;
   remoteUrl: string;
+  writtenPath?: string;
   aceStepPrompt?: {
     tags: string;
     lyrics: string;
@@ -110,6 +111,7 @@ export async function generateRemoteAceStepAudioFile(options: {
     provider: result.provider,
     sourceSeconds: result.sourceSeconds,
     remoteUrl: result.comfyUrl,
+    writtenPath: result.writtenPath,
     aceStepPrompt: result.aceStepPrompt,
   };
 }

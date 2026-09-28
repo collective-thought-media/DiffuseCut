@@ -29,7 +29,7 @@ export type PunchInCropBox = {
 /** Clamp zoom so we always crop a real sub-rectangle, not a no-op or invert. */
 export function normalizePunchInZoom(zoom: number): number {
   if (!Number.isFinite(zoom)) return 1.5;
-  return Math.min(4, Math.max(1.15, zoom));
+  return Math.min(5, Math.max(1.15, zoom));
 }
 
 /**

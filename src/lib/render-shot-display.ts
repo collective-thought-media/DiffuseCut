@@ -51,8 +51,15 @@ export function deriveShotRenderDisplay(
   const latestJob = shotJobs[0] ?? null;
   const activeJob = getActiveJobForShot(shot.id, jobs);
   const completedJob = lastCompletedJob(shotJobs);
-  const playableFromJob = completedJob?.outputPath ?? null;
-  const playablePath = playableFromJob ?? shot.videoPath ?? null;
+  // Chosen finishing clip wins. Fall back to latest completed job output.
+  const playablePath = shot.videoPath ?? completedJob?.outputPath ?? null;
+  const selectedCompletedJob =
+    shotJobs.find(
+      (job) =>
+        job.status === "completed" &&
+        job.outputPath &&
+        job.outputPath === shot.videoPath
+    ) ?? null;
 
   const showingPriorRender =
     Boolean(playablePath) &&
@@ -84,7 +91,7 @@ export function deriveShotRenderDisplay(
     displayStatus,
     activeJob,
     latestJob,
-    completedJob,
+    completedJob: selectedCompletedJob ?? completedJob,
     progress,
     statusMessage,
     errorMessage: activeJob?.errorMessage ?? latestJob?.errorMessage ?? null,
@@ -101,6 +108,14 @@ export function previewMediaVersion(
     return (
       display.completedJob?.completedAt ??
       display.completedJob?.createdAt ??
+      undefined
+    );
+  }
+
+  if (display.completedJob?.outputPath === display.playablePath) {
+    return (
+      display.completedJob.completedAt ??
+      display.completedJob.createdAt ??
       undefined
     );
   }

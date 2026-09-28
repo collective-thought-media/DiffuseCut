@@ -6,7 +6,12 @@ import ffmpeg from "fluent-ffmpeg";
 import { generateAceStepAudioFile } from "@/lib/services/ace-step-audio-generation";
 import { resolveFfmpegBinary } from "@/lib/services/ffmpeg-path";
 import { getFfmpegPathSetting, getSetting } from "@/lib/services/settings";
-import { resolveScoreGenerationProvider } from "@/lib/services/score-audio-source";
+import { generateElevenLabsVoiceoverClip } from "@/lib/services/elevenlabs-voiceover";
+import { generateEdgeTtsVoiceoverFile } from "@/lib/services/local-edge-tts-voiceover";
+import {
+  resolveScoreGenerationProvider,
+  resolveVoiceoverGenerationProvider,
+} from "@/lib/services/score-audio-source";
 import { ensureDir } from "@/lib/paths/app-paths";
 
 const ELEVENLABS_MAX_SECONDS = 22;
@@ -80,7 +85,12 @@ async function generateElevenLabsClip(
 async function fitAudioToDuration(
   inputPath: string,
   outputPath: string,
-  durationSeconds: number
+  durationSeconds: number,
+  options?: {
+    padShortClip?: "loop" | "silence";
+    /** When the source is longer than the span, keep the start or the ending. */
+    trimFrom?: "start" | "end";
+  }
 ): Promise<void> {
   await configureFfmpeg();
   ensureDir(path.dirname(outputPath));
@@ -111,10 +121,45 @@ async function fitAudioToDuration(
     String(targetSeconds),
   ];
 
-  if (sourceSeconds > 0 && sourceSeconds < targetSeconds * 0.92) {
+  const padMode = options?.padShortClip ?? "loop";
+  if (
+    padMode === "loop" &&
+    sourceSeconds > 0 &&
+    sourceSeconds < targetSeconds * 0.92
+  ) {
     await runFfmpeg(
       ffmpeg(inputPath)
         .inputOptions(["-stream_loop", "-1"])
+        .outputOptions(outputOptions)
+        .output(outputPath)
+    );
+    return;
+  }
+
+  if (
+    padMode === "silence" &&
+    sourceSeconds > 0 &&
+    sourceSeconds < targetSeconds * 0.92
+  ) {
+    const padSeconds = Math.max(0, targetSeconds - sourceSeconds);
+    await runFfmpeg(
+      ffmpeg(inputPath)
+        .complexFilter([`[0:a]apad=pad_dur=${padSeconds}[aout]`])
+        .outputOptions(["-map", "[aout]", ...outputOptions])
+        .output(outputPath)
+    );
+    return;
+  }
+
+  // Cinematic ACE scores generate long then trim: keep the ending so the
+  // crescendo / resolve lands on the span (medallion beat), not the quiet open.
+  if (
+    options?.trimFrom === "end" &&
+    sourceSeconds > targetSeconds * 1.08
+  ) {
+    await runFfmpeg(
+      ffmpeg(inputPath)
+        .inputOptions(["-sseof", `-${targetSeconds}`])
         .outputOptions(outputOptions)
         .output(outputPath)
     );
@@ -270,9 +315,58 @@ export async function generateScoreAudioFile(options: {
     bpm: number;
     keyscale: string;
   };
+  gpuWaitedMs?: number;
+  gpuWaitedFor?: string | null;
 }> {
   if (!options.prompt.trim()) {
-    throw new Error("Describe the score or sound before generating.");
+    throw new Error(
+      options.kind === "voiceover"
+        ? "Add the dialog lines to speak before generating."
+        : "Describe the score or sound before generating."
+    );
+  }
+
+  if (options.kind === "voiceover") {
+    const voProvider = await resolveVoiceoverGenerationProvider();
+    const scratchDir = path.join(
+      path.dirname(options.outputAbsolutePath),
+      ".gen"
+    );
+    ensureDir(scratchDir);
+
+    const rawPath = path.join(scratchDir, "dialog-tts.mp3");
+
+    if (voProvider === "elevenlabs") {
+      const apiKey = await getMusicApiKey();
+      if (!apiKey) {
+        throw new Error(
+          "Add your ElevenLabs API key in Settings, or run: pip install edge-tts"
+        );
+      }
+      const buffer = await generateElevenLabsVoiceoverClip(
+        options.prompt,
+        apiKey
+      );
+      fs.writeFileSync(rawPath, buffer);
+    } else {
+      await generateEdgeTtsVoiceoverFile({
+        scriptText: options.prompt,
+        outputAbsolutePath: rawPath,
+      });
+    }
+
+    ensureDir(path.dirname(options.outputAbsolutePath));
+    await fitAudioToDuration(
+      rawPath,
+      options.outputAbsolutePath,
+      options.durationSeconds,
+      { padShortClip: "silence" }
+    );
+    fs.rmSync(scratchDir, { recursive: true, force: true });
+    return {
+      provider: voProvider === "elevenlabs" ? "elevenlabs_tts" : "edge_tts",
+      sourceSeconds: options.durationSeconds,
+    };
   }
 
   const provider = await resolveScoreGenerationProvider();
@@ -280,23 +374,40 @@ export async function generateScoreAudioFile(options: {
   ensureDir(scratchDir);
 
   if (provider === "ace_step") {
-    const rawPath = path.join(scratchDir, "ace-step.flac");
+    const rawPathPreferred = path.join(scratchDir, "ace-step.flac");
     const aceResult = await generateAceStepAudioFile({
       ...options,
-      outputAbsolutePath: rawPath,
+      outputAbsolutePath: rawPathPreferred,
     });
 
+    const rawPath = [
+      aceResult.writtenPath,
+      rawPathPreferred,
+      path.join(scratchDir, "ace-step.mp3"),
+      path.join(scratchDir, "ace-step.wav"),
+    ].find((candidate) => candidate && fs.existsSync(candidate));
+
+    if (!rawPath) {
+      throw new Error(
+        "ACE-Step finished but no audio file was written. Check ACE-Step / ComfyUI logs, then try again."
+      );
+    }
+
     ensureDir(path.dirname(options.outputAbsolutePath));
+    // Control Gate: generate long, keep the ending (crescendo), trim to span.
     await fitAudioToDuration(
       rawPath,
       options.outputAbsolutePath,
-      options.durationSeconds
+      options.durationSeconds,
+      { padShortClip: "silence", trimFrom: "end" }
     );
     fs.rmSync(scratchDir, { recursive: true, force: true });
     return {
       provider: aceResult.provider,
       sourceSeconds: aceResult.sourceSeconds,
       aceStepPrompt: aceResult.aceStepPrompt,
+      gpuWaitedMs: aceResult.gpuWaitedMs,
+      gpuWaitedFor: aceResult.gpuWaitedFor,
     };
   }
 
@@ -314,10 +425,7 @@ export async function generateScoreAudioFile(options: {
     Math.max(0.5, options.durationSeconds)
   );
 
-  const fullPrompt =
-    options.kind === "music"
-      ? `Cinematic score: ${options.prompt.trim()}`
-      : `Voiceover tone bed: ${options.prompt.trim()}`;
+  const fullPrompt = `Cinematic score: ${options.prompt.trim()}`;
 
   const buffer = await generateElevenLabsClip(
     fullPrompt,

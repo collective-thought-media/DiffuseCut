@@ -30,6 +30,7 @@ interface AppSettings {
   aceStepInstallDir: string;
   aceStepComputeMode: "local" | "remote";
   aceStepRemoteUrl: string;
+  dialogEdgeTtsVoice: string;
 }
 
 export default function SettingsPage() {
@@ -49,6 +50,9 @@ export default function SettingsPage() {
   const [aceStepInstallDir, setAceStepInstallDir] = useState("");
   const [aceStepComputeMode, setAceStepComputeMode] = useState<"local" | "remote">("local");
   const [aceStepRemoteUrl, setAceStepRemoteUrl] = useState("");
+  const [dialogEdgeTtsVoice, setDialogEdgeTtsVoice] = useState(
+    "en-US-ChristopherNeural"
+  );
   const [importName, setImportName] = useState("");
   const [importPurpose, setImportPurpose] = useState<
     "shot_video" | "character_sheet" | "location_sheet"
@@ -107,6 +111,9 @@ export default function SettingsPage() {
       setAceStepInstallDir(s.aceStepInstallDir ?? "");
       setAceStepComputeMode(s.aceStepComputeMode === "remote" ? "remote" : "local");
       setAceStepRemoteUrl(s.aceStepRemoteUrl ?? "");
+      setDialogEdgeTtsVoice(
+        s.dialogEdgeTtsVoice ?? "en-US-ChristopherNeural"
+      );
       setDeps(depsData.dependencies ?? []);
       if (templatesRes.ok) {
         setSheetTemplates(templatesData.templates ?? []);
@@ -150,6 +157,7 @@ export default function SettingsPage() {
           aceStepInstallDir: aceStepInstallDir || null,
           aceStepComputeMode,
           aceStepRemoteUrl: aceStepRemoteUrl || null,
+          dialogEdgeTtsVoice: dialogEdgeTtsVoice || null,
         }),
       });
       const data = await res.json();
@@ -457,9 +465,30 @@ export default function SettingsPage() {
                 </p>
               </div>
             )}
+            <div className="space-y-3 border-t border-neutral-800 pt-4">
+              <h3 className="text-sm font-medium">Dialog speech (Finishing)</h3>
+              <p className="text-xs text-muted-foreground">
+                Finishing Dialog Generate uses local Edge TTS (Python edge-tts)
+                unless an ElevenLabs key is saved below. ACE-Step is not used for
+                dialog.
+              </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="dialog-edge-tts-voice">Edge TTS voice id</Label>
+                <Input
+                  id="dialog-edge-tts-voice"
+                  value={dialogEdgeTtsVoice}
+                  onChange={(e) => setDialogEdgeTtsVoice(e.target.value)}
+                  placeholder="en-US-ChristopherNeural"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Example voices: en-US-ChristopherNeural, en-US-EricNeural.
+                  Requires pip install edge-tts on the machine running DiffuseCut.
+                </p>
+              </div>
+            </div>
             <div className="space-y-1.5">
               <Label htmlFor="music-api-key">
-                ElevenLabs API key (SFX fallback)
+                ElevenLabs API key (dialog + SFX fallback)
                 {settings?.musicApiKeySet ? " (saved)" : ""}
               </Label>
               <Input
@@ -470,8 +499,9 @@ export default function SettingsPage() {
                 placeholder="Leave blank to keep existing key"
               />
               <p className="text-xs text-muted-foreground">
-                Sound effects use ComfyUI-Woosh on your GPU Comfy server when
-                installed. ElevenLabs is the cloud fallback. ACE-Step is score only.
+                When set, Finishing Dialog prefers ElevenLabs text-to-speech over
+                Edge TTS. SFX uses Woosh on Comfy when installed, else ElevenLabs.
+                ACE-Step remains score only.
               </p>
             </div>
           </div>

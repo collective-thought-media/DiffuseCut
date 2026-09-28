@@ -12,7 +12,8 @@ export type DependencyId =
   | "comfyui_ltx_i2v"
   | "comfyui_minimax_i2v"
   | "comfyui_ace_step"
-  | "score_audio";
+  | "score_audio"
+  | "dialog_speech";
 
 export type DependencyRequiredFor = "app" | "export" | "render" | "finishing";
 
@@ -85,6 +86,13 @@ export interface WorkflowBindings {
   subjectMaskCompositeNodeId?: string;
   /** Integrate in scene: FeatherMask softening the box edges. */
   subjectMaskFeatherNodeId?: string;
+  /**
+   * Integrate in scene: EmptyImage sized like the subject box, painted mid-gray
+   * into the plate so the first paint cannot keep house pixels as a missing head.
+   */
+  subjectMaskClearFillNodeId?: string;
+  /** Integrate in scene: ImageCompositeMasked that pastes the gray fill. */
+  subjectMaskClearCompositeNodeId?: string;
   /** img2img encodes the reference into the latent; ipadapter keeps txt2img composition freedom. */
   referenceImageUsage?:
     | "img2img"
@@ -203,6 +211,12 @@ import type { ShotStillReferenceMode } from "@/lib/services/shot-still-reference
 export interface LocationReferenceGenerationOptions {
   /** When false, generate txt2img from prompt only (ignore saved anchor). */
   useIpAdapter?: boolean;
+  /**
+   * Optional project-relative reference override for IP-Adapter (for example a
+   * manually punched crop). Tight Auto does not set this; it soft-locks the
+   * establishing plate with style transfer instead.
+   */
+  ipAdapterAnchorPath?: string;
   /** Override IP-Adapter weight (0.1 to 0.7). */
   ipAdapterWeight?: number;
   /** Override IP-Adapter end_at (0.2 to 0.85). */
@@ -288,6 +302,15 @@ export type MediaKind = "image" | "video";
 
 export const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
 export const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mov"];
+export const AUDIO_EXTENSIONS = [
+  ".mp3",
+  ".wav",
+  ".m4a",
+  ".aac",
+  ".flac",
+  ".ogg",
+  ".opus",
+];
 
 export class BindingNodeMismatchError extends Error {
   code = "BINDING_NODE_MISMATCH";

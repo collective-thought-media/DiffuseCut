@@ -106,9 +106,10 @@ export type ShotCastReferenceEntry = {
 };
 
 export function resolveShotCharacterReferenceFromCast(
-  cast: Array<ShotCastReferenceEntry>
+  cast: Array<ShotCastReferenceEntry>,
+  characterAngleId?: string | null
 ): { path: string | null; name: string | null } {
-  const split = resolveShotCastReferenceSplit(cast);
+  const split = resolveShotCastReferenceSplit(cast, { characterAngleId });
   if (!split.ipAdapterEntry) {
     return { path: null, name: null };
   }
@@ -120,7 +121,8 @@ export function resolveShotCharacterReferenceFromCast(
 
 /** Which cast members get IP-Adapter art vs prompt text only (one image slot). */
 export function resolveShotCastReferenceSplit(
-  cast: Array<ShotCastReferenceEntry>
+  cast: Array<ShotCastReferenceEntry>,
+  options?: { characterAngleId?: string | null }
 ): {
   ipAdapterEntry: {
     character: Character;
@@ -146,10 +148,16 @@ export function resolveShotCastReferenceSplit(
         ? entry.state.angles
         : [];
     const angles = entry.angles ?? nestedAngles;
-    const coverPath = resolveCharacterStateCoverPath({
+    let coverPath = resolveCharacterStateCoverPath({
       ...entry.state,
       angles,
     });
+    if (options?.characterAngleId) {
+      const forced = angles.find((a) => a.id === options.characterAngleId);
+      if (forced?.referencePath && forced.referenceKind !== "video") {
+        coverPath = forced.referencePath;
+      }
+    }
     const referencePath =
       coverPath ??
       entry.state.referencePath ??
@@ -180,6 +188,7 @@ export function resolveShotReferencePathsFromData(input: {
   legacyLocationPath?: string | null;
   legacyLocationKind?: string | null;
   cast?: Array<ShotCastReferenceEntry>;
+  characterAngleId?: string | null;
 }): ShotReferencePaths {
   const location = resolveShotLocationReferenceFromStates(
     input.shot,
@@ -187,7 +196,10 @@ export function resolveShotReferencePathsFromData(input: {
     input.legacyLocationPath,
     input.legacyLocationKind
   );
-  const character = resolveShotCharacterReferenceFromCast(input.cast ?? []);
+  const character = resolveShotCharacterReferenceFromCast(
+    input.cast ?? [],
+    input.characterAngleId
+  );
 
   const hasCharacter = Boolean(character.path);
   const hasLocation = Boolean(location.path);

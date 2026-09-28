@@ -1,5 +1,6 @@
 import path from "path";
 import {
+  AUDIO_EXTENSIONS,
   IMAGE_EXTENSIONS,
   VIDEO_EXTENSIONS,
   type MediaKind,
@@ -16,6 +17,11 @@ const MIME_MAP: Record<string, string> = {
   ".mov": "video/quicktime",
   ".mp3": "audio/mpeg",
   ".wav": "audio/wav",
+  ".m4a": "audio/mp4",
+  ".aac": "audio/aac",
+  ".flac": "audio/flac",
+  ".ogg": "audio/ogg",
+  ".opus": "audio/opus",
 };
 
 export function extname(fileName: string): string {
@@ -27,6 +33,10 @@ export function mediaKindFromExtension(fileName: string): MediaKind | null {
   if (IMAGE_EXTENSIONS.includes(ext)) return "image";
   if (VIDEO_EXTENSIONS.includes(ext)) return "video";
   return null;
+}
+
+export function isAudioExtension(fileName: string): boolean {
+  return AUDIO_EXTENSIONS.includes(extname(fileName));
 }
 
 export function mimeFromExtension(fileName: string): string {

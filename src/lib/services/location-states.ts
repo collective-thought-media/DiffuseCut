@@ -241,7 +241,12 @@ export function updateLocationAngle(
   locationId: string,
   stateId: string,
   angleId: string,
-  patch: Partial<{ name: string; viewDescription: string; sortOrder: number }>
+  patch: Partial<{
+    name: string;
+    viewDescription: string;
+    sortOrder: number;
+    generationOverridesJson: string | null;
+  }>
 ): LocationAngle {
   const existing = getLocationAngle(
     projectId,
@@ -260,6 +265,9 @@ export function updateLocationAngle(
     updates.viewDescription = patch.viewDescription;
   }
   if (patch.sortOrder !== undefined) updates.sortOrder = patch.sortOrder;
+  if (patch.generationOverridesJson !== undefined) {
+    updates.generationOverridesJson = patch.generationOverridesJson;
+  }
 
   db.update(schema.locationAngles)
     .set(updates)

@@ -47,6 +47,7 @@ export async function generateRemoteAceStepApiAudioFile(options: {
   provider: string;
   sourceSeconds: number;
   remoteUrl: string;
+  writtenPath: string;
   aceStepPrompt?: {
     tags: string;
     lyrics: string;
@@ -75,7 +76,7 @@ export async function generateRemoteAceStepApiAudioFile(options: {
   const keyscale = acePrompt.keyscale ?? (options.kind === "sfx" ? "C major" : "A minor");
   const lyrics =
     options.kind === "music"
-      ? acePrompt.lyrics?.trim() || "[Instrumental]"
+      ? acePrompt.lyrics?.trim() || ""
       : acePrompt.lyrics ?? "";
 
   const controller = new AbortController();
@@ -99,16 +100,26 @@ export async function generateRemoteAceStepApiAudioFile(options: {
           },
         ],
         modalities: ["audio"],
-        audio_config: {
-          duration: sourceSeconds,
-          bpm,
-          key_scale: keyscale,
-          instrumental: options.kind !== "voiceover",
-          format: "flac",
-        },
+        audio_config:
+          options.kind === "voiceover"
+            ? {
+                duration: sourceSeconds,
+                vocal_language: "en",
+                instrumental: false,
+                format: "flac",
+              }
+            : {
+                duration: sourceSeconds,
+                bpm,
+                key_scale: keyscale,
+                instrumental: options.kind === "music" ? true : options.kind === "sfx",
+                format: "flac",
+              },
         lyrics,
-        thinking: options.kind !== "sfx",
-        use_format: options.kind !== "sfx",
+        // Match Control Gate / Comfy instrumental path: no CoT rewrite for music.
+        thinking: options.kind === "voiceover",
+        use_format: false,
+        use_cot_caption: options.kind === "voiceover",
         use_cot_metas: false,
       }),
     });
@@ -149,6 +160,7 @@ export async function generateRemoteAceStepApiAudioFile(options: {
     provider: "ace_step_remote_api",
     sourceSeconds,
     remoteUrl: base,
+    writtenPath: options.outputAbsolutePath,
     aceStepPrompt: {
       tags: acePrompt.tags,
       lyrics,

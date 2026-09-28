@@ -34,6 +34,9 @@ interface LocationReferenceGeneratorProps {
   hasReference?: boolean;
   usesEstablishingAnchor?: boolean;
   anchorAngleName?: string | null;
+  /** Persisted per-angle extra negatives (same role as shot stillNegativePrompt). */
+  stillNegativePrompt?: string;
+  onStillNegativePromptChange?: (value: string) => void;
   onReferenceSelected: () => void | Promise<void>;
 }
 
@@ -48,10 +51,11 @@ export function LocationReferenceGenerator({
   hasReference = false,
   usesEstablishingAnchor = false,
   anchorAngleName,
+  stillNegativePrompt = "",
+  onStillNegativePromptChange,
   onReferenceSelected,
 }: LocationReferenceGeneratorProps) {
   const [sampleCount, setSampleCount] = useState(3);
-  const [extraNegativePrompt, setExtraNegativePrompt] = useState("");
   const [promptPreview, setPromptPreview] = useState<string | null>(null);
   const [negativePreview, setNegativePreview] = useState<string | null>(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -124,8 +128,8 @@ export function LocationReferenceGenerator({
       if (usesEstablishingAnchor) {
         params.set("anchorMode", "true");
       }
-      if (extraNegativePrompt.trim()) {
-        params.set("extraNegativePrompt", extraNegativePrompt.trim());
+      if (stillNegativePrompt.trim()) {
+        params.set("extraNegativePrompt", stillNegativePrompt.trim());
       }
       const res = await fetch(
         `/api/prompt-preview/location-reference?${params.toString()}`
@@ -150,7 +154,7 @@ export function LocationReferenceGenerator({
     referenceDescription,
     projectId,
     usesEstablishingAnchor,
-    extraNegativePrompt,
+    stillNegativePrompt,
   ]);
 
   const togglePromptPreview = useCallback(() => {
@@ -241,7 +245,7 @@ export function LocationReferenceGenerator({
           generationOptions: usesEstablishingAnchor
             ? locationIpAdapterSettingsToApi(ipAdapterSettings)
             : undefined,
-          extraNegativePrompt: extraNegativePrompt.trim() || undefined,
+          extraNegativePrompt: stillNegativePrompt.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -536,10 +540,10 @@ export function LocationReferenceGenerator({
                     negativePreview={negativePreview}
                     previewLoading={previewLoading}
                     previewError={previewError}
-                    stillNegativePrompt={extraNegativePrompt}
-                    onStillNegativePromptChange={setExtraNegativePrompt}
-                    extraNegativeLabel="Extra negative prompt (this location reference)"
-                    extraNegativePlaceholder="Optional. Appended to this location reference's negatives only."
+                    stillNegativePrompt={stillNegativePrompt}
+                    onStillNegativePromptChange={onStillNegativePromptChange}
+                    extraNegativeLabel="Extra negative prompt (this angle)"
+                    extraNegativePlaceholder="Optional. Appended to this angle's location reference negatives only."
                     previewEmptyHint="No preview text returned. Check the description and try again."
                     onGenerate={() => void handleGenerate(canReplaceBatch)}
                     previewDisabled={descriptionEmpty}

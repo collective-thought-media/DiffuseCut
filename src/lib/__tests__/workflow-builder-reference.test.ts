@@ -171,6 +171,78 @@ describe("buildPortraitPayload reference sizing", () => {
     expect(workflow["5"].inputs.height).toBe(768);
   });
 
+  it("keeps SDXL sampler settings when a Krea project anchors through IP-Adapter", () => {
+    const baseWorkflow = JSON.parse(staleTemplate.workflowJson);
+    const ipAdapterTemplate: WorkflowTemplate = {
+      ...staleTemplate,
+      bindingsJson: JSON.stringify({
+        ...JSON.parse(staleTemplate.bindingsJson),
+        referenceImageNodeId: "10",
+        referenceImageInputKey: "image",
+        referenceImageUsage: "ipadapter",
+        controls: [
+          ...JSON.parse(staleTemplate.bindingsJson).controls,
+          {
+            id: "sampler",
+            label: "Sampler",
+            type: "sampler",
+            nodeId: "3",
+            inputs: {
+              steps: "steps",
+              cfg: "cfg",
+              sampler_name: "sampler_name",
+              scheduler: "scheduler",
+            },
+          },
+        ],
+      }),
+      workflowJson: JSON.stringify({
+        ...baseWorkflow,
+        "3": {
+          ...baseWorkflow["3"],
+          inputs: {
+            ...baseWorkflow["3"].inputs,
+            model: ["13", 0],
+          },
+        },
+        "10": {
+          class_type: "LoadImage",
+          inputs: { image: "placeholder.png" },
+        },
+        "13": {
+          class_type: "IPAdapterAdvanced",
+          inputs: {
+            model: ["4", 0],
+            image: ["10", 0],
+            weight: 0.55,
+            end_at: 0.72,
+          },
+        },
+      }),
+    };
+
+    const { workflow } = buildPortraitPayload(
+      ipAdapterTemplate,
+      JSON.parse(ipAdapterTemplate.bindingsJson),
+      {
+        imageEngine: "krea2",
+        imageSampler: { steps: 8, cfg: 1, scheduler: "simple" },
+        sampler: { steps: 20, cfg: 1 },
+      },
+      {
+        prompt: "valley floor",
+        negativePrompt: "bad",
+        seed: 7,
+        referenceImage: "anchor.png",
+      }
+    );
+
+    expect(workflow["3"].inputs.steps).toBe(24);
+    expect(workflow["3"].inputs.cfg).toBe(7.5);
+    expect(workflow["3"].inputs.scheduler).toBe("normal");
+    expect(workflow["3"].inputs.denoise).toBe(1);
+  });
+
   it("lowers IP-Adapter strength for extreme reframes while keeping 16:9 latent", () => {
     const ipAdapterTemplate: WorkflowTemplate = {
       ...staleTemplate,

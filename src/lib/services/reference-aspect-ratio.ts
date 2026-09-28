@@ -11,8 +11,12 @@ export interface ReferenceAspectRatioDefinition {
   id: ReferenceAspectRatioPreset;
   label: string;
   description: string;
+  /** Still canvas (diffusion bucket) for character sheets, locations, storyboard stills. */
   width: number;
   height: number;
+  /** Delivery video size. Renders and exports conform here. */
+  videoWidth: number;
+  videoHeight: number;
 }
 
 export const REFERENCE_ASPECT_RATIO_PRESETS: Record<
@@ -22,37 +26,47 @@ export const REFERENCE_ASPECT_RATIO_PRESETS: Record<
   "16_9": {
     id: "16_9",
     label: "16:9 widescreen",
-    description: "Standard HD landscape. Stills and video share this canvas.",
+    description: "Standard HD landscape.",
     width: 1344,
     height: 768,
+    videoWidth: 1920,
+    videoHeight: 1080,
   },
   "9_16": {
     id: "9_16",
     label: "9:16 vertical",
-    description: "Portrait / mobile vertical framing. Stills and video share this canvas.",
+    description: "Portrait / mobile vertical framing.",
     width: 768,
     height: 1344,
+    videoWidth: 1080,
+    videoHeight: 1920,
   },
   "21_9": {
     id: "21_9",
     label: "21:9 ultrawide",
-    description: "Cinematic ultrawide landscape. Stills and video share this canvas.",
+    description: "Cinematic ultrawide landscape.",
     width: 1344,
     height: 576,
+    videoWidth: 2560,
+    videoHeight: 1080,
   },
   "2_1": {
     id: "2_1",
     label: "2:1 wide",
-    description: "Extra-wide landscape, good for character turnaround sheets. Stills and video share this canvas.",
+    description: "Extra-wide landscape, good for character turnaround sheets.",
     width: 1536,
     height: 768,
+    videoWidth: 2160,
+    videoHeight: 1080,
   },
   "1_1": {
     id: "1_1",
     label: "1:1 square",
-    description: "Square framing for symmetric references. Stills and video share this canvas.",
+    description: "Square framing for symmetric references.",
     width: 1024,
     height: 1024,
+    videoWidth: 1080,
+    videoHeight: 1080,
   },
 };
 
@@ -79,35 +93,39 @@ export function getReferenceAspectRatioLabel(
   preset: ReferenceAspectRatioPreset | undefined | null
 ): string {
   const def = resolveReferenceAspectRatio(preset);
-  return `${def.label} (${def.width}×${def.height})`;
+  return `${def.label} (video ${def.videoWidth}×${def.videoHeight})`;
 }
 
-/** Video output size follows the same preset as stills, unless the user typed other numbers. */
+/** Video output size for the preset, unless the user typed other numbers. */
 export function resolveVideoDimensionsForAspectRatio(
   projectPreset?: ReferenceAspectRatioPreset | null
 ): { width: number; height: number } {
   const def = resolveReferenceAspectRatio(projectPreset);
-  return { width: def.width, height: def.height };
+  return { width: def.videoWidth, height: def.videoHeight };
 }
 
 /**
- * Stills and video used to have separate size fields. Template hydrate writes
- * landscape 1920x1080 or 1344x768 even when the project still preset is 9:16.
- * If the saved video size is the same shape as the still preset, keep it.
- * If it is a leftover landscape default on a portrait project, follow the
- * still preset. Keep any other pair the user typed, such as 1080x1920.
+ * Template hydrate writes landscape 1920x1080 or 1344x768 even when the
+ * project preset is 9:16, and older projects saved the still canvas as the
+ * video size. A saved size equal to the preset's still canvas is upgraded to
+ * the delivery size. Otherwise keep a saved size that matches the preset
+ * shape, and replace one that does not (a landscape leftover on a portrait
+ * project). Keep any other pair the user typed, such as 1080x1920.
  */
 export function alignVideoSizeToReferenceAspect(settings: {
   referenceAspectRatio?: string | null;
   videoWidth?: number | null;
   videoHeight?: number | null;
 }): { videoWidth: number; videoHeight: number } {
-  const ref = resolveVideoDimensionsForAspectRatio(
-    parseReferenceAspectRatio(settings.referenceAspectRatio)
-  );
+  const preset = parseReferenceAspectRatio(settings.referenceAspectRatio);
+  const stillCanvas = resolveReferenceAspectRatio(preset);
+  const ref = resolveVideoDimensionsForAspectRatio(preset);
   const width = settings.videoWidth;
   const height = settings.videoHeight;
   if (width == null || height == null || !width || !height) {
+    return { videoWidth: ref.width, videoHeight: ref.height };
+  }
+  if (width === stillCanvas.width && height === stillCanvas.height) {
     return { videoWidth: ref.width, videoHeight: ref.height };
   }
   if (width === ref.width && height === ref.height) {

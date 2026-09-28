@@ -54,6 +54,25 @@ function statusLabel(status: ExportJob["status"]): string {
   }
 }
 
+function makePlaceholderJob(projectId: string): ExportJob {
+  return {
+    id: "__starting__",
+    projectId,
+    status: "queued",
+    progress: 0,
+    progressMessage: "Starting export…",
+    outputPath: null,
+    outputMetaJson: null,
+    settingsJson: "{}",
+    errorMessage: null,
+    previewFramePath: null,
+    currentFrame: 0,
+    totalFrames: null,
+    createdAt: Date.now(),
+    completedAt: null,
+  };
+}
+
 export function ExportEncoderPanel({
   projectId,
   fps,
@@ -63,14 +82,18 @@ export function ExportEncoderPanel({
 }: ExportEncoderPanelProps) {
   const [format, setFormat] = useState<"mp4" | "webm">("mp4");
   const [job, setJob] = useState<ExportJob | null>(initialJob);
+  const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [opening, setOpening] = useState<"reveal" | "open" | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const exportInFlightRef = useRef(false);
 
-  const isActive =
-    job?.status === "queued" || job?.status === "running";
+  const isActive = job?.status === "queued" || job?.status === "running";
+  const isBusy = starting || isActive;
   const isComplete = job?.status === "completed";
-  const progressPct = Math.round(Math.min(100, Math.max(0, (job?.progress ?? 0) * 100)));
+  const progressPct = Math.round(
+    Math.min(100, Math.max(0, (job?.progress ?? 0) * 100))
+  );
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -119,9 +142,13 @@ export function ExportEncoderPanel({
   }, [initialJob, pollJob, stopPolling]);
 
   async function handleExport() {
+    if (exportInFlightRef.current || isBusy) return;
+    exportInFlightRef.current = true;
+    setStarting(true);
     setError(null);
-    setJob(null);
     stopPolling();
+    // Immediate feedback: do not clear UI into an empty state while the POST runs.
+    setJob(makePlaceholderJob(projectId));
 
     try {
       const res = await fetch("/api/export", {
@@ -133,6 +160,15 @@ export function ExportEncoderPanel({
         }),
       });
       const data = await res.json();
+
+      // Attach to an already-running export instead of opening a duplicate.
+      if (res.status === 409 && data.job) {
+        const existing = data.job as ExportJob;
+        setJob(existing);
+        pollJob(existing.id);
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error ?? "Export failed");
 
       const created = data.job as ExportJob | undefined;
@@ -141,30 +177,23 @@ export function ExportEncoderPanel({
 
       setJob(
         created ?? {
+          ...makePlaceholderJob(projectId),
           id: jobId,
-          projectId,
-          status: "queued",
-          progress: 0,
-          progressMessage: "Queued…",
-          outputPath: null,
-          outputMetaJson: null,
-          settingsJson: "{}",
-          errorMessage: null,
-          previewFramePath: null,
-          currentFrame: 0,
-          totalFrames: null,
-          createdAt: Date.now(),
-          completedAt: null,
+          progressMessage: "Waiting for encoder…",
         }
       );
       pollJob(jobId);
     } catch (err) {
+      setJob(null);
       setError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setStarting(false);
+      exportInFlightRef.current = false;
     }
   }
 
   async function handleReveal(action: "reveal" | "open") {
-    if (!job?.id) return;
+    if (!job?.id || job.id === "__starting__") return;
     setOpening(action);
     setError(null);
     try {
@@ -183,7 +212,9 @@ export function ExportEncoderPanel({
   }
 
   const previewSrc =
-    job?.previewFramePath && job.previewFramePath.length > 0
+    job?.previewFramePath &&
+    job.previewFramePath.length > 0 &&
+    job.id !== "__starting__"
       ? mediaUrl(projectId, job.previewFramePath, {
           version: job.completedAt ?? job.createdAt,
         })
@@ -196,12 +227,27 @@ export function ExportEncoderPanel({
         })
       : null;
 
+  const buttonLabel = starting
+    ? "Starting export…"
+    : isActive
+      ? job?.status === "queued"
+        ? "Waiting in queue…"
+        : "Encoding…"
+      : isComplete
+        ? "Export again"
+        : "Export final video";
+
+  const statusText =
+    starting || job?.id === "__starting__"
+      ? "Starting export…"
+      : (job?.progressMessage ?? (job ? statusLabel(job.status) : null));
+
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <Card className="space-y-5 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="font-medium">Export queue</h2>
+            <h2 className="font-medium">Export film</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {renderedCount} / {shotCount} shots rendered · {fps} fps
             </p>
@@ -211,10 +257,15 @@ export function ExportEncoderPanel({
               className={cn(
                 job.status === "completed" && "bg-emerald-700 text-white",
                 job.status === "failed" && "bg-red-800 text-white",
-                job.status === "running" && "bg-primary text-primary-foreground"
+                (job.status === "running" ||
+                  job.status === "queued" ||
+                  starting) &&
+                  "bg-primary text-primary-foreground"
               )}
             >
-              {statusLabel(job.status)}
+              {starting || job.id === "__starting__"
+                ? "Starting"
+                : statusLabel(job.status)}
             </Badge>
           ) : null}
         </div>
@@ -225,7 +276,7 @@ export function ExportEncoderPanel({
             <Select
               id="export-format"
               value={format}
-              disabled={isActive}
+              disabled={isBusy}
               onChange={(e) => setFormat(e.target.value as "mp4" | "webm")}
             >
               <option value="mp4">MP4 (H.264)</option>
@@ -240,11 +291,18 @@ export function ExportEncoderPanel({
 
         <Button
           onClick={() => void handleExport()}
-          disabled={isActive || shotCount === 0 || renderedCount === 0}
+          disabled={isBusy || shotCount === 0 || renderedCount === 0}
           size="lg"
+          aria-busy={isBusy}
         >
-          {isActive ? "Exporting…" : isComplete ? "Export again" : "Export final video"}
+          {buttonLabel}
         </Button>
+
+        {isBusy ? (
+          <p className="text-sm text-muted-foreground" aria-live="polite">
+            Export is running. This button stays locked until it finishes.
+          </p>
+        ) : null}
 
         {error ? (
           <p className="text-sm text-red-400" role="alert">
@@ -252,11 +310,11 @@ export function ExportEncoderPanel({
           </p>
         ) : null}
 
-        {(isActive || isComplete || job?.status === "failed") && job ? (
+        {(isBusy || isComplete || job?.status === "failed") && job ? (
           <div className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-950/70 p-4">
             <div className="flex items-center justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">
-                {job.progressMessage ?? statusLabel(job.status)}
+              <span className="text-muted-foreground" aria-live="polite">
+                {statusText}
               </span>
               <span className="tabular-nums text-foreground">{progressPct}%</span>
             </div>
@@ -265,16 +323,33 @@ export function ExportEncoderPanel({
               <div
                 className={cn(
                   "h-full transition-all duration-300",
-                  job.status === "failed" ? "bg-red-500" : "bg-primary"
+                  job.status === "failed" ? "bg-red-500" : "bg-primary",
+                  (starting || job.id === "__starting__") && "animate-pulse"
                 )}
-                style={{ width: `${progressPct}%` }}
+                style={{
+                  width: `${
+                    starting || job.id === "__starting__"
+                      ? Math.max(progressPct, 4)
+                      : progressPct
+                  }%`,
+                }}
               />
             </div>
 
-            {job.currentFrame != null && job.totalFrames != null ? (
+            {job.currentFrame != null &&
+            job.totalFrames != null &&
+            job.id !== "__starting__" ? (
               <p className="text-xs tabular-nums text-muted-foreground">
                 Frame {Math.min(job.currentFrame, job.totalFrames)} of{" "}
                 {job.totalFrames}
+              </p>
+            ) : isBusy ? (
+              <p className="text-xs text-muted-foreground">
+                {starting || job.id === "__starting__"
+                  ? "Queuing the encode job…"
+                  : job.status === "queued"
+                    ? "Waiting for the background worker to pick this up…"
+                    : "Encoding frames and mixing audio…"}
               </p>
             ) : null}
 
@@ -340,8 +415,10 @@ export function ExportEncoderPanel({
         <div className="border-b border-neutral-800 px-4 py-3">
           <h3 className="text-sm font-medium">Preview</h3>
           <p className="text-xs text-muted-foreground">
-            {isActive
-              ? "Updating every 10 frames while encoding"
+            {isBusy
+              ? starting || job?.id === "__starting__"
+                ? "Starting export…"
+                : "Updating every 10 frames while encoding"
               : isComplete
                 ? "Final export"
                 : "Frame preview appears during export"}
@@ -364,8 +441,10 @@ export function ExportEncoderPanel({
             />
           ) : (
             <div className="flex h-full items-center justify-center px-6 text-center text-sm text-muted-foreground">
-              {isActive
-                ? "Waiting for the next preview frame…"
+              {isBusy
+                ? starting || job?.id === "__starting__"
+                  ? "Starting export…"
+                  : "Waiting for the next preview frame…"
                 : "Start an export to see progress here."}
             </div>
           )}

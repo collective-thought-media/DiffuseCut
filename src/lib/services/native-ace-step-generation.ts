@@ -60,6 +60,7 @@ export async function generateNativeAceStepAudioFile(options: {
   provider: string;
   sourceSeconds: number;
   installDir: string;
+  writtenPath: string;
   aceStepPrompt?: {
     tags: string;
     lyrics: string;
@@ -165,6 +166,7 @@ export async function generateNativeAceStepAudioFile(options: {
     provider: "ace_step_native",
     sourceSeconds,
     installDir: paths.installDir,
+    writtenPath: options.outputAbsolutePath,
     aceStepPrompt:
       options.kind === "music"
         ? { tags: acePrompt.tags, lyrics: acePrompt.lyrics, bpm, keyscale }

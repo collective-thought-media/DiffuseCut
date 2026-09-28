@@ -45,6 +45,17 @@ next-env.d.ts
 /preview-exports/
 .tmp-*
 eval-journey-run.log
+/.vitest-data/
+/.gen-direct/
+/output/
+/scripts/one-off/
+/scripts/**/*.log
+/scripts/eval/still-director/runs/
+
+# local media and brand source (never shipped)
+/assets/source/
+/assets/deliverables/
+/doc/brand/
 
 # typescript build info
 tsconfig.tsbuildinfo

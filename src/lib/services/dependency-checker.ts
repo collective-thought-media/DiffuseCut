@@ -22,7 +22,10 @@ import {
   ffprobeBeside,
   resolveFfmpegBinary,
 } from "@/lib/services/ffmpeg-path";
-import { getScoreAudioSourceStatus } from "@/lib/services/score-audio-source";
+import {
+  getDialogSpeechSourceStatus,
+  getScoreAudioSourceStatus,
+} from "@/lib/services/score-audio-source";
 import { getAceStepComputeStatus } from "@/lib/services/ace-step-compute";
 import {
   CLIP_VISION_MODEL_HINT,
@@ -209,12 +212,12 @@ async function checkComfyui(endpoints: string[]): Promise<DependencyStatus> {
   const lastCheckedAt = Date.now();
   const url = endpoints[0] ?? "http://127.0.0.1:8188";
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${normalizeUrl(url)}/system_stats`, {
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const { fetchWithComfyuiTimeout } = await import(
+      "@/lib/services/comfyui-timeout"
+    );
+    const res = await fetchWithComfyuiTimeout(
+      `${normalizeUrl(url)}/system_stats`
+    );
     if (!res.ok) {
       return {
         id: "comfyui",
@@ -241,9 +244,11 @@ async function checkComfyui(endpoints: string[]): Promise<DependencyStatus> {
       lastCheckedAt,
     };
   } catch (err) {
+    const { comfyuiHttpTimeoutMs } = await import("@/lib/services/comfyui-timeout");
+    const timeoutSec = Math.round(comfyuiHttpTimeoutMs() / 1000);
     const msg =
       err instanceof Error && err.name === "AbortError"
-        ? "Connection timed out"
+        ? `Connection timed out after ${timeoutSec}s`
         : "Connection refused or host unreachable";
     return {
       id: "comfyui",
@@ -252,7 +257,7 @@ async function checkComfyui(endpoints: string[]): Promise<DependencyStatus> {
       requiredFor: ["render"],
       message: `${msg} at ${url}`,
       installHint:
-        "Start ComfyUI on your GPU machine. For LAN: python main.py --listen 0.0.0.0 --port 8188",
+        "Start ComfyUI on your GPU machine. For LAN: python main.py --listen 0.0.0.0 --port 8188. If the host is slow to answer, raise DIFFUSECUT_COMFYUI_TIMEOUT_MS in .env.",
       docsUrl: "https://github.com/comfyanonymous/ComfyUI",
       lastCheckedAt,
     };
@@ -560,6 +565,49 @@ async function checkComfyuiAceStep(
   };
 }
 
+async function checkDialogSpeech(): Promise<DependencyStatus> {
+  const lastCheckedAt = Date.now();
+  const dialog = await getDialogSpeechSourceStatus();
+
+  if (dialog.primary === "elevenlabs_tts") {
+    return {
+      id: "dialog_speech",
+      label: "Dialog speech (Finishing)",
+      status: "ok",
+      requiredFor: ["finishing"],
+      message:
+        "Generate on Finishing Dialog uses ElevenLabs text-to-speech (eleven_multilingual_v2).",
+      installHint: "",
+      detectedVersion: "ElevenLabs TTS",
+      lastCheckedAt,
+    };
+  }
+
+  if (dialog.primary === "edge_tts") {
+    return {
+      id: "dialog_speech",
+      label: "Dialog speech (Finishing)",
+      status: "ok",
+      requiredFor: ["finishing"],
+      message: `Generate on Finishing Dialog uses local Edge TTS (voice: ${dialog.edgeTtsVoice}).`,
+      installHint: "",
+      detectedVersion: dialog.edgeTtsVoice,
+      lastCheckedAt,
+    };
+  }
+
+  return {
+    id: "dialog_speech",
+    label: "Dialog speech (Finishing)",
+    status: "missing",
+    requiredFor: ["finishing"],
+    message:
+      "Dialog Generate needs speech TTS. Install: pip install edge-tts, or add ElevenLabs in Settings.",
+    installHint: "pip install edge-tts",
+    lastCheckedAt,
+  };
+}
+
 async function checkScoreAudio(): Promise<DependencyStatus> {
   const lastCheckedAt = Date.now();
   const source = await getScoreAudioSourceStatus();
@@ -780,6 +828,7 @@ export async function checkAllDependencies(): Promise<DependencyStatus[]> {
     endpoints
   );
   const scoreAudioStatus = await checkScoreAudio();
+  const dialogSpeechStatus = await checkDialogSpeech();
   const aceStepStatus = await checkComfyuiAceStep({}, {} as ComfyModelFolders, Date.now());
 
   return [
@@ -791,6 +840,7 @@ export async function checkAllDependencies(): Promise<DependencyStatus[]> {
     comfyuiStatus,
     ...comfyWorkflowStatuses,
     scoreAudioStatus,
+    dialogSpeechStatus,
   ];
 }
 

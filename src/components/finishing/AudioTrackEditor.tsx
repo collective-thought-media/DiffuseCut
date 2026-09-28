@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AudioTrack, RenderJob, Shot } from "@/lib/db/schema";
 import { isLipSyncJob } from "@/lib/render-shot-display";
 import {
@@ -49,41 +49,46 @@ const VARIANT_CONFIG = {
     kind: "music" as TrackKind,
     title: "Musical Score",
     description:
-      "Sync music to your edit length. Describe a score, set how long it runs, then generate or upload.",
+      "Sync music to your edit. Generate with ACE-Step, or add a track from an MP3, WAV, or other audio file you already have.",
     emptyMessage:
-      "No score yet. Use a preset above to add music sized to your film, or a shorter segment you can chain with another track.",
+      "No score yet. Add a track from a file, or use a preset below to create an empty track and generate.",
     promptLabel: "Score / sound brief",
     promptPlaceholder:
       "Genre, mood, instruments, and arc. Example: dark orchestral slow burn, hellish drones to heavenly strings, 72 bpm, wide dynamics...",
     presetFullLabel: (totalSeconds: string) => `Full score (${totalSeconds}s)`,
     presetPlayheadLabel: "10s segment at playhead",
     presetRestLabel: "Score from playhead to end",
-    presetCustomLabel: "Custom track",
+    presetCustomLabel: "Custom empty track",
+    addFromFileLabel: "Add score from file",
     generateError: "Describe the score or sound in the brief field first.",
     uploadLabel: "Upload score file",
     footerNote:
-      "Upload your own score file, or generate with local or remote ACE-Step in",
+      "Add or replace a score file (MP3, WAV, M4A, FLAC, OGG, AAC), or generate with local or remote ACE-Step in",
   },
   dialog: {
     kind: "voiceover" as TrackKind,
     title: "Dialog",
     description:
-      "Sync dialogue and voiceover to your edit. Set span, describe the read, then generate or upload.",
+      "Sync dialogue and voiceover to your edit. Set span, describe the read, then generate or upload a recording.",
     emptyMessage:
-      "No dialog yet. Use a preset above to add voiceover sized to your film, or a shorter segment at the playhead.",
-    promptLabel: "Dialog / voice brief",
+      "No dialog yet. Add a track from a file, or use a preset below to create an empty track and generate.",
+    promptLabel: "Dialog script",
     promptPlaceholder:
-      "Gravelly narrator, low and calm. No music. Match the tension of the ascent scene...",
+      "Paste the exact lines to speak. Example: Welcome to the city. We have one night to finish this.",
     presetFullLabel: (totalSeconds: string) => `Full film dialog (${totalSeconds}s)`,
     presetPlayheadLabel: "10s segment at playhead",
     presetRestLabel: "Dialog from playhead to end",
-    presetCustomLabel: "Custom track",
-    generateError: "Describe the dialog or voice in the brief field first.",
+    presetCustomLabel: "Custom empty track",
+    addFromFileLabel: "Add dialog from file",
+    generateError: "Add the dialog lines to speak in the script field first.",
     uploadLabel: "Upload voice over file",
     footerNote:
-      "Upload your own voice over or dialog recording, or generate a voice tone bed from the brief in",
+      "Add or replace a recording (MP3, WAV, M4A, FLAC, OGG, AAC), or Generate to span for spoken dialog (Edge TTS on this machine, or ElevenLabs when configured) in",
   },
 } as const;
+
+const AUDIO_FILE_ACCEPT =
+  "audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.opus";
 
 function defaultLabel(
   kind: TrackKind,
@@ -113,13 +118,50 @@ export function AudioTrackEditor({
   const visibleTracks = tracks.filter((track) => track.kind === config.kind);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [generateStatus, setGenerateStatus] = useState<string | null>(null);
   const [lipSyncBusy, setLipSyncBusy] = useState(false);
   const [lipSyncMessage, setLipSyncMessage] = useState<string | null>(null);
   const [lipSyncTarget, setLipSyncTarget] = useState<string>("");
   const [watchedLipSyncJobIds, setWatchedLipSyncJobIds] = useState<string[]>(
     []
   );
+  const [dialogSpeechHint, setDialogSpeechHint] = useState<string | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const addFromFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (variant !== "dialog") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/system/dialog-speech");
+        const data = await res.json();
+        if (!res.ok || cancelled) return;
+        const ds = data.dialogSpeech as {
+          primary?: string;
+          edgeTtsVoice?: string;
+        };
+        if (ds.primary === "elevenlabs_tts") {
+          setDialogSpeechHint(
+            "Dialog Generate uses ElevenLabs text-to-speech."
+          );
+        } else if (ds.primary === "edge_tts") {
+          setDialogSpeechHint(
+            `Dialog Generate uses local Edge TTS (voice: ${ds.edgeTtsVoice ?? "en-US-ChristopherNeural"}).`
+          );
+        } else {
+          setDialogSpeechHint(
+            "Dialog Generate needs pip install edge-tts or an ElevenLabs key in Settings."
+          );
+        }
+      } catch {
+        if (!cancelled) setDialogSpeechHint(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [variant]);
 
   const watchedLipSyncJobs = useMemo(() => {
     const wanted = new Set(watchedLipSyncJobIds);
@@ -180,6 +222,59 @@ export function AudioTrackEditor({
     return data.track as AudioTrack;
   }
 
+  async function createTrackRecord(options: {
+    kind: TrackKind;
+    spanMode: AudioTrackSpanMode;
+    durationSeconds?: number;
+    startFrame?: number;
+    targetShotId?: string | null;
+    label?: string;
+  }): Promise<AudioTrack | null> {
+    const draft = applySpanModeToTrack(
+      {
+        startFrame: options.startFrame ?? currentFrame,
+        durationFrames:
+          options.durationSeconds != null
+            ? secondsToFrames(options.durationSeconds, fps)
+            : null,
+        spanMode: options.spanMode,
+        targetShotId: options.targetShotId ?? null,
+      },
+      shots,
+      totalFrames,
+      {
+        spanMode: options.spanMode,
+        startFrame: options.startFrame,
+        durationFrames:
+          options.durationSeconds != null
+            ? secondsToFrames(options.durationSeconds, fps)
+            : undefined,
+        targetShotId: options.targetShotId,
+      }
+    );
+
+    const res = await fetch(`/api/projects/${projectId}/audio`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: options.kind,
+        label:
+          options.label ??
+          defaultLabel(options.kind, options.spanMode, variant),
+        filePath: "audio/tracks/pending",
+        startFrame: draft.startFrame,
+        durationFrames: draft.durationFrames,
+        spanMode: draft.spanMode,
+        targetShotId: draft.targetShotId,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Create failed");
+    const created = data.track as AudioTrack;
+    onChange([...tracks, created]);
+    return created;
+  }
+
   async function createTrack(options: {
     kind: TrackKind;
     spanMode: AudioTrackSpanMode;
@@ -187,53 +282,57 @@ export function AudioTrackEditor({
     startFrame?: number;
     targetShotId?: string | null;
     label?: string;
-  }) {
+  }): Promise<AudioTrack | null> {
     setError(null);
     setBusyId("new");
     try {
-      const draft = applySpanModeToTrack(
-        {
-          startFrame: options.startFrame ?? currentFrame,
-          durationFrames:
-            options.durationSeconds != null
-              ? secondsToFrames(options.durationSeconds, fps)
-              : null,
-          spanMode: options.spanMode,
-          targetShotId: options.targetShotId ?? null,
-        },
-        shots,
-        totalFrames,
-        {
-          spanMode: options.spanMode,
-          startFrame: options.startFrame,
-          durationFrames:
-            options.durationSeconds != null
-              ? secondsToFrames(options.durationSeconds, fps)
-              : undefined,
-          targetShotId: options.targetShotId,
-        }
-      );
-
-      const res = await fetch(`/api/projects/${projectId}/audio`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          kind: options.kind,
-          label:
-            options.label ??
-            defaultLabel(options.kind, options.spanMode, variant),
-          filePath: "audio/tracks/pending",
-          startFrame: draft.startFrame,
-          durationFrames: draft.durationFrames,
-          spanMode: draft.spanMode,
-          targetShotId: draft.targetShotId,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Create failed");
-      onChange([...tracks, data.track]);
+      return await createTrackRecord(options);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Create failed");
+      return null;
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function uploadFileToTrack(
+    trackId: string,
+    file: File,
+    tracksSnapshot: AudioTrack[]
+  ): Promise<AudioTrack> {
+    const formData = new FormData();
+    formData.set("projectId", projectId);
+    formData.set("entityType", "audio");
+    formData.set("entityId", trackId);
+    formData.set("file", file);
+
+    const res = await fetch("/api/uploads", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? "Upload failed");
+    const updated = data.entity as AudioTrack;
+    onChange(tracksSnapshot.map((t) => (t.id === trackId ? updated : t)));
+    return updated;
+  }
+
+  async function handleAddFromFile(file: File) {
+    setError(null);
+    setBusyId("new");
+    try {
+      const created = await createTrackRecord({
+        kind: config.kind,
+        spanMode: "full_timeline",
+        label:
+          file.name.replace(/\.[^.]+$/, "").slice(0, 80) ||
+          defaultLabel(config.kind, "full_timeline", variant),
+      });
+      if (!created) return;
+      setBusyId(created.id);
+      await uploadFileToTrack(created.id, file, [...tracks, created]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setBusyId(null);
     }
@@ -285,6 +384,9 @@ export function AudioTrackEditor({
 
   async function handleGenerate(trackId: string) {
     setError(null);
+    setGenerateStatus(
+      "Generating… If a video render is using ComfyUI, this waits in line."
+    );
     setBusyId(trackId);
     try {
       const track = tracks.find((t) => t.id === trackId);
@@ -299,7 +401,20 @@ export function AudioTrackEditor({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Generation failed");
       onChange(tracks.map((t) => (t.id === trackId ? data.track : t)));
+      const waitedMs = data.generation?.gpuWaitedMs as number | undefined;
+      const waitedFor = data.generation?.gpuWaitedFor as
+        | string
+        | null
+        | undefined;
+      if (waitedMs && waitedMs >= 3000 && waitedFor) {
+        setGenerateStatus(
+          `Waited for ${waitedFor}, then generated.`
+        );
+      } else {
+        setGenerateStatus(null);
+      }
     } catch (err) {
+      setGenerateStatus(null);
       setError(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setBusyId(null);
@@ -361,20 +476,7 @@ export function AudioTrackEditor({
     setError(null);
     setBusyId(trackId);
     try {
-      const formData = new FormData();
-      formData.set("projectId", projectId);
-      formData.set("entityType", "audio");
-      formData.set("entityId", trackId);
-      formData.set("file", file);
-
-      const res = await fetch("/api/uploads", {
-        method: "POST",
-        body: formData,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-
-      onChange(tracks.map((t) => (t.id === trackId ? data.entity : t)));
+      await uploadFileToTrack(trackId, file, tracks);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
     } finally {
@@ -395,8 +497,29 @@ export function AudioTrackEditor({
         <p className="text-sm font-medium">Project timeline</p>
         <p className="text-xs text-muted-foreground">{timelineSummary}</p>
         <div className="flex flex-wrap gap-2">
+          <input
+            ref={addFromFileInputRef}
+            type="file"
+            accept={AUDIO_FILE_ACCEPT}
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void handleAddFromFile(file);
+              e.target.value = "";
+            }}
+          />
           <Button
             size="sm"
+            disabled={busyId === "new" || totalFrames === 0}
+            onClick={() => addFromFileInputRef.current?.click()}
+          >
+            {busyId === "new"
+              ? "Adding file…"
+              : config.addFromFileLabel}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
             disabled={busyId === "new" || totalFrames === 0}
             onClick={() =>
               void createTrack({
@@ -447,6 +570,11 @@ export function AudioTrackEditor({
             {config.presetCustomLabel}
           </Button>
         </div>
+        <p className="text-[11px] text-muted-foreground">
+          {variant === "score"
+            ? "Add score from file imports MP3, WAV, M4A, FLAC, OGG, or AAC and places it on the full timeline. Use Replace upload on a track to swap the file later."
+            : "Add dialog from file imports a recording onto the full timeline. Use Replace upload on a track to swap the file later."}
+        </p>
       </Card>
 
       {visibleTracks.length === 0 ? (
@@ -516,9 +644,9 @@ export function AudioTrackEditor({
                   />
                   {variant === "score" && (
                     <p className="text-[11px] text-muted-foreground">
-                      Your brief is sent to ACE-Step as style tags. Add section
-                      markers like [intro] or [build-up] only if you want
-                      structural control.
+                      Used when you Generate to span. Uploaded files ignore this
+                      brief. Cinematic prompts are wrapped in the Control Gate
+                      ACE-Step tag pack automatically.
                     </p>
                   )}
                 </div>
@@ -716,7 +844,7 @@ export function AudioTrackEditor({
                   onClick={() => void handleGenerate(track.id)}
                 >
                   {busyId === track.id
-                    ? "Generating…"
+                    ? "Waiting / generating…"
                     : hasFile
                       ? "Regenerate to span"
                       : "Generate to span"}
@@ -726,7 +854,7 @@ export function AudioTrackEditor({
                     fileInputRefs.current[track.id] = node;
                   }}
                   type="file"
-                  accept="audio/*"
+                  accept={AUDIO_FILE_ACCEPT}
                   className="hidden"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
@@ -828,13 +956,24 @@ export function AudioTrackEditor({
         </Card>
       )}
 
+      {variant === "dialog" && dialogSpeechHint && (
+        <p className="text-xs text-muted-foreground">{dialogSpeechHint}</p>
+      )}
+
       <p className="text-xs text-muted-foreground">
         {config.footerNote}{" "}
         <Link href="/settings" className="text-primary hover:underline">
           Settings
         </Link>
-        . Long spans are loop-fitted to your exact frame duration.
+        .
+        {variant === "dialog"
+          ? " Shorter reads are padded with silence to your span."
+          : " Uploaded scores keep your file as-is; generated scores are trimmed to the track span."}
       </p>
+
+      {generateStatus && !error && (
+        <p className="text-xs text-muted-foreground">{generateStatus}</p>
+      )}
 
       {error && (
         <p className="text-sm text-red-400" role="alert">

@@ -8,7 +8,6 @@ import {
   detectVirtualBackdropLocation,
   DEFAULT_CHARACTER_SHEET_NEGATIVE,
   finalizeCharacterSheetPrompt,
-  LOCATION_REFERENCE_ANCHOR_PREFIX,
   LOCATION_REFERENCE_BACKDROP_LAYOUT_PREFIX,
 } from "@/lib/services/prompt-preprocess";
 
@@ -341,14 +340,22 @@ describe("LLM fallback", () => {
 });
 
 describe("buildLocationReferencePromptTemplate", () => {
-  it("adds anchor consistency language when reframing from establishing shot", () => {
+  it("keeps operator angle text lean when reframing from establishing shot", () => {
     const prompt = buildLocationReferencePromptTemplate(
       "Staircase hall",
-      "Tight shot on the stairs",
+      "Tight shot on the stairs. Stormy night.",
       { preset: "photoreal_cinematic" },
-      { anchorMode: true }
+      {
+        anchorMode: true,
+        viewDescription: "Tight shot on the stairs",
+      }
     );
-    expect(prompt).toContain(LOCATION_REFERENCE_ANCHOR_PREFIX);
+    expect(prompt.toLowerCase()).toContain("tight shot on the stairs");
+    expect(prompt.toLowerCase()).toContain(
+      "match the establishing reference color grade"
+    );
+    expect(prompt.toLowerCase()).not.toContain("doorways");
+    expect(prompt.toLowerCase()).not.toContain("furniture placement");
     expect(prompt.toLowerCase()).not.toContain("wide framing with full environment");
   });
 
@@ -357,10 +364,13 @@ describe("buildLocationReferencePromptTemplate", () => {
       { preset: "photoreal_cinematic" },
       { anchorMode: true }
     );
-    expect(negative.toLowerCase()).toContain("wrong stair direction");
+    // Framing/continuity avoid-lists are operator-owned; auto list is quality only.
+    expect(negative.toLowerCase()).toContain("blurry");
+    expect(negative.toLowerCase()).not.toContain("wrong stair direction");
+    expect(negative.toLowerCase()).not.toContain("wide establishing shot");
   });
 
-  it("adds telephoto camera hints in anchor mode", () => {
+  it("keeps telephoto view text without rewriting framing boilerplate", () => {
     const prompt = buildLocationReferencePromptTemplate(
       "Staircase hall",
       "85mm tight shot looking straight down at the wet stone steps. Stormy night.",
@@ -370,8 +380,9 @@ describe("buildLocationReferencePromptTemplate", () => {
         viewDescription: "85mm tight shot looking straight down at the wet stone steps",
       }
     );
-    expect(prompt.toLowerCase()).toContain("telephoto");
-    expect(prompt.toLowerCase()).toContain("overhead");
+    expect(prompt.toLowerCase()).toContain("85mm");
+    expect(prompt.toLowerCase()).toContain("looking straight down");
+    expect(prompt.toLowerCase()).not.toContain("eighty percent");
   });
 
   it("does not infer overhead from state context pours down at", () => {
@@ -385,10 +396,10 @@ describe("buildLocationReferencePromptTemplate", () => {
       }
     );
     expect(prompt.toLowerCase()).not.toContain("overhead");
-    expect(prompt.toLowerCase()).toContain("macro photography");
+    expect(prompt.toLowerCase()).toContain("extreme macro close-up");
   });
 
-  it("adds macro camera hints for extreme close-up angles", () => {
+  it("keeps macro view description without inventing temple stairs", () => {
     const prompt = buildLocationReferencePromptTemplate(
       "Staircase hall",
       "extreme macro close-up, low camera, broken stone step. Storm context.",
@@ -398,9 +409,9 @@ describe("buildLocationReferencePromptTemplate", () => {
         viewDescription: "extreme macro close-up, low camera, broken stone step",
       }
     );
-    expect(prompt.toLowerCase()).toContain("massive stone treads");
-    expect(prompt.toLowerCase()).toContain("temple-scale");
-    expect(prompt.toLowerCase()).toContain("fill most of the frame");
+    expect(prompt.toLowerCase()).toContain("broken stone step");
+    expect(prompt.toLowerCase()).not.toContain("temple-scale");
+    expect(prompt.toLowerCase()).not.toContain("massive stone treads");
   });
 
   it("does not invent temple stairs for a plain room close-up", () => {
@@ -417,10 +428,11 @@ describe("buildLocationReferencePromptTemplate", () => {
     expect(prompt.toLowerCase()).not.toContain("massive stone treads");
     expect(prompt.toLowerCase()).not.toContain("temple-scale");
     expect(prompt.toLowerCase()).not.toContain("staircase");
-    expect(prompt.toLowerCase()).toContain("same physical location");
+    expect(prompt.toLowerCase()).toContain("table on the right with candles");
+    expect(prompt.toLowerCase()).not.toContain("camera inches from the surface");
   });
 
-  it("adds close-up negatives for macro anchor angles", () => {
+  it("does not auto-inject close-up framing negatives", () => {
     const negative = buildLocationReferenceNegativePrompt(
       { preset: "photoreal_cinematic" },
       {
@@ -428,7 +440,59 @@ describe("buildLocationReferencePromptTemplate", () => {
         viewDescription: "extreme macro close-up on stone step",
       }
     );
-    expect(negative.toLowerCase()).toContain("wide establishing shot");
+    expect(negative.toLowerCase()).toContain("blurry");
+    expect(negative.toLowerCase()).not.toContain("wide establishing shot");
+  });
+
+  it("treats a 100mm close-up, including a marco typo, as operator-led text", () => {
+    const view = "close up 100mm marco shot of broken wreckage";
+    const prompt = buildLocationReferencePromptTemplate(
+      "The Sand Pits (Wreck)",
+      `${view}. Pale bone-tan dune and a rusted machine at the valley mouth.`,
+      { preset: "photoreal_cinematic" },
+      { anchorMode: true, viewDescription: view }
+    );
+    expect(prompt.toLowerCase()).toContain("broken wreckage");
+    expect(prompt.toLowerCase()).toContain("100mm");
+    expect(prompt.toLowerCase()).not.toContain("scene context:");
+    expect(prompt.toLowerCase()).not.toContain("enormous crescent dune");
+    expect(prompt.toLowerCase()).not.toContain(
+      "wide framing with full environment visible"
+    );
+    expect(prompt.toLowerCase()).not.toContain("furniture placement");
+    const negative = buildLocationReferenceNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      { anchorMode: true, viewDescription: view }
+    );
+    expect(negative.toLowerCase()).toContain("blurry");
+    expect(negative.toLowerCase()).not.toContain("wide establishing shot");
+    expect(negative.toLowerCase()).not.toContain("set overview");
+  });
+
+  it("treats a plain close-up as operator-led text, not surface-macro rewrite", () => {
+    const view =
+      "close up shot of rusty broken wreckage from about four feet away";
+    const prompt = buildLocationReferencePromptTemplate(
+      "The Sand Pits (Wreck)",
+      `${view}. Pale bone-tan sand and rusted iron at the valley mouth.`,
+      { preset: "photoreal_cinematic" },
+      { anchorMode: true, viewDescription: view }
+    );
+    expect(prompt.toLowerCase()).toContain("four feet");
+    expect(prompt.toLowerCase()).toContain("rusty broken wreckage");
+    expect(prompt.toLowerCase()).not.toContain("eighty percent");
+    expect(prompt.toLowerCase()).not.toContain("camera inches from the surface");
+    expect(prompt.toLowerCase()).not.toContain("extreme macro close-up photograph");
+    expect(prompt.toLowerCase()).not.toContain(
+      "wide framing with full environment visible"
+    );
+    const negative = buildLocationReferenceNegativePrompt(
+      { preset: "photoreal_cinematic" },
+      { anchorMode: true, viewDescription: view }
+    );
+    expect(negative.toLowerCase()).toContain("blurry");
+    expect(negative.toLowerCase()).not.toContain("extreme macro");
+    expect(negative.toLowerCase()).not.toContain("wide establishing shot");
   });
 
   it("detects seamless backdrop locations", () => {
@@ -668,7 +732,7 @@ describe("buildShotPlaceholderNegativePrompt", () => {
     );
     expect(result.processedPrompt).toContain(SHOT_INTEGRATE_IN_SCENE_SUFFIX);
     expect(result.processedPrompt).toContain(SHOT_SUBJECT_SCALE_PROMPT.small);
-    expect(result.processedPrompt).toContain("one person present");
+    expect(result.processedPrompt).toContain("one complete person present");
     expect(result.processedPrompt).toContain("not leaning on anything");
     expect(result.negativePrompt).toContain("pasted cutout");
     expect(result.negativePrompt).toContain("oversized subject");

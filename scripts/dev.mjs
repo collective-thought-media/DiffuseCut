@@ -13,6 +13,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 const isProd = process.argv.includes("--production");
 const shouldClean = process.argv.includes("--clean");
+
+// Next loads .env on its own, but the worker does not. Load it here so both
+// children see the same DIFFUSECUT_DATA_DIR and friends. Existing env wins,
+// and .env.local is read first so it overrides .env like Next does.
+for (const file of [".env.local", ".env"]) {
+  const envPath = path.join(root, file);
+  if (fs.existsSync(envPath)) process.loadEnvFile(envPath);
+}
+
 const port = process.env.PORT ?? "3004";
 
 function refreshWindowsPath() {
@@ -155,6 +164,25 @@ function rememberBuiltGitRev() {
   fs.writeFileSync(buildRevPath, `${rev}\n`);
 }
 
+function windowsBuildEnv() {
+  const env = { ...process.env };
+  if (process.platform !== "win32") return env;
+
+  // Next/Tailwind globs can walk profile junctions (Application Data, Cookies)
+  // when the checkout is on a non-C: drive and hit EPERM. Pin home to a temp
+  // folder for the build process only; runtime still uses the real profile.
+  const buildHome = path.join(os.tmpdir(), "diffusecut-next-build-home");
+  fs.mkdirSync(buildHome, { recursive: true });
+  const parsed = path.parse(buildHome);
+  const drive = (parsed.root || "").replace(/[\\/]+$/, "");
+  const homePath = buildHome.slice(parsed.root.length - 1);
+  env.USERPROFILE = buildHome;
+  env.HOME = buildHome;
+  if (drive) env.HOMEDRIVE = drive;
+  if (homePath.startsWith("\\")) env.HOMEPATH = homePath;
+  return env;
+}
+
 function runProductionBuild(reason) {
   console.log(
     reason ||
@@ -164,6 +192,7 @@ function runProductionBuild(reason) {
     cwd: root,
     stdio: "inherit",
     shell: true,
+    env: windowsBuildEnv(),
   });
   rememberBuiltGitRev();
 }

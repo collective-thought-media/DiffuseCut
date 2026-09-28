@@ -129,6 +129,10 @@ export async function POST(_req: NextRequest, { params }: RouteParams) {
         fromShot: track.kind === "sfx" ? resolvedSfx?.fromShot : undefined,
         aceStepPrompt:
           "aceStepPrompt" in result ? result.aceStepPrompt : undefined,
+        gpuWaitedMs:
+          "gpuWaitedMs" in result ? result.gpuWaitedMs : undefined,
+        gpuWaitedFor:
+          "gpuWaitedFor" in result ? result.gpuWaitedFor : undefined,
       },
     });
   } catch (err) {

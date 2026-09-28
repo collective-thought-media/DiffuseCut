@@ -116,6 +116,8 @@ export const locationAngles = sqliteTable("location_angles", {
     .references(() => locationStates.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   viewDescription: text("view_description").notNull().default(""),
+  /** JSON: stillNegativePrompt and future per-angle generation overrides. */
+  generationOverridesJson: text("generation_overrides_json"),
   referencePath: text("reference_path"),
   referenceKind: text("reference_kind", { enum: ["image", "video"] }),
   referenceSource: text("reference_source", {

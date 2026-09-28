@@ -1,0 +1,65 @@
+{
+  "title": "Suburban Yard Still",
+  "logline": "A middle-aged homeowner stands on his front lawn at dusk with a push mower nearby.",
+  "plot": "Theo finishes mowing, parks the red push mower on the grass, and stands facing the camera in front of his two-story house as golden hour light hits the lawn.",
+  "visualStylePreset": "photoreal_cinematic",
+  "referenceAspectRatio": "16_9",
+  "characters": [
+    {
+      "name": "Theo",
+      "description": "Middle-aged man, male suburban homeowner, friendly face, short blonde hair.",
+      "state": {
+        "name": "Weekend lawn",
+        "lookDescription": "Adult man, short blonde hair, friendly expression, standing upright at full height, dark blue sweater over a light collared shirt, khaki pants, brown dress shoes, clean casual weekend look, not crouching, male",
+        "angles": [
+          {
+            "name": "Front full body",
+            "viewDescription": "Full body front three-quarter standing upright head to toe on both feet, adult man, casting reference framing, neutral gray studio backdrop, not crouching not sitting"
+          }
+        ]
+      }
+    }
+  ],
+  "locations": [
+    {
+      "name": "Suburban Front Yard",
+      "description": "Two-story suburban house with a manicured front lawn at dusk.",
+      "state": {
+        "name": "Golden hour",
+        "lookDescription": "Empty two-story suburban house with light gray siding, dark roof, red shutters, small porch with white railings and a red front door, manicured green lawn with absolutely no people, no pedestrians, no silhouettes on the porch, no figures in windows, deserted front yard, trees and shrubs, deep blue twilight sky, warm golden-hour light from the right, porch lamp on, unoccupied property, architecture only",
+        "angles": [
+          {
+            "name": "Establishing wide",
+            "viewDescription": "Wide establishing view of the full house and front lawn, empty architecture plate, no people, no figures, no silhouettes"
+          }
+        ]
+      }
+    }
+  ],
+  "shots": [
+    {
+      "title": "Theo in the yard",
+      "prompt": "Theo standing on the front lawn of the suburban house at dusk, complete full body head to toes clearly visible, dark blue sweater over light collared shirt, khaki pants, brown shoes, hands in pockets, red and black push lawnmower nearby on the grass, facing camera, warm golden hour light",
+      "motionPrompt": "Subtle breeze in the trees, Theo holds still facing camera",
+      "characterIndex": 0,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": true,
+      "renderDeep": false
+    },
+    {
+      "title": "Theo nearer the porch",
+      "prompt": "Theo standing in the front yard closer to the porch path, full body, same dark blue sweater and khaki pants, lawnmower visible behind him, facing camera",
+      "motionPrompt": "Hold on Theo as porch light glows behind him",
+      "characterIndex": 0,
+      "locationIndex": 0,
+      "stillReferenceMode": "integrate_in_scene",
+      "generatePlaceholder": true,
+      "renderDeep": false
+    }
+  ],
+  "meta": {
+    "author": "cursor-agent",
+    "notes": "Integrate reliability pack: clear scaled human matching character sheet on house plate"
+  }
+}

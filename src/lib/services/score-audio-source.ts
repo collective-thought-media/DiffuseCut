@@ -1,5 +1,10 @@
 import { getSetting } from "@/lib/services/settings";
 import { isAceStepGenerationReady } from "@/lib/services/ace-step-audio-generation";
+import {
+  DEFAULT_DIALOG_EDGE_TTS_VOICE,
+  getDialogEdgeTtsVoice,
+  isEdgeTtsVoiceoverReady,
+} from "@/lib/services/local-edge-tts-voiceover";
 import { getAceStepComputeModeSetting } from "@/lib/services/ace-step-compute";
 
 export type ScoreAudioProvider = "auto" | "ace_step" | "elevenlabs" | "upload";
@@ -77,6 +82,48 @@ export async function isElevenLabsConfigured(): Promise<boolean> {
     process.env.MUSIC_API_KEY?.trim() ||
     "";
   return Boolean(musicKey?.trim() || legacyKey?.trim() || envKey);
+}
+
+/**
+ * Dialog needs real text-to-speech. ACE-Step is text-to-music (vocals sound sung or musical).
+ * Prefer ElevenLabs when configured; otherwise local Edge TTS (Python edge-tts).
+ */
+export interface DialogSpeechSourceStatus {
+  primary: "elevenlabs_tts" | "edge_tts" | "none";
+  edgeTtsReady: boolean;
+  elevenLabsConfigured: boolean;
+  edgeTtsVoice: string;
+}
+
+export async function getDialogSpeechSourceStatus(): Promise<DialogSpeechSourceStatus> {
+  const elevenLabsConfigured = await isElevenLabsConfigured();
+  const edgeTtsReady = await isEdgeTtsVoiceoverReady();
+  const edgeTtsVoice = (await getDialogEdgeTtsVoice()) || DEFAULT_DIALOG_EDGE_TTS_VOICE;
+
+  let primary: DialogSpeechSourceStatus["primary"] = "none";
+  if (elevenLabsConfigured) primary = "elevenlabs_tts";
+  else if (edgeTtsReady) primary = "edge_tts";
+
+  return {
+    primary,
+    edgeTtsReady,
+    elevenLabsConfigured,
+    edgeTtsVoice,
+  };
+}
+
+export async function resolveVoiceoverGenerationProvider(): Promise<
+  "elevenlabs" | "edge_tts"
+> {
+  if (await isElevenLabsConfigured()) {
+    return "elevenlabs";
+  }
+  if (await isEdgeTtsVoiceoverReady()) {
+    return "edge_tts";
+  }
+  throw new Error(
+    "No dialog speech engine ready. Run: pip install edge-tts, add ElevenLabs in Settings, or upload a voice over file."
+  );
 }
 
 /** SFX prefers ElevenLabs sound generation; ACE-Step is music-first and often produces noise. */

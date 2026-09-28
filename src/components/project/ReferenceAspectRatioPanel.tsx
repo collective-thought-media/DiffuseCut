@@ -97,8 +97,9 @@ export function ReferenceAspectRatioPanel({
         <div>
           <h2 className="entity-card-header">Reference Aspect Ratio</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Whatever ratio you pick here is the canvas for character sheets,
-            location references, storyboard stills, and rendered video.
+            Whatever ratio you pick here shapes character sheets, location
+            references, storyboard stills, and rendered video. Stills use the
+            model canvas; video renders and exports deliver at the video size.
           </p>
         </div>
         {saving ? (
@@ -136,6 +137,7 @@ export function ReferenceAspectRatioPanel({
               <span>
                 <span className="font-medium">{def.label}</span>
                 <span className="ml-2 text-xs text-muted-foreground">
+                  video {def.videoWidth}×{def.videoHeight} · stills{" "}
                   {def.width}×{def.height}
                 </span>
                 <span className="mt-0.5 block text-sm text-muted-foreground">

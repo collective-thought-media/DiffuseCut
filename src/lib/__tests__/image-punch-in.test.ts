@@ -39,6 +39,6 @@ describe("image punch-in", () => {
 
   it("clamps absurd zoom values", () => {
     expect(normalizePunchInZoom(0.5)).toBe(1.15);
-    expect(normalizePunchInZoom(99)).toBe(4);
+    expect(normalizePunchInZoom(99)).toBe(5);
   });
 });

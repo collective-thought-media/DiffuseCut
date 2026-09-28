@@ -9,6 +9,46 @@ import { alignVideoSizeToReferenceAspect } from "@/lib/services/reference-aspect
 export const EXPORT_LOUDNORM_FILTER = "loudnorm=I=-14:TP=-1.5:LRA=11";
 
 /**
+ * Delivery floor is 25 Mbps at 1920x1080. x264 CBR lands a hair under its
+ * target in the container, so encode at 26 Mbps to stay above the floor.
+ */
+export const EXPORT_VIDEO_TARGET_KBPS_1080P = 26000;
+const PIXELS_1080P = 1920 * 1080;
+
+/** Constant video bitrate scaled by frame area from the 1080p target. */
+export function resolveExportVideoBitrateKbps(
+  frameSize: { width: number; height: number } | null
+): number {
+  if (!frameSize) return EXPORT_VIDEO_TARGET_KBPS_1080P;
+  const area = frameSize.width * frameSize.height;
+  return Math.ceil((EXPORT_VIDEO_TARGET_KBPS_1080P * area) / PIXELS_1080P);
+}
+
+/** Constant-bitrate rate control for libx264 or libvpx-vp9 delivery encodes. */
+export function buildExportVideoRateOptions(
+  codec: string,
+  frameSize: { width: number; height: number } | null
+): string[] {
+  const rate = `${resolveExportVideoBitrateKbps(frameSize)}k`;
+  const options = [
+    "-b:v",
+    rate,
+    "-minrate",
+    rate,
+    "-maxrate",
+    rate,
+    "-bufsize",
+    rate,
+    "-pix_fmt",
+    "yuv420p",
+  ];
+  if (codec === "libx264") {
+    options.push("-x264-params", "nal-hrd=cbr");
+  }
+  return options;
+}
+
+/**
  * Cover-and-crop a clip to an exact frame size so the deliverable matches
  * the project output width and height, even when a model wrote a nearby size.
  */

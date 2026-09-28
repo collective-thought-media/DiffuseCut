@@ -13,6 +13,7 @@ import { LocationPunchInControls } from "@/components/sheets/LocationPunchInCont
 import { ReferenceMediaControls } from "@/components/sheets/ReferenceMediaControls";
 import { useDebouncedSave, type DebouncedSaveContext } from "@/lib/hooks/useDebouncedSave";
 import { useSyncedEditableFields } from "@/lib/hooks/useSyncedEditableFields";
+import { parseLocationAngleGenerationOverrides } from "@/lib/location-angle-generation-overrides";
 import { mediaUrl } from "@/lib/media-url";
 import { AsyncRefreshOverlay } from "@/components/ui/AsyncRefreshOverlay";
 import { PageLoadingSkeleton } from "@/components/ui/PageLoadingSkeleton";
@@ -117,7 +118,11 @@ export function LocationStatesPanel({
     async (
       stateId: string,
       angleId: string,
-      patch: Partial<{ name: string; viewDescription: string }>,
+      patch: Partial<{
+        name: string;
+        viewDescription: string;
+        stillNegativePrompt: string;
+      }>,
       ctx: DebouncedSaveContext
     ) => {
       const res = await fetch(
@@ -305,7 +310,11 @@ function LocationStateCard({
   ) => Promise<void>;
   onSaveAngle: (
     angleId: string,
-    patch: Partial<{ name: string; viewDescription: string }>,
+    patch: Partial<{
+      name: string;
+      viewDescription: string;
+      stillNegativePrompt: string;
+    }>,
     ctx: DebouncedSaveContext
   ) => Promise<void>;
   onAddAngle: () => void;
@@ -448,18 +457,26 @@ function LocationAngleSection({
   angle: LocationAngle;
   visualStyleJson?: string | null;
   onSave: (
-    patch: Partial<{ name: string; viewDescription: string }>,
+    patch: Partial<{
+      name: string;
+      viewDescription: string;
+      stillNegativePrompt: string;
+    }>,
     ctx: DebouncedSaveContext
   ) => Promise<void>;
   onDelete: () => void;
   onReferenceSelected: () => void | Promise<void>;
 }) {
+  const savedStillNegative =
+    parseLocationAngleGenerationOverrides(angle.generationOverridesJson)
+      .stillNegativePrompt ?? "";
   const fieldSource = useMemo(
     () => ({
       name: angle.name,
       viewDescription: angle.viewDescription,
+      stillNegativePrompt: savedStillNegative,
     }),
-    [angle.id, angle.name, angle.viewDescription]
+    [angle.id, angle.name, angle.viewDescription, savedStillNegative]
   );
   const { fields, bind } = useSyncedEditableFields(fieldSource, angle.id);
   const [deleting, setDeleting] = useState(false);
@@ -531,6 +548,17 @@ function LocationAngleSection({
               className="min-h-[88px]"
             />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor={`angle-negative-${angle.id}`}>
+              Extra negative prompt (this angle)
+            </Label>
+            <Textarea
+              id={`angle-negative-${angle.id}`}
+              {...bind("stillNegativePrompt", (next) => schedule(next))}
+              placeholder="Optional. Appended to this angle's location reference negatives only."
+              className="min-h-[72px] text-sm"
+            />
+          </div>
         </div>
 
         <div className="space-y-2">
@@ -577,6 +605,14 @@ function LocationAngleSection({
         hasReference={Boolean(angle.referencePath)}
         usesEstablishingAnchor={Boolean(anchorReferencePath)}
         anchorAngleName={anchorAngleName}
+        stillNegativePrompt={fields.stillNegativePrompt}
+        onStillNegativePromptChange={(value) =>
+          schedule({
+            name: fields.name,
+            viewDescription: fields.viewDescription,
+            stillNegativePrompt: value,
+          })
+        }
         onReferenceSelected={onReferenceSelected}
       />
     </NestedEntityCard>

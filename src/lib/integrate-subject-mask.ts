@@ -22,6 +22,12 @@ export type IntegrateSubjectMaskBox = {
   boxHeight: number;
   x: number;
   y: number;
+  /** Subject paste size without headroom (for RemBG cutout scale). */
+  pasteWidth: number;
+  pasteHeight: number;
+  /** Top-left of the paste so feet land on the ground line. */
+  pasteX: number;
+  pasteY: number;
   featherX: number;
   featherTop: number;
   featherBottom: number;
@@ -89,9 +95,9 @@ export function detectIntegrateEnvironmentScale(prompt: string): number | null {
       prompt
     )
   ) {
-    // Stay at Small's floor. Going lower leaves a mask too tiny for RemBG to
-    // keep, and the finish pass pastes an empty cutout (bare plate).
-    return 0.3;
+    // Door-height floor on establishing plates. Going lower leaves a mask too
+    // small for a complete opaque figure to form during masked inpaint.
+    return 0.32;
   }
   return null;
 }
@@ -140,7 +146,7 @@ export function computeIntegrateSubjectMaskBox(
   const frameHeight = Math.max(64, Math.round(input.frameHeight));
   const heightFraction = clamp(
     input.heightFraction ?? DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION,
-    0.28,
+    0.18,
     1.9
   );
   const anchorX = clamp(
@@ -173,6 +179,14 @@ export function computeIntegrateSubjectMaskBox(
     0,
     frameWidth - boxWidth
   );
+  const pasteHeight = Math.min(frameHeight, subjectHeight);
+  const pasteWidth = Math.min(frameWidth, boxWidth);
+  const pasteY = clamp(feetY - pasteHeight, 0, frameHeight - pasteHeight);
+  const pasteX = clamp(
+    Math.round(frameWidth * anchorX - pasteWidth / 2),
+    0,
+    frameWidth - pasteWidth
+  );
 
   const featherX =
     INTEGRATE_MASK_FEATHER_RATIO <= 0
@@ -197,6 +211,10 @@ export function computeIntegrateSubjectMaskBox(
     boxHeight,
     x,
     y,
+    pasteWidth,
+    pasteHeight,
+    pasteX,
+    pasteY,
     featherX,
     featherTop,
     featherBottom,

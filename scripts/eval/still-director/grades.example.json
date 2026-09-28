@@ -1,0 +1,20 @@
+{
+  "grades": [
+    {
+      "optionId": "*",
+      "providerId": "folder_import",
+      "fixtureId": "sandstorm-wide-approach",
+      "gradedBy": "operator",
+      "gradedAt": "2026-09-22T00:00:00.000Z",
+      "scores": [
+        { "id": "identity_lock", "score": 4, "notes": "Wraps and goggles hold" },
+        { "id": "set_continuity", "score": 5, "notes": "Same dune bowl" },
+        { "id": "prop_readability", "score": 3 },
+        { "id": "camera_intent", "score": 5 },
+        { "id": "photoreal_grade", "score": 4 },
+        { "id": "no_harness_artifacts", "score": 5 },
+        { "id": "seed_ready_for_i2v", "score": 4 }
+      ]
+    }
+  ]
+}

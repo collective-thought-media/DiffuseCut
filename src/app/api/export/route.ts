@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   jsonOk,
   jsonError,
@@ -32,6 +32,25 @@ export async function POST(req: NextRequest) {
 
     if (!project) return jsonError("Project not found", 404);
 
+    const active = db
+      .select()
+      .from(schema.exportJobs)
+      .where(
+        and(
+          eq(schema.exportJobs.projectId, body.projectId),
+          inArray(schema.exportJobs.status, ["queued", "running"])
+        )
+      )
+      .get();
+
+    if (active) {
+      return jsonError(
+        "An export is already running for this project. Wait for it to finish before starting another.",
+        409,
+        { jobId: active.id, job: active }
+      );
+    }
+
     const id = nanoid();
     const ts = nowMs();
     const settingsJson = JSON.stringify(body.settings ?? {});
@@ -44,6 +63,7 @@ export async function POST(req: NextRequest) {
       settingsJson,
       errorMessage: null,
       progress: 0,
+      progressMessage: "Queued…",
       createdAt: ts,
       completedAt: null,
     };

@@ -51,9 +51,9 @@ export const SHOT_SUBJECT_POSITION_VALUES: ShotSubjectPosition[] = [
  * Floored high enough that masked inpaint + RemBG still form a person.
  * Spread stays wide so Small / Medium / Large remain obvious. */
 export const SHOT_SUBJECT_SCALE_FRACTIONS: Record<ShotSubjectScale, number> = {
-  small: 0.3,
-  medium: 0.4,
-  large: 0.58,
+  small: 0.24,
+  medium: 0.32,
+  large: 0.42,
 };
 
 /** Mask horizontal center as a fraction of frame width per position preset. */
@@ -85,6 +85,8 @@ export interface ShotRenderOverrides {
   audioPolicy?: ShotAudioPolicy;
   /** Face detail pass after still generation (default off). */
   faceDetail?: ShotFaceDetail;
+  /** When set, this angle's reference wins over the state cover for stills and video. */
+  characterAngleId?: string;
 }
 
 const ENUM_OVERRIDE_KEYS = [

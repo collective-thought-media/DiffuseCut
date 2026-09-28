@@ -23,6 +23,7 @@ import { listTextOverlays } from "@/lib/services/text-overlays";
 import {
   buildExactSizeVideoFilter,
   buildExportAudioMixGraph,
+  buildExportVideoRateOptions,
   buildOverlayDrawtextFilters,
   EXPORT_LOUDNORM_FILTER,
   resolveOutputFrameSize,
@@ -159,10 +160,7 @@ export async function conformVideoToExactSize(
     "0:v:0",
     "-c:v",
     "libx264",
-    "-crf",
-    "16",
-    "-pix_fmt",
-    "yuv420p",
+    ...buildExportVideoRateOptions("libx264", { width, height }),
   ];
   if (hasAudio) {
     outputOptions.push("-map", "0:a:0", "-c:a", "copy");
@@ -226,7 +224,21 @@ async function trimClip(
   // Every clip gets a uniform stereo 48k AAC audio stream so the concat
   // demuxer sees consistent streams whether shots keep or mute their audio.
   let command = ffmpeg(inputPath).setStartTime(startSec);
-  const outputOptions = ["-r", String(fps), "-vsync", "cfr"];
+  // Lossless scratch clip: the final concat encode is the only lossy pass.
+  const outputOptions = [
+    "-r",
+    String(fps),
+    "-vsync",
+    "cfr",
+    "-c:v",
+    "libx264",
+    "-qp",
+    "0",
+    "-preset",
+    "ultrafast",
+    "-pix_fmt",
+    "yuv420p",
+  ];
   if (frameSize) {
     command = command.videoFilters(
       buildExactSizeVideoFilter(frameSize.width, frameSize.height)
@@ -480,6 +492,8 @@ export async function runExport(
     });
 
     let concatFrames = 0;
+    const videoCodec =
+      settings.videoCodec ?? (format === "webm" ? "libvpx-vp9" : "libx264");
     const concatCommand = ffmpeg()
       .input(listFile)
       .inputOptions(["-f", "concat", "-safe", "0"]);
@@ -494,8 +508,11 @@ export async function runExport(
           "-vsync",
           "cfr",
           "-c:v",
-          settings.videoCodec ?? (format === "webm" ? "libvpx-vp9" : "libx264"),
-          ...(settings.crf != null ? ["-crf", String(settings.crf)] : []),
+          videoCodec,
+          ...(settings.crf != null
+            ? ["-crf", String(settings.crf), "-pix_fmt", "yuv420p"]
+            : buildExportVideoRateOptions(videoCodec, frameSize)),
+          ...(format === "mp4" ? ["-movflags", "+faststart"] : []),
           ...(includeAudio
             ? [
                 "-c:a",
@@ -578,6 +595,7 @@ export async function runExport(
             `[${mixGraph.outputLabel}]`,
             "-c:v",
             "copy",
+            ...(format === "mp4" ? ["-movflags", "+faststart"] : []),
             "-t",
             String(videoDuration),
             "-c:a",

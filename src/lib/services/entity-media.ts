@@ -8,8 +8,10 @@ import {
 import { saveFileToProject } from "@/lib/services/file-manager";
 import {
   mediaKindFromExtension,
+  isAudioExtension,
   sanitizeFileName,
 } from "@/lib/services/media-import";
+import { AUDIO_EXTENSIONS } from "@/types";
 import { nowMs } from "@/lib/utils";
 
 export type EntityMediaType = "character" | "location" | "shot" | "audio";
@@ -188,6 +190,12 @@ export async function applyEntityMedia(
         )
         .get();
       if (!track) throw new Error("Audio track not found");
+
+      if (!isAudioExtension(safeName)) {
+        throw new Error(
+          `Unsupported audio type. Use ${AUDIO_EXTENSIONS.join(", ")}`
+        );
+      }
 
       const relativePath = saveFileToProject(
         projectRoot,

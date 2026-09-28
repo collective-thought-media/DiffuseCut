@@ -3,15 +3,15 @@
     "class_type": "KSampler",
     "inputs": {
       "seed": 0,
-      "steps": 28,
-      "cfg": 7.5,
+      "steps": 32,
+      "cfg": 7.0,
       "sampler_name": "euler",
       "scheduler": "normal",
-      "denoise": 1.0,
+      "denoise": 0.52,
       "model": ["14", 0],
       "positive": ["6", 0],
       "negative": ["7", 0],
-      "latent_image": ["24", 0]
+      "latent_image": ["38", 0]
     }
   },
   "4": {
@@ -30,7 +30,7 @@
   "7": {
     "class_type": "CLIPTextEncode",
     "inputs": {
-      "text": "blurry, low quality",
+      "text": "blurry, low quality, pasted cutout, sticker, hard edges, floating subject",
       "clip": ["4", 1]
     }
   },
@@ -45,7 +45,7 @@
     "class_type": "SaveImage",
     "inputs": {
       "filename_prefix": "DiffuseCutShotIntegrate",
-      "images": ["40", 0]
+      "images": ["8", 0]
     }
   },
   "10": {
@@ -79,19 +79,80 @@
       "ipadapter": ["12", 0],
       "clip_vision": ["15", 0],
       "image": ["10", 0],
-      "weight": 0.78,
-      "weight_type": "linear",
+      "weight": 0.55,
+      "weight_type": "style transfer",
       "combine_embeds": "concat",
       "start_at": 0,
-      "end_at": 0.85,
+      "end_at": 0.55,
       "embeds_scaling": "V only"
     }
   },
-  "16": {
-    "class_type": "VAEEncode",
+  "50": {
+    "class_type": "ImageScale",
     "inputs": {
-      "pixels": ["11", 0],
-      "vae": ["4", 2]
+      "image": ["10", 0],
+      "upscale_method": "lanczos",
+      "width": 300,
+      "height": 400,
+      "crop": "center"
+    }
+  },
+  "30": {
+    "class_type": "RemBGSession+",
+    "inputs": {
+      "model": "u2net_human_seg: human segmentation",
+      "providers": "CPU"
+    }
+  },
+  "31": {
+    "class_type": "ImageRemoveBackground+",
+    "inputs": {
+      "rembg_session": ["30", 0],
+      "image": ["50", 0]
+    }
+  },
+  "32": {
+    "class_type": "GrowMask",
+    "inputs": {
+      "mask": ["31", 1],
+      "expand": 4,
+      "tapered_corners": true
+    }
+  },
+  "33": {
+    "class_type": "MaskBlur+",
+    "inputs": {
+      "mask": ["32", 0],
+      "amount": 4,
+      "device": "auto"
+    }
+  },
+  "41": {
+    "class_type": "ImageRemoveAlpha+",
+    "inputs": {
+      "image": ["31", 0]
+    }
+  },
+  "42": {
+    "class_type": "ImageColorMatch+",
+    "inputs": {
+      "image": ["41", 0],
+      "reference": ["11", 0],
+      "color_space": "LAB",
+      "factor": 0.8,
+      "device": "auto",
+      "batch_size": 0
+    }
+  },
+  "35": {
+    "class_type": "ImageCompositeMasked",
+    "inputs": {
+      "destination": ["11", 0],
+      "source": ["42", 0],
+      "mask": ["33", 0],
+      "x": 458,
+      "y": 330,
+      "resize_source": false
     }
   },
   "20": {
@@ -120,25 +181,11 @@
       "operation": "add"
     }
   },
-  "24": {
-    "class_type": "SetLatentNoiseMask",
-    "inputs": {
-      "samples": ["16", 0],
-      "mask": ["22", 0]
-    }
-  },
-  "35": {
-    "class_type": "VAEEncode",
-    "inputs": {
-      "pixels": ["8", 0],
-      "vae": ["4", 2]
-    }
-  },
   "36": {
     "class_type": "GrowMask",
     "inputs": {
       "mask": ["22", 0],
-      "expand": 18,
+      "expand": 22,
       "tapered_corners": true
     }
   },
@@ -146,39 +193,24 @@
     "class_type": "FeatherMask",
     "inputs": {
       "mask": ["36", 0],
-      "left": 12,
-      "top": 12,
-      "right": 12,
-      "bottom": 12
+      "left": 18,
+      "top": 18,
+      "right": 18,
+      "bottom": 14
+    }
+  },
+  "16": {
+    "class_type": "VAEEncode",
+    "inputs": {
+      "pixels": ["35", 0],
+      "vae": ["4", 2]
     }
   },
   "38": {
     "class_type": "SetLatentNoiseMask",
     "inputs": {
-      "samples": ["35", 0],
+      "samples": ["16", 0],
       "mask": ["37", 0]
-    }
-  },
-  "39": {
-    "class_type": "KSampler",
-    "inputs": {
-      "seed": 0,
-      "steps": 28,
-      "cfg": 7.5,
-      "sampler_name": "euler",
-      "scheduler": "normal",
-      "denoise": 0.28,
-      "model": ["4", 0],
-      "positive": ["6", 0],
-      "negative": ["7", 0],
-      "latent_image": ["38", 0]
-    }
-  },
-  "40": {
-    "class_type": "VAEDecode",
-    "inputs": {
-      "samples": ["39", 0],
-      "vae": ["4", 2]
     }
   }
 }

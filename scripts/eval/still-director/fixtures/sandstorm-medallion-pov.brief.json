@@ -1,0 +1,18 @@
+{
+  "id": "sandstorm-medallion-pov",
+  "title": "POV medallion in hands",
+  "brief": {
+    "projectId": "eval-sandstorm",
+    "prompt": "Photoreal first-person POV looking down at outstretched sand-caked hands holding an irregular pewter medallion with brilliant turquoise inlay. Medallion sharp in lower center, bone-tan dunes soft beyond. Soft amber desert light, film grain, no face visible.",
+    "aspectRatio": "16:9",
+    "refs": [],
+    "technique": "multi_ref_native",
+    "optionCount": 2,
+    "allowPromptPreprocess": false
+  },
+  "refFiles": {
+    "prop": "refs/prop.png",
+    "set": "refs/set.png"
+  },
+  "minVisualWeighted": 3.6
+}

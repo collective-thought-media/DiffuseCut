@@ -52,10 +52,10 @@ def main() -> int:
         duration = max(8.0, min(22.0, duration))
     else:
         caption = prompt
-        lyrics = lyrics or "[Instrumental]"
+        lyrics = lyrics  # keep empty for instrumentals; caller may pass structure
         instrumental = True
-        thinking = True
-        use_cot_caption = True
+        thinking = False
+        use_cot_caption = False
 
     gpu = get_global_gpu_config()
     quantization = "int8_weight_only" if gpu.quantization_default else None

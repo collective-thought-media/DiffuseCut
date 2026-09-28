@@ -19,6 +19,10 @@ interface RenderSettingsPanelProps {
   onChange: (settings: RenderSettings) => void;
   showVideoSettings?: boolean;
   videoEngine?: "ltx" | "minimax" | "generic";
+  /** Shot-video workflow templates for the engine picker (LTX / MiniMax / …). */
+  videoTemplates?: Array<{ id: string; name: string }>;
+  selectedVideoTemplateId?: string;
+  onVideoTemplateChange?: (templateId: string) => void;
   variant?: "default" | "sidebar";
   projectId?: string;
   availableImageCheckpoints?: string[];
@@ -38,6 +42,9 @@ export function RenderSettingsPanel({
   onChange,
   showVideoSettings = false,
   videoEngine = "generic",
+  videoTemplates,
+  selectedVideoTemplateId,
+  onVideoTemplateChange,
   variant = "default",
   projectId,
   availableImageCheckpoints,
@@ -245,6 +252,35 @@ export function RenderSettingsPanel({
                   : "Shot video renders from the queue. Separate from SDXL image settings above."}
             </p>
           )}
+
+          {videoTemplates &&
+            videoTemplates.length > 0 &&
+            onVideoTemplateChange && (
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="video-engine"
+                  className={compact ? "text-xs" : undefined}
+                >
+                  Video engine
+                </Label>
+                <Select
+                  id="video-engine"
+                  value={selectedVideoTemplateId ?? ""}
+                  onChange={(e) => onVideoTemplateChange(e.target.value)}
+                  className={compact ? "text-xs" : undefined}
+                >
+                  {videoTemplates.map((template) => (
+                    <option key={template.id} value={template.id}>
+                      {template.name}
+                    </option>
+                  ))}
+                </Select>
+                <p className="text-[11px] leading-relaxed text-muted-foreground">
+                  Pick the engine here. Model files below auto-fill from your
+                  ComfyUI install when available.
+                </p>
+              </div>
+            )}
 
           {videoEngine === "ltx" && (
             <div className="space-y-1.5">
@@ -499,7 +535,7 @@ export function RenderSettingsPanel({
 
   if (compact) {
     return (
-      <Card className="mb-0 space-y-4 p-4">
+      <Card className="mb-0 h-full space-y-4 p-4">
         <div>
           <h3 className="text-sm font-medium">Generation settings</h3>
           <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">

@@ -2,12 +2,48 @@ import { describe, expect, it } from "vitest";
 import {
   buildExactSizeVideoFilter,
   buildExportAudioMixGraph,
+  buildExportVideoRateOptions,
   buildOverlayDrawtextFilters,
   escapeDrawtextFontPath,
   escapeDrawtextText,
   EXPORT_LOUDNORM_FILTER,
+  resolveExportVideoBitrateKbps,
   resolveOutputFrameSize,
 } from "@/lib/services/export-filters";
+
+describe("export video bitrate", () => {
+  it("encodes 1080p above the 25 Mbps floor", () => {
+    expect(
+      resolveExportVideoBitrateKbps({ width: 1920, height: 1080 })
+    ).toBeGreaterThan(25000);
+    expect(resolveExportVideoBitrateKbps(null)).toBe(
+      resolveExportVideoBitrateKbps({ width: 1920, height: 1080 })
+    );
+  });
+
+  it("scales with frame area", () => {
+    expect(
+      resolveExportVideoBitrateKbps({ width: 2560, height: 1080 })
+    ).toBeGreaterThan(resolveExportVideoBitrateKbps({ width: 1920, height: 1080 }));
+    expect(
+      resolveExportVideoBitrateKbps({ width: 1080, height: 1080 })
+    ).toBeLessThan(resolveExportVideoBitrateKbps({ width: 1920, height: 1080 }));
+  });
+
+  it("uses strict CBR for x264 and pins min, max, and target together", () => {
+    const opts = buildExportVideoRateOptions("libx264", {
+      width: 1920,
+      height: 1080,
+    });
+    const rate = opts[opts.indexOf("-b:v") + 1];
+    expect(opts[opts.indexOf("-minrate") + 1]).toBe(rate);
+    expect(opts[opts.indexOf("-maxrate") + 1]).toBe(rate);
+    expect(opts).toContain("nal-hrd=cbr");
+    expect(
+      buildExportVideoRateOptions("libvpx-vp9", { width: 1920, height: 1080 })
+    ).not.toContain("nal-hrd=cbr");
+  });
+});
 
 describe("escapeDrawtextText", () => {
   it("escapes backslashes, percents, colons, and quotes", () => {
@@ -114,37 +150,47 @@ describe("resolveOutputFrameSize", () => {
     ).toBeNull();
   });
 
-  it("follows a 9:16 still preset instead of leftover landscape video size", () => {
+  it("exports a 16:9 project saved at the old 1344x768 canvas at 1920x1080", () => {
+    expect(
+      resolveOutputFrameSize({
+        videoWidth: 1344,
+        videoHeight: 768,
+        referenceAspectRatio: "16_9",
+      })
+    ).toEqual({ width: 1920, height: 1080 });
+  });
+
+  it("follows a 9:16 preset instead of leftover landscape video size", () => {
     expect(
       resolveOutputFrameSize({
         videoWidth: 1920,
         videoHeight: 1080,
         referenceAspectRatio: "9_16",
       })
-    ).toEqual({ width: 768, height: 1344 });
+    ).toEqual({ width: 1080, height: 1920 });
   });
 
-  it("follows square and ultrawide still presets too", () => {
+  it("follows square and ultrawide presets too", () => {
     expect(
       resolveOutputFrameSize({
         videoWidth: 1920,
         videoHeight: 1080,
         referenceAspectRatio: "1_1",
       })
-    ).toEqual({ width: 1024, height: 1024 });
+    ).toEqual({ width: 1080, height: 1080 });
     expect(
       resolveOutputFrameSize({
         videoWidth: 1920,
         videoHeight: 1080,
         referenceAspectRatio: "21_9",
       })
-    ).toEqual({ width: 1344, height: 576 });
+    ).toEqual({ width: 2560, height: 1080 });
     expect(
       resolveOutputFrameSize({
         videoWidth: 1920,
         videoHeight: 1080,
         referenceAspectRatio: "2_1",
       })
-    ).toEqual({ width: 1536, height: 768 });
+    ).toEqual({ width: 2160, height: 1080 });
   });
 });

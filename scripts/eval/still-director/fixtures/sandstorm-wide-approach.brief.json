@@ -1,0 +1,18 @@
+{
+  "id": "sandstorm-wide-approach",
+  "title": "Wide approach into The Sand Pits",
+  "brief": {
+    "projectId": "eval-sandstorm",
+    "prompt": "Photoreal cinematic wide establishing shot of a desert sand bowl. Vast bone-tan crescent dune, ochre shadows, amber sandstorm haze, small rusted wreckage at the valley mouth. A tiny distant figure in sand-colored face wraps and dark goggles walks down toward the wreckage. Landscape dominates. Film still.",
+    "aspectRatio": "16:9",
+    "refs": [],
+    "technique": "multi_ref_native",
+    "optionCount": 2,
+    "allowPromptPreprocess": false
+  },
+  "refFiles": {
+    "identity": "refs/identity.png",
+    "set": "refs/set.png"
+  },
+  "minVisualWeighted": 3.6
+}

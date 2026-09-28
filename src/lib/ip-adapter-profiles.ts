@@ -55,42 +55,67 @@ export function getIpAdapterProfile(
 }
 
 /**
- * Location closer angles need architecture lock. The shared reframe table uses
- * style transfer for moderate/extreme so character sheets can change pose; that
- * same table made location close-ups keep candle mood but invent a new room.
- * Linear weight keeps walls, furniture, and doorway layout from the establishing
- * plate while the angle prompt moves the camera.
+ * Location closer angles need set lock. Shared character reframe uses style
+ * transfer so poses can change; location used to use linear so indoor rooms kept
+ * walls. Linear on desert establishing plates also freezes the wide FOV and can
+ * turn cliff silhouettes into invented buildings when the prompt walks closer.
+ * Style transfer with a strong weight keeps sand tone, rust, haze, and detail
+ * while the angle description moves the camera.
  */
 export const LOCATION_IP_ADAPTER_REFRAME_PROFILES: Record<
   AnchorReframeIntensity,
   IpAdapterProfileSettings
 > = {
   subtle: {
-    weight: 0.55,
-    endAt: 0.72,
+    weight: 0.58,
+    endAt: 0.7,
     preset: "PLUS (high strength)",
-    weightType: "linear",
+    weightType: "style transfer",
   },
   moderate: {
-    weight: 0.5,
-    endAt: 0.65,
+    weight: 0.62,
+    endAt: 0.72,
     preset: "PLUS (high strength)",
-    weightType: "linear",
+    weightType: "style transfer",
   },
   extreme: {
-    weight: 0.42,
-    endAt: 0.55,
+    weight: 0.55,
+    endAt: 0.65,
     preset: "PLUS (high strength)",
-    weightType: "linear",
+    weightType: "style transfer",
   },
   scene: {
-    weight: 0.32,
-    endAt: 0.45,
+    weight: 0.42,
+    endAt: 0.52,
     preset: "PLUS (high strength)",
     weightType: "style transfer",
   },
   character_lock: IP_ADAPTER_REFRAME_PROFILES.character_lock,
 };
+
+/**
+ * Default Auto lock for any anchored location angle (establishing → walk-in).
+ * Strong style transfer: same color grade and materials, free camera.
+ */
+export const LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE: IpAdapterProfileSettings =
+  {
+    weight: 0.62,
+    endAt: 0.72,
+    preset: "PLUS (high strength)",
+    weightType: "style transfer",
+  };
+
+/**
+ * Slightly lighter than full set lock when the angle is already a tight object
+ * close or surface macro (prompt owns framing harder).
+ */
+export const LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE: IpAdapterProfileSettings =
+  {
+    weight: 0.58,
+    endAt: 0.66,
+    preset: "PLUS (high strength)",
+    weightType: "style transfer",
+  };
 
 export function getLocationIpAdapterProfile(
   intensity: AnchorReframeIntensity
@@ -132,15 +157,15 @@ export const DUAL_IP_ADAPTER_CHARACTER_PROFILE: IpAdapterProfileSettings =
   IP_ADAPTER_REFRAME_PROFILES.character_lock;
 
 /**
- * Integrate in scene: linear IP so the character body actually forms inside
- * the subject mask. Style transfer was only tinting the plate, which looked
- * like a bare location still. Harmonization still runs after the first paint.
+ * Integrate in scene: style transfer during the diffusion finish after RemBG
+ * paste. Paste sets scale and wardrobe; this pass must re-light the subject
+ * into the plate. Paste alone is never the finished still.
  */
 export const INTEGRATE_IN_SCENE_CHARACTER_PROFILE: IpAdapterProfileSettings = {
-  weight: 0.78,
-  endAt: 0.85,
+  weight: 0.55,
+  endAt: 0.55,
   preset: "PLUS (high strength)",
-  weightType: "linear",
+  weightType: "style transfer",
 };
 
 /** Virtual backdrop dual chain: character first, location last so gray wins over sheet bg. */
@@ -178,9 +203,9 @@ export const INTEGRATE_IDENTITY_STRENGTH_PRESETS: Record<
   "low" | "balanced" | "high",
   { weight: number; endAt: number }
 > = {
-  low: { weight: 0.55, endAt: 0.7 },
-  balanced: { weight: 0.78, endAt: 0.85 },
-  high: { weight: 0.88, endAt: 0.92 },
+  low: { weight: 0.42, endAt: 0.45 },
+  balanced: { weight: 0.55, endAt: 0.55 },
+  high: { weight: 0.65, endAt: 0.62 },
 };
 
 /** @deprecated Prefer mode-specific tables via resolveShotIdentityStrengthPreset. */

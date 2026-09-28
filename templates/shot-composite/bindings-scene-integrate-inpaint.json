@@ -11,10 +11,17 @@
   "locationPlateImageInputKey": "image",
   "characterIpAdapterNodeId": "14",
   "referenceImageUsage": "location_plate",
+  "characterScaleNodeId": "50",
+  "characterScaleWidthInputKey": "width",
+  "characterScaleHeightInputKey": "height",
+  "compositeNodeId": "35",
+  "compositeXInputKey": "x",
+  "compositeYInputKey": "y",
+  "colorMatchNodeId": "42",
+  "colorMatchFactorInputKey": "factor",
   "subjectMaskFrameNodeId": "20",
   "subjectMaskBoxNodeId": "21",
   "subjectMaskCompositeNodeId": "22",
-  "extraSeedNodeIds": ["39"],
   "outputNodeIds": ["9"],
   "controls": [
     {

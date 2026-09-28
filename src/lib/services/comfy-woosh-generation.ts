@@ -13,6 +13,7 @@ import { WOOSH_NODE_CLASSES } from "@/lib/services/comfyui-workflow-requirements
 import { buildWooshSfxPrompt } from "@/lib/services/sfx-prompt";
 import { getDefaultComfyuiEndpoints } from "@/lib/services/settings";
 import { getAceStepRemoteUrlSetting } from "@/lib/services/ace-step-compute";
+import { withComfyGpuLeaseForAudio } from "@/lib/services/comfy-gpu-gate";
 
 function hostComfyUrlFromAceStepRemote(remoteUrl: string | null): string | null {
   if (!remoteUrl?.trim()) return null;
@@ -125,50 +126,59 @@ export async function generateComfyWooshSfxFile(options: {
     prompt
   );
 
-  const graph = loadWorkflowTemplate();
-  graph["3"]!.inputs!.prompt = prompt;
-  graph["3"]!.inputs!.seed = seed;
-  graph["3"]!.inputs!.latent_frames = latentFrames;
-  graph["3"]!.inputs!.cfg = useHeroCfg ? 4.5 : 3.5;
-  graph["4"]!.inputs!.filename_prefix = `diffusecut/woosh_sfx_${Date.now()}`;
+  return withComfyGpuLeaseForAudio({
+    holder: `audio:woosh:${Date.now()}`,
+    reason: "SFX generation (Woosh)",
+    comfyBaseUrl: baseUrl,
+    run: async () => {
+      const graph = loadWorkflowTemplate();
+      graph["3"]!.inputs!.prompt = prompt;
+      graph["3"]!.inputs!.seed = seed;
+      graph["3"]!.inputs!.latent_frames = latentFrames;
+      graph["3"]!.inputs!.cfg = useHeroCfg ? 4.5 : 3.5;
+      graph["4"]!.inputs!.filename_prefix = `diffusecut/woosh_sfx_${Date.now()}`;
 
-  const queued = await queuePrompt(baseUrl, graph);
-  const history = await waitForHistory(baseUrl, queued.prompt_id, {
-    timeoutMs: Math.max(10 * 60_000, sourceSeconds * 20_000),
+      const queued = await queuePrompt(baseUrl, graph);
+      const history = await waitForHistory(baseUrl, queued.prompt_id, {
+        timeoutMs: Math.max(10 * 60_000, sourceSeconds * 20_000),
+      });
+
+      if (history.status?.status_str === "error") {
+        throw new Error(
+          `ComfyUI Woosh job failed: ${JSON.stringify(history.status).slice(0, 400)}`
+        );
+      }
+
+      const audioFiles = extractAudioOutputFiles(history);
+      if (audioFiles.length === 0) {
+        throw new Error(
+          "ComfyUI Woosh finished but returned no audio file. Check the ComfyUI console on the GPU server."
+        );
+      }
+
+      const scratchPath = options.outputAbsolutePath.endsWith(".mp3")
+        ? options.outputAbsolutePath
+        : path.join(
+            path.dirname(options.outputAbsolutePath),
+            `.gen-woosh-${Date.now()}.mp3`
+          );
+
+      await downloadOutput(baseUrl, audioFiles[0], scratchPath);
+
+      if (scratchPath !== options.outputAbsolutePath) {
+        fs.mkdirSync(path.dirname(options.outputAbsolutePath), {
+          recursive: true,
+        });
+        fs.copyFileSync(scratchPath, options.outputAbsolutePath);
+        fs.rmSync(scratchPath, { force: true });
+      }
+
+      return {
+        provider: "woosh_comfy" as const,
+        sourceSeconds,
+        comfyUrl: baseUrl,
+        prompt,
+      };
+    },
   });
-
-  if (history.status?.status_str === "error") {
-    throw new Error(
-      `ComfyUI Woosh job failed: ${JSON.stringify(history.status).slice(0, 400)}`
-    );
-  }
-
-  const audioFiles = extractAudioOutputFiles(history);
-  if (audioFiles.length === 0) {
-    throw new Error(
-      "ComfyUI Woosh finished but returned no audio file. Check the ComfyUI console on the GPU server."
-    );
-  }
-
-  const scratchPath = options.outputAbsolutePath.endsWith(".mp3")
-    ? options.outputAbsolutePath
-    : path.join(
-        path.dirname(options.outputAbsolutePath),
-        `.gen-woosh-${Date.now()}.mp3`
-      );
-
-  await downloadOutput(baseUrl, audioFiles[0], scratchPath);
-
-  if (scratchPath !== options.outputAbsolutePath) {
-    fs.mkdirSync(path.dirname(options.outputAbsolutePath), { recursive: true });
-    fs.copyFileSync(scratchPath, options.outputAbsolutePath);
-    fs.rmSync(scratchPath, { force: true });
-  }
-
-  return {
-    provider: "woosh_comfy",
-    sourceSeconds,
-    comfyUrl: baseUrl,
-    prompt,
-  };
 }

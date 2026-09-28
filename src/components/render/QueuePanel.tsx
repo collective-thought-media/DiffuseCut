@@ -25,6 +25,8 @@ interface QueuePanelProps {
   settingsReady?: boolean;
   comfyReady?: boolean;
   className?: string;
+  /** Extra classes for the scrollable shot list (overrides default max height when set). */
+  listClassName?: string;
   fillHeight?: boolean;
 }
 
@@ -47,6 +49,7 @@ export function QueuePanel({
   settingsReady = true,
   comfyReady = true,
   className,
+  listClassName,
   fillHeight = false,
 }: QueuePanelProps) {
   const queueableShots = shots.filter(
@@ -55,7 +58,7 @@ export function QueuePanel({
 
   return (
     <Card
-      className={`mb-0 flex flex-col gap-4 p-4 ${fillHeight ? "min-h-0 flex-1" : ""} ${className ?? ""}`}
+      className={`mb-0 flex flex-col gap-4 p-4 ${fillHeight ? "h-full min-h-0" : ""} ${className ?? ""}`}
     >
       <div className="flex shrink-0 items-center justify-between">
         <h3 className="text-sm font-medium">Render queue</h3>
@@ -70,7 +73,11 @@ export function QueuePanel({
       </div>
 
       <div
-        className={`scrollbar-thin space-y-1 overflow-y-auto pr-1 ${fillHeight ? "min-h-0 flex-1" : "max-h-64"}`}
+        className={`scrollbar-thin space-y-1 overflow-y-auto pr-1 ${
+          fillHeight
+            ? "min-h-0 flex-1"
+            : (listClassName ?? "max-h-[min(55vh,36rem)]")
+        }`}
       >
         {shots.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -175,8 +182,8 @@ export function QueuePanel({
             queueing ||
             selectedShotIds.length === 0 ||
             !templateSelected ||
-            !settingsReady ||
-            !comfyReady
+            !comfyReady ||
+            !settingsReady
           }
           className="w-full"
         >
@@ -184,10 +191,10 @@ export function QueuePanel({
             ? "Queueing…"
             : !templateSelected
               ? "Select a workflow template first"
-              : !settingsReady
-                ? "Waiting for render settings"
-                : !comfyReady
-                  ? "Configure ComfyUI endpoint first"
+              : !comfyReady
+                ? "Connect to ComfyUI first"
+                : !settingsReady
+                  ? "Waiting for render settings"
                   : `Queue ${selectedShotIds.length} shot${selectedShotIds.length === 1 ? "" : "s"}`}
         </Button>
         {queueableShots.length === 0 && shots.length > 0 && (
@@ -200,18 +207,22 @@ export function QueuePanel({
             Import a shot video workflow template before queueing renders.
           </p>
         )}
-        {templateSelected && !settingsReady && selectedShotIds.length > 0 && (
-          <p className="text-xs text-amber-400">
-            Still missing models ComfyUI could not auto-detect. Check Render
-            settings on the right.
-          </p>
-        )}
         {templateSelected &&
-          settingsReady &&
           !comfyReady &&
           selectedShotIds.length > 0 && (
             <p className="text-xs text-amber-400">
-              Add a reachable ComfyUI URL in Settings before queueing.
+              DiffuseCut must reach your ComfyUI server to load models and queue
+              renders. Check the URL in Settings, then use Sync ComfyUI.
+            </p>
+          )}
+        {templateSelected &&
+          comfyReady &&
+          !settingsReady &&
+          selectedShotIds.length > 0 && (
+            <p className="text-xs text-amber-400">
+              ComfyUI is connected but required weights are still missing. Check
+              Render settings on the right or install the models on the Comfy
+              machine.
             </p>
           )}
       </div>

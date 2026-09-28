@@ -29,6 +29,7 @@ function makeState(
       locationStateId: "state-1",
       name: angle.name,
       viewDescription: "",
+      generationOverridesJson: null,
       sortOrder: index,
       referencePath: angle.referencePath ?? null,
       referenceKind: angle.referencePath ? "image" : null,

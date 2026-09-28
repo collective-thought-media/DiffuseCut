@@ -13,6 +13,7 @@ import {
 } from "@/lib/render-shot-display";
 import { mediaUrl } from "@/lib/media-url";
 import { JobProgressCard } from "@/components/render/JobProgressCard";
+import { ShotVideoOptionsPanel } from "@/components/render/ShotVideoOptionsPanel";
 import { Badge, Card } from "@/components/ui/button";
 
 interface RenderJobCenterProps {
@@ -22,7 +23,10 @@ interface RenderJobCenterProps {
   shotTitleMap: Record<string, string>;
   selectedShotId: string | null;
   onSelectShot: (shotId: string) => void;
+  onShotUpdated: (shot: Shot) => void;
   onCancel: (jobId: string) => void;
+  /** When false, hide the duplicate All shots list (queue panel already lists them). */
+  showShotList?: boolean;
 }
 
 function sortShotsByOrder(shots: Shot[]): Shot[] {
@@ -114,7 +118,9 @@ export function RenderJobCenter({
   shotTitleMap,
   selectedShotId,
   onSelectShot,
+  onShotUpdated,
   onCancel,
+  showShotList = true,
 }: RenderJobCenterProps) {
   const orderedShots = useMemo(() => sortShotsByOrder(shots), [shots]);
 
@@ -136,6 +142,9 @@ export function RenderJobCenter({
 
   const selectedDisplay = selectedShotId
     ? displayByShotId.get(selectedShotId)
+    : null;
+  const selectedShot = selectedShotId
+    ? orderedShots.find((shot) => shot.id === selectedShotId) ?? null
     : null;
   const selectedJob = selectedDisplay?.activeJob ?? selectedDisplay?.latestJob;
 
@@ -272,61 +281,72 @@ export function RenderJobCenter({
               Render complete. Use the player above to review this shot.
             </p>
           ) : null}
+
+          {selectedShot && (
+            <ShotVideoOptionsPanel
+              projectId={projectId}
+              shot={selectedShot}
+              jobs={jobs}
+              onShotUpdated={onShotUpdated}
+            />
+          )}
         </Card>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col gap-3">
-        <h3 className="shrink-0 text-sm font-medium text-muted-foreground">
-          All shots
-        </h3>
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
-          <div className="flex flex-col gap-4 pb-1">
-            {displays.map((display) => {
-              const job = jobForCard(display);
-              const isSelected = display.shotId === selectedShotId;
+      {showShotList && (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <h3 className="shrink-0 text-sm font-medium text-muted-foreground">
+            All shots
+          </h3>
+          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="flex flex-col gap-4 pb-1">
+              {displays.map((display) => {
+                const job = jobForCard(display);
+                const isSelected = display.shotId === selectedShotId;
 
-              if (job) {
+                if (job) {
+                  return (
+                    <JobProgressCard
+                      key={display.shotId}
+                      job={job}
+                      shotTitle={shotTitleMap[display.shotId]}
+                      onCancel={onCancel}
+                      variant="compact"
+                      selected={isSelected}
+                      onSelect={() => onSelectShot(display.shotId)}
+                    />
+                  );
+                }
+
                 return (
-                  <JobProgressCard
+                  <button
                     key={display.shotId}
-                    job={job}
-                    shotTitle={shotTitleMap[display.shotId]}
-                    onCancel={onCancel}
-                    variant="compact"
-                    selected={isSelected}
-                    onSelect={() => onSelectShot(display.shotId)}
-                  />
-                );
-              }
-
-              return (
-                <button
-                  key={display.shotId}
-                  type="button"
-                  onClick={() => onSelectShot(display.shotId)}
-                  className={`rounded-lg border bg-neutral-900 p-3 text-left transition-colors hover:border-neutral-600 ${
-                    isSelected
-                      ? "border-primary bg-primary/5"
-                      : "border-neutral-800"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-sm font-medium">
-                      {shotTitleMap[display.shotId] ?? display.shotId}
+                    type="button"
+                    onClick={() => onSelectShot(display.shotId)}
+                    className={`rounded-lg border bg-neutral-900 p-3 text-left transition-colors hover:border-neutral-600 ${
+                      isSelected
+                        ? "border-primary bg-primary/5"
+                        : "border-neutral-800"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-medium">
+                        {shotTitleMap[display.shotId] ?? display.shotId}
+                      </p>
+                      <Badge variant={displayVariant(display)}>
+                        {displayLabel(display)}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Not queued yet
                     </p>
-                    <Badge variant={displayVariant(display)}>
-                      {displayLabel(display)}
-                    </Badge>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Not queued yet
-                  </p>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

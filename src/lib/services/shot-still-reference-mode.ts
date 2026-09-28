@@ -235,8 +235,9 @@ export function resolveShotStillReferencePlan(
     stillReferenceMode: mode,
     referenceFocus,
     useIpAdapter,
-    // Integrate in scene: linear IP so a real figure forms in the subject
-    // mask, then diffusion harmonization on that first paint (no RemBG paste).
+    // Integrate in scene: RemBG paste sets scale/wardrobe, then a mandatory
+    // diffusion finish re-lights the subject into the plate. Paste alone is
+    // never the finished still.
     ipAdapterWeight: useIntegrateInScene
       ? INTEGRATE_IN_SCENE_CHARACTER_PROFILE.weight
       : undefined,

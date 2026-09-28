@@ -39,6 +39,7 @@ import {
 } from "@/components/storyboard/ShotPlaceholderGenerator";
 import { MediaPanel } from "@/components/sheets/MediaPanel";
 import { InstallShotClip } from "@/components/storyboard/InstallShotClip";
+import { InterviewMonologuePlanner } from "@/components/storyboard/InterviewMonologuePlanner";
 import { downloadStoryboardPacket } from "@/lib/storyboard-download";
 import { useDebouncedSave, type DebouncedSaveContext } from "@/lib/hooks/useDebouncedSave";
 import { useSyncedEditableFields } from "@/lib/hooks/useSyncedEditableFields";
@@ -65,6 +66,17 @@ type CharacterWithStates = Character & {
 type LocationWithStates = Location & {
   states: Array<LocationState & { angles: LocationAngle[] }>;
 };
+
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  );
+}
 
 function defaultLocationRef(location: LocationWithStates) {
   const state = location.states[0];
@@ -100,6 +112,7 @@ export default function StoryboardPage({ params }: PageProps) {
   const [error, setError] = useState<string | null>(null);
   const [exportingBoard, setExportingBoard] = useState(false);
   const [exportingShot, setExportingShot] = useState(false);
+  const [deletingShot, setDeletingShot] = useState(false);
   const playRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const selectedShot = shots.find((s) => s.id === selectedShotId) ?? null;
@@ -453,6 +466,61 @@ export default function StoryboardPage({ params }: PageProps) {
     }
   }
 
+  const handleDeleteSelectedShot = useCallback(async () => {
+    if (!selectedShotId) return;
+    const shot = shots.find((s) => s.id === selectedShotId);
+    if (!shot) return;
+    const label = shot.title?.trim() || "Untitled";
+    if (
+      !window.confirm(
+        `Delete "${label}" from the storyboard? This cannot be undone.`
+      )
+    ) {
+      return;
+    }
+    setDeletingShot(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/projects/${projectId}/shots/${selectedShotId}`,
+        { method: "DELETE" }
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Delete failed");
+
+      const idx = shots.findIndex((s) => s.id === selectedShotId);
+      const remaining = shots.filter((s) => s.id !== selectedShotId);
+      setShots(remaining);
+
+      if (remaining.length > 0) {
+        const next = remaining[Math.min(idx, remaining.length - 1)];
+        setSelectedShotId(next.id);
+        const orderedIds = remaining.map((s) => s.id);
+        await handleReorder(orderedIds);
+      } else {
+        setSelectedShotId(null);
+        setCurrentFrame(0);
+        setPlaying(false);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeletingShot(false);
+    }
+  }, [projectId, selectedShotId, shots]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Delete" && event.key !== "Backspace") return;
+      if (isTextEntryTarget(event.target)) return;
+      if (!selectedShotId || deletingShot) return;
+      event.preventDefault();
+      void handleDeleteSelectedShot();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [deletingShot, handleDeleteSelectedShot, selectedShotId]);
+
   const saveShot = useCallback(
     async (patch: Partial<StoryboardShot>, ctx: DebouncedSaveContext) => {
       if (!selectedShotId) return;
@@ -553,6 +621,14 @@ export default function StoryboardPage({ params }: PageProps) {
         </p>
       )}
 
+      <InterviewMonologuePlanner
+        projectId={projectId}
+        fps={fps}
+        characters={characters}
+        locations={locations}
+        onPlanned={loadAll}
+      />
+
       <Timeline
         projectId={projectId}
         shots={shots}
@@ -616,6 +692,15 @@ export default function StoryboardPage({ params }: PageProps) {
                   onClick={() => void handleExportStoryboard(selectedShot.id)}
                 >
                   {exportingShot ? "Exporting…" : "Export this shot"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  disabled={deletingShot}
+                  onClick={() => void handleDeleteSelectedShot()}
+                >
+                  {deletingShot ? "Deleting…" : "Delete shot"}
                 </Button>
                 {saving ? (
                   <Badge variant="warning">Saving…</Badge>

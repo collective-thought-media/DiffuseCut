@@ -165,6 +165,38 @@ describe("render-shot-display", () => {
     expect(previewMediaVersion(display)).not.toBe(5000);
   });
 
+  it("prefers the shot videoPath over a newer completed job", () => {
+    const display = deriveShotRenderDisplay(
+      shot({
+        id: "s6",
+        videoPath: "renders/chosen-ltx.mp4",
+        renderStatus: "done",
+      }),
+      [
+        job({
+          id: "j-new-minimax",
+          shotId: "s6",
+          status: "completed",
+          outputPath: "renders/new-minimax.mp4",
+          createdAt: 5,
+          completedAt: 6,
+        }),
+        job({
+          id: "j-old-ltx",
+          shotId: "s6",
+          status: "completed",
+          outputPath: "renders/chosen-ltx.mp4",
+          createdAt: 2,
+          completedAt: 3,
+        }),
+      ]
+    );
+
+    expect(display.playablePath).toBe("renders/chosen-ltx.mp4");
+    expect(display.completedJob?.id).toBe("j-old-ltx");
+    expect(previewMediaVersion(display)).toBe(3);
+  });
+
   it("labels a completed lip sync job separately from a regular render", () => {
     const display = deriveShotRenderDisplay(
       shot({

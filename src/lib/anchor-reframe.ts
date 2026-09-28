@@ -23,7 +23,7 @@ export function resolveAnchorReframeIntensity(
     return "extreme";
   }
   if (
-    /macro|close-up|close up|tight shot|85mm|telephoto|low angle|overhead|push.?in|medium shot|detail shot|ground level|looking straight at|zoomed in|head and shoulders|head-and-shoulders|chest-up|chest up|bust framing|portrait zone|85 mm|100mm|105mm/.test(
+    /macro|close-up|close up|tight shot|85mm|telephoto|low angle|overhead|push.?in|medium shot|detail shot|ground level|looking straight at|zoomed in|head and shoulders|head-and-shoulders|chest-up|chest up|bust framing|portrait zone|85 mm|100mm|105mm|new camera|different camera|closer (?:to|shot|view)|standing closer|walk(?:ing)? (?:up|past|over|through|into)|valley floor|at the base of|down inside|from inside the/.test(
       lower
     )
   ) {

@@ -1,0 +1,14 @@
+{
+  "id": "harness-off-smoke",
+  "title": "Harness-off prompt integrity smoke",
+  "brief": {
+    "projectId": "eval-harness",
+    "prompt": "EXACT_PROMPT_TOKEN_do_not_rewrite cinematic desert scavenger mid shot",
+    "aspectRatio": "16:9",
+    "refs": [],
+    "technique": "prompt_only",
+    "optionCount": 1,
+    "allowPromptPreprocess": false
+  },
+  "minVisualWeighted": 3.0
+}

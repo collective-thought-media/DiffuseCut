@@ -15,16 +15,15 @@ export const COMPOSITING_NODE_CLASSES = [
 export const DEFAULT_LOCATION_PLATE_DENOISE = 0.42;
 
 /**
- * Integrate in scene (masked inpaint): denoise applied inside the subject
- * mask only. Must be near 1.0: the masked region starts from empty-street
- * plate latent, and mid-range values leave a translucent half-formed subject
- * blended into the background. The plate outside the mask is pixel-locked by
- * the noise mask, so high denoise here does not drift the set.
+ * Integrate finish denoise after RemBG paste. Paste alone is never the still:
+ * this pass must be strong enough to kill studio sticker lighting and
+ * re-photograph the subject into the plate. Too low leaves a cutout; too high
+ * melts anatomy.
  */
-export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 1.0;
+export const DEFAULT_INTEGRATE_INPAINT_DENOISE = 0.52;
 
 /** Subject mask height as a fraction of frame height (medium preset). */
-export const DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION = 0.4;
+export const DEFAULT_INTEGRATE_SUBJECT_HEIGHT_FRACTION = 0.32;
 
 /** Horizontal center of the subject mask as a fraction of frame width. */
 export const DEFAULT_INTEGRATE_SUBJECT_ANCHOR_X = 0.5;
@@ -33,19 +32,19 @@ export const DEFAULT_INTEGRATE_SUBJECT_ANCHOR_X = 0.5;
 export const DEFAULT_INTEGRATE_SUBJECT_GROUND_Y = 0.95;
 
 /** Mask box width relative to its height (room for arms, props, stride). */
-export const INTEGRATE_SUBJECT_WIDTH_RATIO = 0.62;
+export const INTEGRATE_SUBJECT_WIDTH_RATIO = 0.65;
 
 /**
  * Extra mask height above the nominal subject height. Without headroom the
  * hard mask edge crops the head, and the model responds by crouching the
  * figure or smearing the face into the feather band.
  */
-export const INTEGRATE_SUBJECT_HEADROOM_RATIO = 0.22;
+export const INTEGRATE_SUBJECT_HEADROOM_RATIO = 0.4;
 
 /**
  * Feather size relative to the mask box width. Keep at 0 for the first paint:
  * any soft band is only partially denoised and reads as empty plate / ghosting
- * instead of a solid character.
+ * instead of a solid character. Harmonization uses its own soft grow later.
  */
 export const INTEGRATE_MASK_FEATHER_RATIO = 0;
 

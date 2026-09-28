@@ -1,6 +1,11 @@
 import { expandPromptWithLlm } from "@/lib/services/llm-prompt-expand";
 import { detectVirtualBackdropLocation } from "@/lib/location-backdrop";
 import {
+  locationViewIsDetailCloseup,
+  resolveLocationTightFraming,
+  type LocationTightFraming,
+} from "@/lib/location-tight-framing";
+import {
   detectCharacterRearView,
   extractAnchoredViewDescription,
   resolveAnchorReframeIntensity,
@@ -41,7 +46,7 @@ export const CASTING_PORTRAIT_ANTI_PANEL_NEGATIVE =
   "triptych, diptych, polyptych, split screen, two panels, three panels, four panels, four-up, contact sheet, photo grid, casting card, photo booth strip, mosaic, panel layout, side by side, comparison sheet, multiple subjects, multiple portraits, multiple views, turnaround sheet, model sheet, character sheet, profile collage, front and back view, two people, three people, four people, group photo, two-up, three-up, duplicate figure, two heads, multiple heads, extra face, collage";
 
 export const CASTING_PORTRAIT_QUALITY_NEGATIVE =
-  "blurry, watermark, text, logo, generic model face, stock photo model, beauty campaign, soft glam makeup, symmetrical doll face, influencer portrait, different person, inconsistent identity, doll, figurine, mannequin, plastic skin, wax figure, cgi character, anime, illustration, oversaturated, cropped, feet out of frame, low quality, deformed, back view, rear view";
+  "blurry, watermark, text, logo, generic model face, stock photo model, beauty campaign, soft glam makeup, symmetrical doll face, influencer portrait, different person, inconsistent identity, doll, figurine, mannequin, plastic skin, wax figure, cgi character, anime, illustration, oversaturated, cropped, feet out of frame, low quality, deformed, back view, rear view, crouching, squatting, kneeling, one knee down, sitting on floor, hunched pose, hero kneel, proposal pose";
 
 /** Casting quality negatives without rear-view penalties (for back/rear anchored angles). */
 export const CASTING_PORTRAIT_QUALITY_NEGATIVE_REAR_VIEW =
@@ -87,17 +92,17 @@ export const CASTING_PORTRAIT_NEGATIVE = mergeNegativePrompts(
 
 /** Single casting photo for photo-real projects (one subject, one angle). */
 export const CASTING_PORTRAIT_LAYOUT_PREFIX =
-  "Single photograph, one person, one pose, one camera angle, full body head to toe, 16:9 widescreen, front three-quarter view, subject centered, neutral gray backdrop";
+  "Single photograph, one person, one pose, one camera angle, full body head to toe standing upright on both feet like a casting catalog pose, 16:9 widescreen, front three-quarter view, subject centered, neutral gray backdrop";
 
 export const CASTING_PORTRAIT_LAYOUT_SUFFIX =
-  "photorealistic, natural skin, 50mm lens, soft studio light";
+  "standing at full height on both feet, legs straight, not on one knee, not crouching, not kneeling, not sitting, not squatting, photorealistic, natural skin, 50mm lens, soft studio light";
 
 /** Intentional front+back diptych for paired angle assignment. */
 export const CHARACTER_FRONT_BACK_DIPTYCH_PREFIX =
-  "Single wide reference image, exactly two panels side by side in one horizontal row, same character in both panels, left panel full body front three-quarter view facing camera, right panel full body back view with face hidden, matching wardrobe hair color and body type in both panels, neutral gray studio backdrop, even soft lighting";
+  "Single wide reference image, exactly two panels side by side in one horizontal row, same character in both panels standing upright full body on both feet, left panel full body front three-quarter view facing camera, right panel full body back view with face hidden, matching wardrobe hair color and body type in both panels, neutral gray studio backdrop, even soft lighting";
 
 export const CHARACTER_FRONT_BACK_DIPTYCH_SUFFIX =
-  "two panels only, not three panels, not triptych, full body head to toe in each panel, same outfit in both views, casting reference quality";
+  "two panels only, not three panels, not triptych, full body head to toe standing in each panel, same outfit in both views, casting reference quality, not kneeling";
 
 export const CHARACTER_FRONT_BACK_DIPTYCH_NEGATIVE =
   "triptych, three panels, four panels, profile view, extra figures, different outfits between panels, inconsistent hair, inconsistent wardrobe, more than two panels, vertical stack, top and bottom layout, four-up, contact sheet";
@@ -429,16 +434,210 @@ export const LOCATION_REFERENCE_BACKDROP_APPEARANCE =
   "smooth evenly lit seamless backdrop surface, uniform color, soft subtle gradient optional, photographed in-camera";
 
 export { detectVirtualBackdropLocation } from "@/lib/location-backdrop";
+export {
+  locationViewIsDetailCloseup,
+  resolveLocationTightFraming,
+  type LocationTightFraming,
+} from "@/lib/location-tight-framing";
+
+/**
+ * Operator angle text drives the positive. Continuity comes from IP-Adapter on
+ * the establishing plate, not from long auto prose about architecture/doorways
+ * that invents the wrong set.
+ */
+export function buildLeanLocationAnglePrompt(
+  name: string,
+  viewDescription: string,
+  options?: { anchored?: boolean }
+): string {
+  const view = viewDescription.trim();
+  const parts = [view, "photorealistic cinematic still"];
+  if (options?.anchored) {
+    parts.push(
+      "match the establishing reference color grade, materials, haze, and photographic detail"
+    );
+  }
+  if (name.trim()) {
+    parts.push(`Location: ${name.trim()}`);
+  }
+  return parts.filter(Boolean).join(". ");
+}
 
 export const LOCATION_REFERENCE_ANCHOR_PREFIX =
-  "Same physical location and set as the establishing reference image. Match the identical architecture, materials, weather, lighting, prop layout, and physical scale. This is the same environment with the camera moved closer or to a new angle, not a different place and not a redesigned set.";
+  "Same physical location and set as the establishing reference image. Match materials, weather, lighting, prop layout, and physical scale. Match the establishing plate color grade, surface tone, haze, contrast, and photographic detail. Same environment with the camera moved as described.";
 
 export const LOCATION_REFERENCE_ANCHORED_SUFFIX =
-  "closer or tighter view of the same structures from the establishing reference, different camera position and lens as described, preserve the same walls, furniture placement, doorways, and prop layout from the wide shot, single clear shot, not a collage, not multiple panels, not a character portrait, clean readable composition, reference photo quality";
+  "different camera position and lens as described, single clear shot, clean readable composition, reference photo quality";
+
+/** Extreme surface macros must not inherit the wide-plate "show the whole set" suffix. */
+export const LOCATION_REFERENCE_CLOSEUP_SUFFIX =
+  "extreme macro close-up, subject fills the entire frame edge to edge, camera inches from the surface, shallow depth of field, background completely soft and unreadable";
+
+/** Object close-ups: a few feet away, subject readable as a hero object. */
+export const LOCATION_REFERENCE_OBJECT_CLOSE_SUFFIX =
+  "very close shot from about two feet away, subject fills most of the frame and is fully recognizable, narrow foreground, soft secondary background of the same location";
+
+/** Keep material continuity. Drop wide geography that forces establishing plates. */
+export function extractCloseupContinuity(description: string): string {
+  const text = description.trim();
+  if (!text) {
+    return "match surface materials, color, and weathering from this location";
+  }
+
+  const tokens = new Set<string>();
+  const colorOrMaterial =
+    /\b(pale\s+bone-?tan|bone-?tan|ochre|amber|rusted|rust|iron|steel|copper|bronze|brass|sand|stone|wood|brick|concrete|metal|leather|cloth|glass|grit|dust|mud|water|paint|weathered|corroded|oxidized|beige|tan|gray|grey|black|white)\b/gi;
+  for (const match of text.matchAll(colorOrMaterial)) {
+    tokens.add(match[0].toLowerCase().replace(/\s+/g, " "));
+  }
+
+  if (tokens.size === 0) {
+    return "match surface materials, color, and weathering from this location";
+  }
+
+  return `materials and colors from this location only: ${[...tokens].slice(0, 12).join(", ")}`;
+}
+
+/**
+ * Walk-around continuity: materials plus structural and environment anchors so
+ * a new camera still reads as the same set (same wreckage, same dunes/walls),
+ * not a reinvented prop in a different desert.
+ */
+export function extractLocationWalkContinuity(description: string): string {
+  const materials = extractCloseupContinuity(description);
+  const text = description.trim();
+  if (!text) {
+    return `${materials}. same location set as the establishing reference`;
+  }
+
+  const anchors = new Set<string>();
+  const structural =
+    /\b((?:large|massive|rusted|corroded|weathered|horizontal|vertical|circular|round)\s+){0,3}(?:wreckage|wreck|cylinder|pipe|chimney|stack|hub|gear|wheel|fuselage|hull|beam|plating|machinery|engine|exhaust|sandstone|cliff|canyon|dune|desert|pillar|formation|alley|wall)s?\b/gi;
+  for (const match of text.matchAll(structural)) {
+    anchors.add(match[0].toLowerCase().replace(/\s+/g, " ").trim());
+  }
+
+  const clauses = text
+    .split(/[.;]+/)
+    .map((part) => part.trim())
+    .filter((part) =>
+      /\b(wreck|cylinder|pipe|dune|sandstone|cliff|canyon|hub|gear|stack|chimney|desert|machinery)\b/i.test(
+        part
+      )
+    )
+    .slice(0, 3);
+
+  const parts = [
+    materials,
+    anchors.size > 0
+      ? `same set identity: ${[...anchors].slice(0, 14).join(", ")}`
+      : null,
+    clauses.length > 0
+      ? `establishing set facts to preserve: ${clauses.join("; ")}`
+      : null,
+    "same environment backdrop as the establishing plate whenever background is visible (dunes, walls, sky, or room geometry matching that set)",
+    "same subject identity and proportions as the establishing plate",
+  ].filter(Boolean);
+
+  return parts.join(". ");
+}
+
+export function buildLocationDetailCloseupPrompt(
+  name: string,
+  viewDescription: string,
+  continuitySource: string
+): string {
+  const subject =
+    viewDescription.trim() ||
+    "macro detail of the location surface filling the frame";
+  const continuity = extractCloseupContinuity(continuitySource);
+  const hasStairs = /stair|steps|\bstep\b|tread/i.test(
+    `${subject} ${continuitySource}`
+  );
+  const stairLine = hasStairs
+    ? "one or two massive stone treads fill most of the frame, each tread still temple-scale width from the establishing reference"
+    : null;
+  return [
+    "Extreme macro close-up photograph",
+    "the subject fills the entire frame from edge to edge",
+    "camera inches from the surface",
+    "shallow depth of field",
+    "background completely soft and unreadable",
+    `Subject: ${subject}`,
+    stairLine,
+    `Continuity: ${continuity}`,
+    "photorealistic material detail, surface texture and fine grain visible",
+    `Location name for continuity only: ${name.trim()}`,
+    LOCATION_REFERENCE_CLOSEUP_SUFFIX,
+  ]
+    .filter(Boolean)
+    .join(". ");
+}
+
+/** A few feet from the subject: readable object hero. Exclusions live in the negative prompt. */
+export function buildLocationObjectCloseupPrompt(
+  name: string,
+  viewDescription: string,
+  continuitySource: string
+): string {
+  const subject =
+    viewDescription.trim() ||
+    "the main subject of this location angle";
+  const continuity = extractLocationWalkContinuity(continuitySource);
+  return [
+    "Very close shot from about two feet away",
+    "85mm lens feel, shallow depth of field",
+    "new camera position after walking up to the subject",
+    "camera height, facing direction, and look follow the angle view description",
+    "sides and surfaces that were hidden or foreshortened in the establishing shot may be visible",
+    "the described subject fills roughly eighty percent of the frame",
+    "the subject is the same wreckage or set piece from the establishing plate, fully recognizable",
+    "only a narrow strip of ground in the foreground when ground is visible",
+    "background soft and secondary but still the same location environment as the establishing plate, out of focus behind the subject",
+    `Subject and camera: ${subject}`,
+    `Continuity: ${continuity}`,
+    "photorealistic, natural light matching the establishing plate",
+    `Location name for continuity only: ${name.trim()}`,
+    LOCATION_REFERENCE_OBJECT_CLOSE_SUFFIX,
+  ].join(". ");
+}
+
+function buildLocationTightFramingPrompt(
+  kind: LocationTightFraming,
+  name: string,
+  viewDescription: string,
+  continuitySource: string
+): string {
+  return kind === "surface_macro"
+    ? buildLocationDetailCloseupPrompt(name, viewDescription, continuitySource)
+    : buildLocationObjectCloseupPrompt(name, viewDescription, continuitySource);
+}
+
+function locationReferenceFramingSuffix(options?: {
+  anchorMode?: boolean;
+  backdropMode?: boolean;
+  viewDescription?: string;
+  userDescription?: string;
+}): string {
+  if (options?.backdropMode) {
+    return options.anchorMode
+      ? LOCATION_REFERENCE_BACKDROP_ANCHORED_SUFFIX
+      : LOCATION_REFERENCE_BACKDROP_LAYOUT_SUFFIX;
+  }
+  const tight = resolveLocationTightFraming(
+    options?.viewDescription,
+    options?.userDescription
+  );
+  if (tight === "surface_macro") return LOCATION_REFERENCE_CLOSEUP_SUFFIX;
+  if (tight === "object_close") return LOCATION_REFERENCE_OBJECT_CLOSE_SUFFIX;
+  return options?.anchorMode
+    ? LOCATION_REFERENCE_ANCHORED_SUFFIX
+    : LOCATION_REFERENCE_LAYOUT_SUFFIX;
+}
 
 /** Only appended when the establishing description already mentions stairs or temple-scale stonework. */
 export const LOCATION_REFERENCE_SCALE_ANCHOR =
-  "Preserve the same monumental architectural scale and tread proportions from the establishing wide reference, never a narrow garden path or residential-sized steps";
+  "Preserve the same monumental architectural scale and tread proportions from the establishing wide reference";
 
 export function locationDescriptionNeedsScaleAnchor(
   description: string
@@ -450,13 +649,25 @@ export function locationDescriptionNeedsScaleAnchor(
 }
 
 export const DEFAULT_LOCATION_REFERENCE_NEGATIVE =
-  "blurry, watermark, text, logo, people, characters, faces, cropped, cut off, collage, split screen, multiple panels, low quality, deformed, duplicate";
+  "blurry, watermark, text, logo, people, characters, faces, person, human figure, silhouette on porch, pedestrian, crowd, collage, split screen, multiple panels, low quality, deformed, duplicate";
 
+/**
+ * Framing and continuity avoid-lists used to be auto-merged for anchored /
+ * close angles. That fought operator intent. Keep the strings only as optional
+ * documentation for operators who want to paste them into Extra negative.
+ * buildLocationReferenceNegativePrompt no longer injects these.
+ */
 export const LOCATION_REFERENCE_ANCHOR_NEGATIVE_EXTRA =
-  "different architecture, different location, inconsistent layout, mirrored layout, wrong stair direction, unrelated environment, identical framing to reference, zoomed crop of reference, same camera position as reference, same field of view as establishing wide, duplicate composition, narrow garden path, backyard steps, single-person trail width, residential staircase, small decorative pebbles, tiny mossy garden stones, miniature stairs, path-sized treads, hiking trail steps";
+  "different architecture, different location, inconsistent layout, mirrored layout, wrong stair direction, unrelated environment, identical framing to reference, zoomed crop of reference, same camera position as reference, same field of view as establishing wide, duplicate composition, redesigned set, pixel crop of reference, distant wide view, wide master shot, narrow garden path, backyard steps, single-person trail width, residential staircase, small decorative pebbles, tiny mossy garden stones, miniature stairs, path-sized treads, hiking trail steps";
 
 export const LOCATION_REFERENCE_CLOSEUP_NEGATIVE_EXTRA =
-  "wide establishing shot, full room master shot, entire environment visible, panoramic view, distant wide view, environmental wide, full set visible, long shot, aerial overview, duplicate of establishing wide";
+  "wide establishing shot, full room master shot, entire environment visible, panoramic view, distant wide view, environmental wide, full set visible, long shot, aerial overview, duplicate of establishing wide, medium wide shot, medium-wide, landscape establishing, architecture overview, set overview, entire location visible, whole location visible";
+
+export const LOCATION_REFERENCE_OBJECT_CLOSE_NEGATIVE_EXTRA =
+  "extreme macro, abstract surface texture, microscope view, camera millimeters from the surface, unrecognizable texture fill, tiny subject in a big landscape, wide desert vista, full environment master shot, medium-wide shot, medium wide shot, standing twenty feet away, distant wide view, wide establishing shot, landscape establishing, different wreckage, reinvented prop, different machine, new desert landscape, missing dunes, zoomed crop of reference, identical framing to reference, same camera position as reference";
+
+export const LOCATION_REFERENCE_TIGHT_ANCHOR_NEGATIVE_EXTRA =
+  "different location, unrelated environment, inconsistent materials, mirrored layout, different wreckage, different machine, reinvented geometry, unrelated object, new desert landscape, missing dunes, flat empty background, different canyon, wrong sandstone walls, zoomed crop of reference, identical framing to reference, same camera position as reference, same optical axis as establishing wide";
 
 export type { AnchorReframeIntensity } from "@/lib/ip-adapter-profiles";
 export {
@@ -476,6 +687,24 @@ export function buildLocationReferencePromptTemplate(
   const desc = userDescription.trim();
   const viewDesc = options?.viewDescription?.trim() ?? "";
   const backdropMode = detectVirtualBackdropLocation(name, desc, viewDesc);
+
+  if (!backdropMode) {
+    const operatorView =
+      viewDesc ||
+      (options?.anchorMode ? extractAnchoredViewDescription(desc) : "") ||
+      "";
+    // Walk-ins and close angles: keep the operator text. Do not rewrite into
+    // layout/architecture boilerplate (that invents buildings, furniture, etc.).
+    if (options?.anchorMode && operatorView.trim()) {
+      return buildLeanLocationAnglePrompt(name, operatorView, { anchored: true });
+    }
+    if (viewDesc && resolveLocationTightFraming(viewDesc, desc)) {
+      return buildLeanLocationAnglePrompt(name, viewDesc, {
+        anchored: Boolean(options?.anchorMode),
+      });
+    }
+  }
+
   const def = getVisualStyleDefinition(style);
   let appearance = backdropMode
     ? LOCATION_REFERENCE_BACKDROP_APPEARANCE
@@ -514,9 +743,11 @@ export function buildLocationReferencePromptTemplate(
     layoutPrefix = options?.anchorMode
       ? `${LOCATION_REFERENCE_LAYOUT_PREFIX}. ${LOCATION_REFERENCE_ANCHOR_PREFIX}${scaleAnchor}`
       : LOCATION_REFERENCE_LAYOUT_PREFIX;
-    layoutSuffix = options?.anchorMode
-      ? LOCATION_REFERENCE_ANCHORED_SUFFIX
-      : LOCATION_REFERENCE_LAYOUT_SUFFIX;
+    layoutSuffix = locationReferenceFramingSuffix({
+      anchorMode: options?.anchorMode,
+      viewDescription: viewDesc,
+      userDescription: desc,
+    });
   }
 
   const cameraDirective =
@@ -565,23 +796,19 @@ export function buildLocationReferenceNegativePrompt(
     options?.userDescription,
     viewDesc
   );
-  const closeupMode =
-    options?.anchorMode &&
-    !backdropMode &&
-    resolveAnchorReframeIntensity(viewDesc) !== "subtle";
   const backdropTightMode =
     options?.anchorMode &&
     backdropMode &&
     resolveAnchorReframeIntensity(viewDesc) !== "subtle";
 
+  // Quality / people / collage only. Framing and continuity avoid-lists are
+  // operator-owned via Extra negative on the angle (and optional project
+  // imageDefaultNegative). Auto-injected "forbid wide / different wreckage"
+  // terms are intentionally not merged here.
   return mergeNegativePrompts(
     DEFAULT_LOCATION_REFERENCE_NEGATIVE,
     backdropMode ? LOCATION_REFERENCE_BACKDROP_NEGATIVE : undefined,
     backdropTightMode ? LOCATION_REFERENCE_BACKDROP_TIGHT_NEGATIVE : undefined,
-    options?.anchorMode && !backdropMode
-      ? LOCATION_REFERENCE_ANCHOR_NEGATIVE_EXTRA
-      : undefined,
-    closeupMode ? LOCATION_REFERENCE_CLOSEUP_NEGATIVE_EXTRA : undefined,
     getVisualStyleNegativeExtras(style)
   );
 }
@@ -592,32 +819,33 @@ function buildAnchorCameraDirective(description: string): string {
   const hasStairs = /stair|steps|\bstep\b|tread|staircase/.test(lower);
   const hints: string[] = [];
 
+  const trueMacro = resolveLocationTightFraming(description) === "surface_macro";
+  if (trueMacro) {
+    if (hasStairs) {
+      return [
+        "Macro photography, one or two massive stone treads fill most of the frame, camera inches from the wet stone surface, shallow depth of field, each tread still temple-scale width from the establishing reference",
+        "subject fills the frame",
+      ].join(". ");
+    }
+    return [
+      "Extreme macro close-up of the described subject only",
+      "camera inches from the surface",
+      "subject fills the entire frame",
+      "shallow depth of field",
+      "background completely soft and unreadable",
+    ].join(". ");
+  }
+
   if (intensity === "extreme" || intensity === "moderate") {
     hints.push(
-      "Closer or tighter shot of the same physical set from the establishing wide reference, same architecture, materials, prop layout, and scale, not a wide master shot and not a redesigned room"
+      "Closer or tighter shot of the same physical set from the establishing wide reference, same architecture, materials, prop layout, and scale"
     );
   } else {
     hints.push(
       "Closer view of the same structures shown in the establishing wide reference, same materials and physical scale"
     );
   }
-
-  const trueMacro =
-    /extreme macro|macro close|macro shot|tight macro|surface detail|texture fill|\bmacro\b|detail shot/.test(
-      lower
-    );
-  if (trueMacro && hasStairs) {
-    hints.push(
-      "Macro photography, one or two massive stone treads fill most of the frame, camera inches from the wet stone surface, shallow depth of field, each tread still temple-scale width from the establishing reference"
-    );
-    hints.push(
-      "Do not show the full staircase length, do not show the entire environment, subject fills the frame"
-    );
-  } else if (trueMacro) {
-    hints.push(
-      "Macro photography on the same set surfaces from the establishing reference, shallow depth of field, subject fills the frame, do not invent a different room"
-    );
-  } else if (intensity === "moderate" || intensity === "extreme") {
+  if (intensity === "moderate" || intensity === "extreme") {
     hints.push(
       "Tighter camera framing on the same set, keep recognizable landmarks from the establishing plate in shot when the framing allows"
     );
@@ -626,7 +854,7 @@ function buildAnchorCameraDirective(description: string): string {
     hints.push(
       "Telephoto lens on the same staircase, compressed perspective, still monumental tread width from the establishing reference, tighter framing than the wide master"
     );
-  } else if (/85mm|telephoto|portrait lens|long lens/.test(lower)) {
+  } else if (/85mm|100\s*mm|105\s*mm|telephoto|portrait lens|long lens/.test(lower)) {
     hints.push(
       "Telephoto lens on the same set, compressed perspective, tighter framing than the wide master"
     );
@@ -656,7 +884,7 @@ function buildAnchorCameraDirective(description: string): string {
     )
   ) {
     hints.push(
-      "Camera at ground level on the same monumental staircase, low angle near the tread surface, same scale as the establishing wide, not a distant wide view"
+      "Camera at ground level on the same monumental staircase, low angle near the tread surface, same scale as the establishing wide"
     );
   } else if (
     /low angle|low camera|worm.?s eye|from below|looking up|ground level/.test(
@@ -664,12 +892,12 @@ function buildAnchorCameraDirective(description: string): string {
     )
   ) {
     hints.push(
-      "Low camera on the same set from the establishing reference, not a distant wide view"
+      "Low camera on the same set from the establishing reference"
     );
   }
   if (/push.?in|dolly in|medium shot|mid shot/.test(lower)) {
     hints.push(
-      "Medium or closer framing on the same set, not a wide master shot, still the same architecture and prop layout"
+      "Medium or closer framing on the same set, still the same architecture and prop layout"
     );
   }
   if (/water running|rain on|wet stone|drops on/.test(lower)) {
@@ -679,7 +907,7 @@ function buildAnchorCameraDirective(description: string): string {
   }
 
   hints.push(
-    "Different camera position and lens from the establishing wide, not a pixel crop, not a redesigned set, not a duplicate wide composition"
+    "Different camera position and lens from the establishing wide"
   );
 
   return hints.join(". ");
@@ -693,6 +921,8 @@ export async function buildLocationReferencePrompts(
 ): Promise<CharacterSheetPrompts> {
   const viewDesc = options?.viewDescription?.trim() ?? "";
   const backdropMode = detectVirtualBackdropLocation(name, userDescription, viewDesc);
+  const detailCloseup =
+    !backdropMode && locationViewIsDetailCloseup(viewDesc, userDescription);
   const negativePrompt = buildLocationReferenceNegativePrompt(style, {
     ...options,
     name,
@@ -705,6 +935,30 @@ export async function buildLocationReferencePrompts(
     options
   );
 
+  // Operator angle text (anchored walk-ins / tight views) must not be rewritten
+  // by layout boilerplate or LLM expansion into a different set.
+  const leanOperatorAngle =
+    !backdropMode &&
+    (detailCloseup ||
+      Boolean(options?.anchorMode && viewDesc) ||
+      Boolean(options?.anchorMode && userDescription.trim()));
+  if (leanOperatorAngle) {
+    return {
+      processedPrompt: templatePrompt.trim(),
+      negativePrompt,
+      usedLlm: false,
+    };
+  }
+
+  // Wide-location LLM expansion rewrites macros back into canyon establishing plates.
+  if (detailCloseup) {
+    return {
+      processedPrompt: templatePrompt.trim(),
+      negativePrompt,
+      usedLlm: false,
+    };
+  }
+
   const llmResult = await expandPromptWithLlm({
     name,
     userDescription,
@@ -714,13 +968,12 @@ export async function buildLocationReferencePrompts(
     backdropMode,
   });
 
-  const layoutSuffix = backdropMode
-    ? options?.anchorMode
-      ? LOCATION_REFERENCE_BACKDROP_ANCHORED_SUFFIX
-      : LOCATION_REFERENCE_BACKDROP_LAYOUT_SUFFIX
-    : options?.anchorMode
-      ? LOCATION_REFERENCE_ANCHORED_SUFFIX
-      : LOCATION_REFERENCE_LAYOUT_SUFFIX;
+  const layoutSuffix = locationReferenceFramingSuffix({
+    anchorMode: options?.anchorMode,
+    backdropMode,
+    viewDescription: viewDesc,
+    userDescription,
+  });
 
   return {
     processedPrompt: `${llmResult.prompt.trim()}. ${layoutSuffix}`,
@@ -755,10 +1008,10 @@ export const SHOT_COMPOSITED_NEGATIVE =
   "tiny figure, distant subject, small person in frame, environmental wide master, full scene establishing shot, sharp background, deep focus, everything in focus, pasted cutout, floating subject, bad composite, halo around subject, warm subject on cool background, cool subject on warm background, mismatched white balance, split color grading";
 
 export const SHOT_INTEGRATE_IN_SCENE_SUFFIX =
-  "the character clearly visible in the frame, one person present in the scene, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, correctly proportioned to the doorways, windows, and street furniture around them, feet on the visible ground plane, on-location cinematic storyboard still, not a cutout composite";
+  "the character clearly visible in the frame, one complete person present in the scene head to toes, subject sharp and in focus with clear facial features and readable clothing detail, subject generated in the same environment as the location reference, matching scene lighting and depth, photographed with the same lens, focal length, and camera height as the background plate, single consistent perspective, correctly proportioned to the doorways, windows, and street furniture around them, feet on the visible ground plane, opaque solid subject with no missing torso or head, on-location cinematic storyboard still, not a cutout composite";
 
 export const SHOT_INTEGRATE_IN_SCENE_NEGATIVE =
-  "empty scene, deserted street with no one present, missing subject, character absent from frame, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant person, subject too large for the scene, wrong scale, out of proportion with the environment";
+  "empty scene, deserted street with no one present, missing subject, character absent from frame, missing torso, missing head, headless, legs only, floating legs, black void where the body should be, pasted cutout, floating subject, green screen composite, sticker on background, hard cutout edges, mismatched lighting direction, flat superimposed figure, halo around subject, bad composite, oversized subject, giant person, subject too large for the scene, wrong scale, out of proportion with the environment, transparent subject, ghosted subject, blurry subject, out of focus person, soft focus subject, motion blur on subject, blotchy skin, melted face, incomplete body dissolving into background";
 
 /** Prompt lock for Subject size on Integrate / Scene edit character+location stills. */
 export const SHOT_SUBJECT_SCALE_PROMPT: Record<

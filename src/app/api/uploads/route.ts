@@ -59,6 +59,9 @@ export async function POST(req: NextRequest) {
 
     return jsonOk(result, 201);
   } catch (err) {
+    if (err instanceof Error && err.message.startsWith("Unsupported audio")) {
+      return jsonError(err.message, 400);
+    }
     if (err instanceof Error && err.message.endsWith("not found")) {
       return jsonError(err.message, 404);
     }

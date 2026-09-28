@@ -17,10 +17,10 @@
     "inputs": {
       "clip": ["1", 1],
       "tags": "TAGS_PLACEHOLDER",
-      "lyrics": "LYRICS_PLACEHOLDER",
+      "lyrics": "",
       "seed": 0,
-      "bpm": 90,
-      "duration": 30.0,
+      "bpm": 72,
+      "duration": 45.0,
       "timesignature": "4",
       "language": "en",
       "keyscale": "A minor",
@@ -41,7 +41,7 @@
   "5": {
     "class_type": "EmptyAceStep1.5LatentAudio",
     "inputs": {
-      "seconds": 30.0,
+      "seconds": 45.0,
       "batch_size": 1
     }
   },

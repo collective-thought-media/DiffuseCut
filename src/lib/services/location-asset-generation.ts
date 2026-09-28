@@ -27,7 +27,10 @@ import {
   syncLocationReferenceFromState,
 } from "@/lib/services/location-states";
 import { buildAnchoredAngleReferenceDescription } from "@/lib/location-preview";
-import { buildLocationReferencePrompts } from "@/lib/services/prompt-preprocess";
+import {
+  buildLocationReferencePrompts,
+  resolveLocationTightFraming,
+} from "@/lib/services/prompt-preprocess";
 import { parseVisualStyle } from "@/lib/services/visual-style";
 import { ensureProjectStillImageSettings, resolveProjectEndpointUrl } from "@/lib/services/generation-stack";
 import { mergeImageNegativePrompt } from "@/lib/services/image-generation-overrides";
@@ -40,6 +43,10 @@ import {
   resolveComfyuiEndpoints,
 } from "@/lib/services/settings";
 import type { LocationReferenceGenerationOptions, RenderSettings } from "@/types";
+import {
+  LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE,
+  LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE,
+} from "@/lib/ip-adapter-profiles";
 import {
   getActiveBatchForEntity,
   getDisplayBatchForEntity,
@@ -323,8 +330,51 @@ export async function enqueueLocationReferenceBatch(
     throw new Error("No reachable ComfyUI endpoint configured");
   }
 
-  const generationOptions = options?.generationOptions;
-  const useIpAdapter = generationOptions?.useIpAdapter !== false;
+  const generationOptions = options?.generationOptions ?? {};
+  const explicitCustomIp =
+    generationOptions.useIpAdapter === true &&
+    generationOptions.ipAdapterWeight != null &&
+    generationOptions.ipAdapterEndAt != null;
+  let useIpAdapter = generationOptions.useIpAdapter !== false;
+  const tightFraming = resolveLocationTightFraming(
+    angle.viewDescription.trim(),
+    referenceDescription
+  );
+  // Prompt-only stays available. Tight Auto keeps IP for material continuity
+  // via soft style-transfer on the establishing plate (not a punch crop).
+  // Optical punch-in remains a separate deliberate tool for same-axis crops.
+  if (generationOptions.useIpAdapter === false) {
+    useIpAdapter = false;
+  }
+
+  let resolvedIpWeight = generationOptions.ipAdapterWeight;
+  let resolvedIpEndAt = generationOptions.ipAdapterEndAt;
+  let resolvedIpWeightType = generationOptions.ipAdapterWeightType;
+  if (useIpAdapter && anchorMode && !explicitCustomIp) {
+    // Every walk-in from the establishing plate gets a strong style-transfer
+    // set lock (tone, rust, sand, haze). Tight angles use a slightly lighter
+    // variant so the prompt can own framing.
+    const profile = tightFraming
+      ? LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE
+      : LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE;
+    resolvedIpWeight = profile.weight;
+    resolvedIpEndAt = profile.endAt;
+    resolvedIpWeightType = profile.weightType;
+  } else if (
+    tightFraming &&
+    useIpAdapter &&
+    explicitCustomIp &&
+    resolvedIpWeightType == null
+  ) {
+    resolvedIpWeightType = "style transfer";
+  } else if (
+    anchorMode &&
+    useIpAdapter &&
+    explicitCustomIp &&
+    resolvedIpWeightType == null
+  ) {
+    resolvedIpWeightType = "style transfer";
+  }
 
   const templateId = useIpAdapter
     ? await resolveLocationReferenceTemplateId(projectId, {
@@ -383,9 +433,15 @@ export async function enqueueLocationReferenceBatch(
     rawPrompt: referenceDescription,
     processedPrompt,
     negativePrompt: finalNegativePrompt,
-    generationOptionsJson: generationOptions
-      ? JSON.stringify(generationOptions)
-      : null,
+    generationOptionsJson: JSON.stringify({
+      ...generationOptions,
+      useIpAdapter,
+      ...(resolvedIpWeight != null ? { ipAdapterWeight: resolvedIpWeight } : {}),
+      ...(resolvedIpEndAt != null ? { ipAdapterEndAt: resolvedIpEndAt } : {}),
+      ...(resolvedIpWeightType != null
+        ? { ipAdapterWeightType: resolvedIpWeightType }
+        : {}),
+    }),
     createdAt: ts,
   };
 

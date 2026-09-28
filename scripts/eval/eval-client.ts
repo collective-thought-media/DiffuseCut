@@ -62,8 +62,8 @@ export class EvalClient {
     return this.request<T>("PATCH", pathname, body);
   }
 
-  put<T>(pathname: string, body: unknown) {
-    return this.request<T>("PUT", pathname, body);
+  delete<T>(pathname: string) {
+    return this.request<T>("DELETE", pathname);
   }
 }
 

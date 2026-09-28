@@ -14,6 +14,7 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  serverExternalPackages: ["better-sqlite3"],
 };
 
 export default nextConfig;

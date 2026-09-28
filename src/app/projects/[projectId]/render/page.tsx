@@ -86,105 +86,161 @@ export default function RenderPage({ params }: PageProps) {
     string[]
   >([]);
   const [krea2Available, setKrea2Available] = useState(false);
+  const [syncingComfy, setSyncingComfy] = useState(false);
   const settingsHydratedRef = useRef(false);
   const templateHydratedRef = useRef<string | null>(null);
+
+  const refreshComfyAndHydrateSettings = useCallback(
+    async (templateId: string) => {
+      const [depsRes, settingsRes] = await Promise.all([
+        fetch("/api/system/dependencies/recheck", { method: "POST" }),
+        fetch(
+          `/api/projects/${projectId}/render-settings?hydrate=1&templateId=${encodeURIComponent(templateId)}`
+        ),
+      ]);
+
+      let comfyReachable = false;
+      let comfyMessage: string | undefined;
+      let hydratedSettings: RenderSettings | undefined;
+
+      if (depsRes.ok) {
+        const depsData = await depsRes.json();
+        const comfy = (
+          depsData.dependencies as DependencyStatus[] | undefined
+        )?.find((dep) => dep.id === "comfyui");
+        setComfyDependency(comfy ?? null);
+        comfyReachable = comfy?.status === "ok";
+        comfyMessage = comfy?.message;
+      }
+
+      if (settingsRes.ok) {
+        const settingsData = await settingsRes.json();
+        if (settingsData.renderSettings) {
+          hydratedSettings = settingsData.renderSettings as RenderSettings;
+          setRenderSettings(hydratedSettings);
+        }
+        if (typeof settingsData.comfyReachable === "boolean") {
+          comfyReachable = settingsData.comfyReachable;
+        }
+      }
+
+      return {
+        comfyReachable,
+        comfyMessage,
+        renderSettings: hydratedSettings,
+      };
+    },
+    [projectId]
+  );
 
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [shotsRes, jobsRes, templatesRes, depsRes, stackRes] = await Promise.all([
+      // Fast path: local DB only. Do not block the page on Comfy model probes.
+      const [shotsRes, jobsRes, templatesRes, settingsRes] = await Promise.all([
         fetch(`/api/projects/${projectId}/shots`),
         fetch(`/api/render-jobs?projectId=${projectId}`),
         fetch("/api/workflow-templates?purpose=shot_video"),
-        fetch("/api/system/dependencies"),
-        fetch(`/api/projects/${projectId}/generation-stack`).catch(() => null),
+        fetch(`/api/projects/${projectId}/render-settings`),
       ]);
+
       const shotsData = await shotsRes.json();
       const jobsData = await jobsRes.json();
       const templatesData = await templatesRes.json();
+      const settingsData = settingsRes.ok ? await settingsRes.json() : null;
+
+      let loadedShots: Shot[] = [];
+      let loadedJobs: RenderJob[] = [];
+
       if (shotsRes.ok) {
-        const loadedShots = shotsData.shots ?? [];
+        loadedShots = shotsData.shots ?? [];
         setShots(loadedShots);
-        if (jobsRes.ok) {
-          const loadedJobs = jobsData.jobs ?? [];
-          setJobs(loadedJobs);
-          setSelectedPreviewShotId((prev) => {
-            if (prev && loadedShots.some((shot: Shot) => shot.id === prev)) {
-              return prev;
-            }
-            const displays = loadedShots.map((shot: Shot) =>
-              deriveShotRenderDisplay(shot, loadedJobs)
-            );
-            return pickDefaultShotId(displays, loadedShots);
-          });
-        }
-      } else if (jobsRes.ok) {
-        setJobs(jobsData.jobs ?? []);
+      }
+      if (jobsRes.ok) {
+        loadedJobs = jobsData.jobs ?? [];
+        setJobs(loadedJobs);
+      }
+      if (shotsRes.ok) {
+        setSelectedPreviewShotId((prev) => {
+          if (prev && loadedShots.some((shot) => shot.id === prev)) {
+            return prev;
+          }
+          const displays = loadedShots.map((shot) =>
+            deriveShotRenderDisplay(shot, loadedJobs)
+          );
+          return pickDefaultShotId(displays, loadedShots);
+        });
       }
 
-      let preferredTemplateId = "";
       let loadedTemplates: WorkflowTemplate[] = [];
       if (templatesRes.ok) {
         loadedTemplates = sortShotVideoTemplates(templatesData.templates ?? []);
         setTemplates(loadedTemplates);
       }
 
-      const settingsPeekRes = await fetch(
-        `/api/projects/${projectId}/render-settings`
-      );
-      let savedTemplateId: string | undefined;
-      if (settingsPeekRes.ok) {
-        const peekData = await settingsPeekRes.json();
-        savedTemplateId = peekData.renderSettings?.workflowTemplateId as
-          | string
-          | undefined;
+      if (settingsData?.renderSettings) {
+        setRenderSettings(settingsData.renderSettings);
       }
 
-      preferredTemplateId = resolvePreferredVideoTemplateId(
+      const preferredTemplateId = resolvePreferredVideoTemplateId(
         loadedTemplates,
-        savedTemplateId
+        settingsData?.renderSettings?.workflowTemplateId as string | undefined
       );
       if (preferredTemplateId) {
         setSelectedTemplateId(preferredTemplateId);
       }
-
-      const settingsRes = await fetch(
-        `/api/projects/${projectId}/render-settings?hydrate=1${
-          preferredTemplateId
-            ? `&templateId=${encodeURIComponent(preferredTemplateId)}`
-            : ""
-        }`
-      );
-      if (settingsRes.ok && settingsRes.status !== 404) {
-        const settingsData = await settingsRes.json();
-        if (settingsData.renderSettings) {
-          setRenderSettings(settingsData.renderSettings);
-        }
-      }
-
       templateHydratedRef.current = preferredTemplateId || null;
 
-      if (depsRes.ok) {
-        const depsData = await depsRes.json();
-        const comfy = (depsData.dependencies as DependencyStatus[] | undefined)?.find(
-          (dep) => dep.id === "comfyui"
-        );
-        setComfyDependency(comfy ?? null);
-      }
+      setLoading(false);
 
-      if (stackRes?.ok) {
-        const stackData = await stackRes.json();
-        const stack = stackData.stack as GenerationStack | undefined;
-        setAvailableImageCheckpoints(
-          stack?.availableImageCheckpoints?.length
-            ? stack.availableImageCheckpoints
-            : stack?.availableCheckpoints ?? []
-        );
-        setKrea2Available(stack?.krea2Available ?? false);
-      }
+      // Background: Comfy probes. Page is already usable with saved settings.
+      void (async () => {
+        try {
+          const [hydrateRes, depsRes, stackRes] = await Promise.all([
+            fetch(
+              `/api/projects/${projectId}/render-settings?hydrate=1${
+                preferredTemplateId
+                  ? `&templateId=${encodeURIComponent(preferredTemplateId)}`
+                  : ""
+              }`
+            ),
+            fetch("/api/system/dependencies"),
+            fetch(`/api/projects/${projectId}/generation-stack`).catch(
+              () => null
+            ),
+          ]);
+
+          if (hydrateRes.ok && hydrateRes.status !== 404) {
+            const hydrateData = await hydrateRes.json();
+            if (hydrateData.renderSettings) {
+              setRenderSettings(hydrateData.renderSettings);
+            }
+          }
+
+          if (depsRes.ok) {
+            const depsData = await depsRes.json();
+            const comfy = (
+              depsData.dependencies as DependencyStatus[] | undefined
+            )?.find((dep) => dep.id === "comfyui");
+            setComfyDependency(comfy ?? null);
+          }
+
+          if (stackRes?.ok) {
+            const stackData = await stackRes.json();
+            const stack = stackData.stack as GenerationStack | undefined;
+            setAvailableImageCheckpoints(
+              stack?.availableImageCheckpoints?.length
+                ? stack.availableImageCheckpoints
+                : stack?.availableCheckpoints ?? []
+            );
+            setKrea2Available(stack?.krea2Available ?? false);
+          }
+        } catch {
+          /* keep whatever we already showed */
+        }
+      })();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
-    } finally {
       setLoading(false);
     }
   }, [projectId]);
@@ -205,21 +261,10 @@ export default function RenderPage({ params }: PageProps) {
     if (templateHydratedRef.current === selectedTemplateId) return;
     templateHydratedRef.current = selectedTemplateId;
 
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/projects/${projectId}/render-settings?hydrate=1&templateId=${encodeURIComponent(selectedTemplateId)}`
-        );
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.renderSettings) {
-          setRenderSettings(data.renderSettings);
-        }
-      } catch {
-        /* keep current settings */
-      }
-    })();
-  }, [projectId, selectedTemplateId, loading]);
+    void refreshComfyAndHydrateSettings(selectedTemplateId).catch(() => {
+      /* keep current settings */
+    });
+  }, [projectId, selectedTemplateId, loading, refreshComfyAndHydrateSettings]);
 
   useEffect(() => {
     let es: EventSource | null = null;
@@ -283,33 +328,43 @@ export default function RenderPage({ params }: PageProps) {
       return;
     }
 
-    if (selectedTemplate) {
-      let bindings: WorkflowBindings = {};
-      try {
-        bindings = JSON.parse(
-          selectedTemplate.bindingsJson || "{}"
-        ) as WorkflowBindings;
-      } catch {
-        bindings = {};
-      }
-      const missing = getMissingRenderSettingsForBindings(
-        bindings,
-        renderSettings
-      );
-      if (missing.length > 0) {
-        setError(formatMissingRenderSettingsMessage(missing));
-        return;
-      }
-    }
-    if (comfyDependency && comfyDependency.status !== "ok") {
-      setError(
-        "ComfyUI is not reachable. Set your ComfyUI URL in Settings or project settings, then recheck dependencies."
-      );
-      return;
-    }
     setQueueing(true);
     setError(null);
     try {
+      const {
+        comfyReachable,
+        comfyMessage,
+        renderSettings: hydratedSettings,
+      } = await refreshComfyAndHydrateSettings(selectedTemplateId);
+      const settingsForQueue = hydratedSettings ?? renderSettings;
+
+      if (!comfyReachable) {
+        setError(
+          comfyMessage ??
+            "ComfyUI is not reachable. Set your ComfyUI URL in Settings or project settings, then use Sync ComfyUI."
+        );
+        return;
+      }
+
+      if (selectedTemplate) {
+        let bindings: WorkflowBindings = {};
+        try {
+          bindings = JSON.parse(
+            selectedTemplate.bindingsJson || "{}"
+          ) as WorkflowBindings;
+        } catch {
+          bindings = {};
+        }
+        const missing = getMissingRenderSettingsForBindings(
+          bindings,
+          settingsForQueue
+        );
+        if (missing.length > 0) {
+          setError(formatMissingRenderSettingsMessage(missing));
+          return;
+        }
+      }
+
       const res = await fetch("/api/render-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -388,6 +443,9 @@ export default function RenderPage({ params }: PageProps) {
     }
   }
 
+  const comfyReady = !comfyDependency || comfyDependency.status === "ok";
+  const settingsReady = missingRenderSettings.length === 0;
+
   const shotTitleMap = Object.fromEntries(
     shots.map((s) => [s.id, s.title || "Untitled"])
   );
@@ -401,8 +459,7 @@ export default function RenderPage({ params }: PageProps) {
       <div className="shrink-0">
         <h1 className="text-2xl font-semibold">Render</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Queue shots on the left, tune models on the right, watch progress in
-          the center.
+          Queue shots on the left, preview below, tune models on the right.
         </p>
       </div>
 
@@ -423,6 +480,22 @@ export default function RenderPage({ params }: PageProps) {
                 {comfyDependency.installHint}
               </p>
               <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={syncingComfy || !selectedTemplateId}
+                  onClick={() => {
+                    if (!selectedTemplateId) return;
+                    setSyncingComfy(true);
+                    void refreshComfyAndHydrateSettings(selectedTemplateId)
+                      .catch(() =>
+                        setError("Could not sync with ComfyUI. Try again.")
+                      )
+                      .finally(() => setSyncingComfy(false));
+                  }}
+                >
+                  {syncingComfy ? "Syncing…" : "Sync ComfyUI"}
+                </Button>
                 <Link href="/settings">
                   <Button size="sm" variant="outline">
                     App settings
@@ -437,7 +510,7 @@ export default function RenderPage({ params }: PageProps) {
             </Card>
           )}
 
-          {missingRenderSettings.length > 0 && (
+          {comfyReady && missingRenderSettings.length > 0 && (
             <Card className="border-amber-500/40 bg-amber-950/20 p-3 text-sm text-amber-200">
               {formatMissingRenderSettingsMessage(missingRenderSettings)}
             </Card>
@@ -445,81 +518,100 @@ export default function RenderPage({ params }: PageProps) {
         </div>
       )}
 
-      <div className="grid flex-1 grid-rows-1 items-start gap-4 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(240px,320px)] lg:max-h-[calc(100vh-11rem)]">
-        <aside className="order-2 flex min-h-0 flex-col gap-4 self-stretch lg:order-1 lg:max-h-[calc(100vh-11rem)]">
-          <Card className="mb-0 shrink-0 space-y-4 p-4">
-            <h3 className="text-sm font-medium">Workflow template</h3>
-            {templates.length === 0 ? (
-              <p className="text-xs text-amber-400">
-                No shot video templates yet. Import one below to enable the
-                render queue.
-              </p>
-            ) : (
-              <>
-                <Select
-                  value={selectedTemplateId}
-                  onChange={(e) => setSelectedTemplateId(e.target.value)}
-                  className="text-xs"
-                >
-                  {templates.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </Select>
-                {selectedTemplateId === BUILTIN_LTX_I2V_TEMPLATE_ID && (
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Local LTX 2.3 I2V. Models and resolution auto-fill from your
-                    ComfyUI install and last render setup.
-                  </p>
-                )}
-                {selectedTemplateId === BUILTIN_MINIMAX_I2V_TEMPLATE_ID && (
-                  <p className="text-[11px] leading-relaxed text-muted-foreground">
-                    Local MiniMax H3 I2V with native audio (ComfyUI 0.30+). Models
-                    auto-detect from your diffusion_models, vae, and text_encoders
-                    folders.
-                  </p>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setWizardOpen(true)}
-                  disabled={!selectedTemplate}
-                >
-                  Edit bindings
-                </Button>
-              </>
-            )}
-          </Card>
+      <div className="grid flex-1 items-stretch gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)]">
+        <section className="order-1 flex h-full min-h-0 min-w-0 flex-col gap-4">
+          <div className="grid min-h-[16rem] flex-1 gap-3 lg:grid-cols-[minmax(200px,260px)_minmax(0,1fr)]">
+            <Card className="mb-0 h-fit space-y-3 self-start p-4">
+              <h3 className="text-sm font-medium">Workflow template</h3>
+              {templates.length === 0 ? (
+                <p className="text-xs text-amber-400">
+                  No shot video templates yet. Import one below to enable the
+                  render queue.
+                </p>
+              ) : (
+                <>
+                  <Select
+                    value={selectedTemplateId}
+                    onChange={(e) => setSelectedTemplateId(e.target.value)}
+                    className="text-xs"
+                  >
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </Select>
+                  {selectedTemplateId === BUILTIN_LTX_I2V_TEMPLATE_ID && (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Local LTX 2.3 I2V. Models auto-fill from ComfyUI when
+                      available.
+                    </p>
+                  )}
+                  {selectedTemplateId === BUILTIN_MINIMAX_I2V_TEMPLATE_ID && (
+                    <p className="text-[11px] leading-relaxed text-muted-foreground">
+                      Local MiniMax H3 I2V with native audio (ComfyUI 0.30+).
+                    </p>
+                  )}
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setWizardOpen(true)}
+                      disabled={!selectedTemplate}
+                    >
+                      Edit bindings
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={syncingComfy || !selectedTemplateId}
+                      onClick={() => {
+                        if (!selectedTemplateId) return;
+                        setSyncingComfy(true);
+                        void refreshComfyAndHydrateSettings(selectedTemplateId)
+                          .catch(() =>
+                            setError("Could not sync with ComfyUI. Try again.")
+                          )
+                          .finally(() => setSyncingComfy(false));
+                      }}
+                    >
+                      {syncingComfy ? "Syncing…" : "Sync ComfyUI"}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </Card>
 
-          <QueuePanel
-            shots={shots}
-            jobs={jobs}
-            selectedShotIds={selectedShotIds}
-            selectedPreviewShotId={selectedPreviewShotId}
-            onSelectPreviewShot={setSelectedPreviewShotId}
-            onToggleShot={(id) =>
-              setSelectedShotIds((prev) =>
-                prev.includes(id)
-                  ? prev.filter((x) => x !== id)
-                  : [...prev, id]
-              )
-            }
-            onSelectAll={() =>
-              setSelectedShotIds(
-                shots
-                  .filter((s) => !shotHasActiveRenderJob(s.id, jobs))
-                  .map((s) => s.id)
-              )
-            }
-            onClearSelection={() => setSelectedShotIds([])}
-            onQueue={() => void handleQueue()}
-            queueing={queueing}
-            templateSelected={Boolean(selectedTemplateId)}
-            settingsReady={missingRenderSettings.length === 0}
-            comfyReady={!comfyDependency || comfyDependency.status === "ok"}
-            fillHeight
-          />
+            <QueuePanel
+              shots={shots}
+              jobs={jobs}
+              selectedShotIds={selectedShotIds}
+              selectedPreviewShotId={selectedPreviewShotId}
+              onSelectPreviewShot={setSelectedPreviewShotId}
+              onToggleShot={(id) =>
+                setSelectedShotIds((prev) =>
+                  prev.includes(id)
+                    ? prev.filter((x) => x !== id)
+                    : [...prev, id]
+                )
+              }
+              onSelectAll={() =>
+                setSelectedShotIds(
+                  shots
+                    .filter((s) => !shotHasActiveRenderJob(s.id, jobs))
+                    .map((s) => s.id)
+                )
+              }
+              onClearSelection={() => setSelectedShotIds([])}
+              onQueue={() => void handleQueue()}
+              queueing={queueing}
+              templateSelected={Boolean(selectedTemplateId)}
+              settingsReady={settingsReady}
+              comfyReady={comfyReady}
+              fillHeight
+              className="h-full min-h-0"
+            />
+          </div>
 
           {templates.length === 0 && (
             <WorkflowTemplateImport
@@ -532,26 +624,35 @@ export default function RenderPage({ params }: PageProps) {
               }}
             />
           )}
-        </aside>
 
-        <section className="order-1 flex min-h-0 min-w-0 flex-col self-stretch lg:order-2 lg:max-h-[calc(100vh-11rem)]">
-          <RenderJobCenter
-            projectId={projectId}
-            jobs={jobs}
-            shots={shots}
-            shotTitleMap={shotTitleMap}
-            selectedShotId={selectedPreviewShotId}
-            onSelectShot={setSelectedPreviewShotId}
-            onCancel={(id) => void handleCancelJob(id)}
-          />
+          <div className="shrink-0">
+            <RenderJobCenter
+              projectId={projectId}
+              jobs={jobs}
+              shots={shots}
+              shotTitleMap={shotTitleMap}
+              selectedShotId={selectedPreviewShotId}
+              onSelectShot={setSelectedPreviewShotId}
+              onShotUpdated={(updated) =>
+                setShots((prev) =>
+                  prev.map((shot) => (shot.id === updated.id ? updated : shot))
+                )
+              }
+              onCancel={(id) => void handleCancelJob(id)}
+              showShotList={false}
+            />
+          </div>
         </section>
 
-        <aside className="order-3 flex flex-col lg:order-3">
+        <aside className="order-2 min-w-0 self-stretch">
           <RenderSettingsPanel
             settings={renderSettings}
             onChange={setRenderSettings}
             showVideoSettings={isVideoTemplate}
             videoEngine={videoEngine}
+            videoTemplates={templates.map((t) => ({ id: t.id, name: t.name }))}
+            selectedVideoTemplateId={selectedTemplateId}
+            onVideoTemplateChange={setSelectedTemplateId}
             variant="sidebar"
             projectId={projectId}
             availableImageCheckpoints={availableImageCheckpoints}

@@ -4,14 +4,15 @@ import { useMemo } from "react";
 import { detectVirtualBackdropLocation } from "@/lib/location-backdrop";
 import {
   resolveCharacterAnchorReframeIntensity,
-  resolveLocationAnchorReframeIntensity,
   extractAnchoredViewDescription,
   detectCharacterRearView,
 } from "@/lib/anchor-reframe";
+import { locationViewIsDetailCloseup } from "@/lib/location-tight-framing";
 import {
   BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS,
   getIpAdapterProfile,
-  getLocationIpAdapterProfile,
+  LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE,
+  LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE,
 } from "@/lib/ip-adapter-profiles";
 import { Label, Select } from "@/components/ui/button";
 
@@ -38,8 +39,16 @@ export function defaultLocationIpAdapterSettings(
       endAt: BACKDROP_TIGHT_IP_ADAPTER_DEFAULTS.endAt,
     };
   }
-  const intensity = resolveLocationAnchorReframeIntensity(referenceDescription);
-  const profile = getLocationIpAdapterProfile(intensity);
+  // Close and macro Auto soft-locks materials from the establishing plate
+  // (style transfer) so the prompt can walk to a new vantage.
+  if (locationViewIsDetailCloseup(referenceDescription)) {
+    return {
+      mode: "auto",
+      weight: LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE.weight,
+      endAt: LOCATION_TIGHT_REFRAME_IP_ADAPTER_PROFILE.endAt,
+    };
+  }
+  const profile = LOCATION_SET_CONTINUITY_IP_ADAPTER_PROFILE;
   return {
     mode: "auto",
     weight: profile.weight,
@@ -106,6 +115,9 @@ export function LocationIpAdapterControls({
   const rearViewAuto =
     entityKind === "character" &&
     detectCharacterRearView(viewDescription?.trim() ?? referenceDescription);
+  const tightLocationAuto =
+    entityKind === "location" &&
+    locationViewIsDetailCloseup(viewDescription, referenceDescription);
 
   return (
     <div className="space-y-3 rounded-lg border border-neutral-800 bg-neutral-950 p-3">
@@ -113,10 +125,10 @@ export function LocationIpAdapterControls({
         <p className="text-sm font-medium text-foreground">Anchor reference</p>
         <p className="mt-1 text-xs text-muted-foreground">
           Tune how much this batch follows your saved anchor image vs the text
-          prompt. For real locations, Auto keeps a strong set lock even on
-          closer angles. Lower Custom influence only when you want the prompt
-          to redesign framing more aggressively. Prompt only ignores the anchor
-          entirely.
+          prompt. Auto keeps a strong style lock on tone, materials, and detail
+          from the establishing plate while the view description moves the
+          camera. Use the separate Punch in control only when you want a
+          same-axis crop. Prompt only ignores the anchor image entirely.
         </p>
       </div>
 
@@ -148,20 +160,28 @@ export function LocationIpAdapterControls({
               Back and rear views default to Prompt only. The front anchor
               image causes front-facing double portraits when IP-Adapter is on.
             </>
+          ) : tightLocationAuto ? (
+            <>
+              Auto for this close angle: strong style lock from the establishing
+              plate (weight {autoProfile.weight.toFixed(2)}, through{" "}
+              {(autoProfile.endAt * 100).toFixed(0)}% of denoising). The prompt
+              moves the camera.
+            </>
           ) : (
             <>
               Auto for this angle: weight {autoProfile.weight.toFixed(2)}, through
-              step {(autoProfile.endAt * 100).toFixed(0)}% of denoising.
+              step {(autoProfile.endAt * 100).toFixed(0)}% of denoising (style
+              transfer set lock).
             </>
           )}
         </p>
       )}
 
-      {settings.mode === "prompt_only" && rearViewAuto && (
+      {settings.mode === "prompt_only" && (rearViewAuto || tightLocationAuto) && (
         <p className="text-xs text-muted-foreground">
-          Generating from your text prompt only. Wardrobe and hair should match
-          your descriptions. Pick the best back shot, then save it as this
-          angle&apos;s reference.
+          {rearViewAuto
+            ? "Generating from your text prompt only. Wardrobe and hair should match your descriptions. Pick the best back shot, then save it as this angle's reference."
+            : "Generating from your text prompt only. Materials stay continuous from the location description. Pick the best tight frame, then save it as this angle's reference."}
         </p>
       )}
 

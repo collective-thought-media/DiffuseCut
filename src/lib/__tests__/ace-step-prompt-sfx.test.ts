@@ -28,7 +28,8 @@ describe("ace-step-prompt sfx", () => {
   it("uses a longer minimum duration for short SFX clips", () => {
     expect(resolveAceStepSourceDuration("sfx", 2.5)).toBe(8);
     expect(resolveAceStepSourceDuration("sfx", 12)).toBe(12);
-    expect(resolveAceStepSourceDuration("music", 2.5)).toBe(2.5);
+    expect(resolveAceStepSourceDuration("music", 2.5)).toBe(45);
+    expect(resolveAceStepSourceDuration("music", 60)).toBe(60);
   });
 
   it("does not attach bpm or key metadata to SFX prompts", () => {
