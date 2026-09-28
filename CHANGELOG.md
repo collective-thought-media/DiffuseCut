@@ -4,6 +4,13 @@
 
 First cut for a small tester group. Install from a fresh clone on any machine. App data, ComfyUI URL, and FFmpeg path are local to that install.
 
+- Still Director groundwork (not in the UI yet): a `StillProvider` contract for seed stills, harness-off still briefs, a technique guide, and `npm run eval:stills` self-evals. Folder import and a thin local ComfyUI provider run in the eval harness. Google Gemini Image, fal, OpenAI, Replicate, Midjourney bridge, and NightCafe are scaffolded contracts without live API calls yet.
+- Render shows every completed generation for a shot. Pick which take Finishing and Export use.
+- Storyboard has an Interview monologue planner: long lip-sync scripts split into alternating camera A / camera B takes, one LTX lip sync render per take.
+- Dialog can generate speech with local Edge TTS (`pip install edge-tts`) or ElevenLabs text-to-speech. ACE-Step stays score-only.
+- ComfyUI jobs can run a GPU yield command first (`DIFFUSECUT_GPU_YIELD_COMMAND`, optional `DIFFUSECUT_GPU_YIELD_HOSTS`) so another model server frees VRAM, and ACE-Step / Woosh audio jobs take a lease so they do not collide with video renders on the same ComfyUI host. `DIFFUSECUT_COMFYUI_TIMEOUT_MS` raises the HTTP wait for slow LAN GPUs.
+- Unit tests use a throwaway `.vitest-data/` folder and never open or create the real app data folder.
+- Export Final Video locks immediately on click (Starting… / Encoding…), keeps continuous progress feedback, and the API rejects a second export while one is already queued or running for that project.
 - Package metadata now declares the MIT license and public GitHub repo fields (no longer marked private npm).
 - README lists known alpha limitations so testers know what is still sharp.
 
@@ -16,6 +23,9 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Storyboard shots use the current character-angle picture, not an older state-level sheet left behind after a regenerate.
 - Developer mode no longer enables Turbopack by default. On Windows it was racing the client manifest after Next restarted, which 500'd every page into a white screen. `npm start` was never on that path. Use `npm run dev -- --turbo` only if you want the old bundler.
 - The project still ratio (16:9, 9:16, 21:9, 2:1, or 1:1) now sets video output too. The Render tab width and height default to that canvas. You should not have to enter them again.
+- Video delivery uses standard sizes instead of the stills canvas: 16:9 is 1920×1080, 9:16 is 1080×1920, 21:9 is 2560×1080, 2:1 is 2160×1080, and 1:1 is 1080×1080. Stills keep their model canvas (16:9 stays 1344×768). Projects saved at the old still-canvas video size export at the delivery size, so 1080p renders are no longer downscaled on export.
+- `npm start` now loads `.env` / `.env.local` before launching the app and the worker. Before, only Next read them, so `DIFFUSECUT_DATA_DIR` (and other `.env` settings) could leave the worker writing renders to the default Documents folder while the web app used the override.
+- Exports encode at a constant 26 Mbps at 1920×1080 (floor 25 Mbps), scaled by frame area for other sizes. Previously the final encode used the x264 default CRF 23, which landed near 2 Mbps. Per-shot trim clips are now lossless scratch files, so the final encode is the only lossy pass. MP4 exports are faststart.
 - `npm start` rebuilds after `git pull` when the last production build is from an older commit, so testers are not left on a stale app.
 - Dual reference no longer copies the character sheet's empty studio background over the location. Auto and Integrate in scene remain the modes that lock the saved location plate.
 - Closer location angles keep the establishing set layout instead of inventing a new room that only shares the mood. Close-up prompts no longer inject temple-staircase language into every location.
@@ -48,6 +58,7 @@ First cut for a small tester group. Install from a fresh clone on any machine. A
 - Integrate no longer RemBG-pastes the subject. An empty RemBG cutout was wiping people and leaving a bare plate. The painted subject region is pasted with the same geometric mask, then diffusion harmonization still runs.
 - Storyboard reloads select the first shot automatically so generate controls are ready without an extra click.
 - Integrate first paint uses hard masks, full denoise, and linear IP-Adapter so a real figure forms in the subject region. Style transfer was only tinting the plate. Harmonization runs on that first paint with no RemBG or intermediate paste.
+- Integrate in scene pastes the character at Subject size, then always runs a diffusion finish so the person is re-lit into the plate. A RemBG cutout alone is not a finished still.
 
 - Export honors the project output size and no longer depends on FFmpeg lavfi.
 - Show in folder opens Explorer and selects the file.

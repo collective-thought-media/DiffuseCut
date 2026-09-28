@@ -31,7 +31,7 @@ If a bundled mode needs a specific custom node pack (for example IP-Adapter, LTX
 | Storyboard | Shot list, still modes and controls, animatic, stop hung packs, hybrid outside-clip path |
 | Render | Queue shot video (bundled LTX or MiniMax, or any imported shot-video template) |
 | Finishing | Trims, text overlay preview, musical score, sound effects, dialog / VO, lip sync |
-| Export | Conformed MP4 or WebM via FFmpeg (mixes score, dialog, and SFX) |
+| Export | Conformed MP4 or WebM via FFmpeg at 25+ Mbps for 1080p (mixes score, dialog, and SFX, burns text overlays) |
 | Setup / Settings | Dependency checks, ComfyUI endpoints, FFmpeg path, workflow imports, ACE-Step, LLM, API keys |
 
 **Hybrid path:** export a storyboard packet (stills + shot notes), generate clips in another video tool, then **Install clip** so Finishing and Export treat them like native takes.
@@ -43,7 +43,8 @@ If a bundled mode needs a specific custom node pack (for example IP-Adapter, LTX
 - Bundled shot still modes (Integrate, Dual, Scene edit, face refine, instruction edit) need matching ComfyUI custom nodes and models. Without them, those modes degrade or fail with setup-style errors. Custom imported workflows follow whatever those graphs need instead.
 - Bundled Render video templates are **LTX 2.3 I2V** and **MiniMax H3 I2V**. Each needs its matching stack on ComfyUI. Still generation and storyboard writing work without either. Import another I2V / T2V workflow if you prefer a different video model.
 - A separate bundled **LTX lip sync** graph (image + dialog audio to video) is used from Finishing → Dialog, not as the everyday Render template.
-- Text overlays in Finishing are still preview-oriented and may not land in the exported file the way the timeline shows.
+- Text overlays are burned into the export with one fixed style (white bold text in a dark box, upper third). There are no per-overlay fonts or positions yet.
+- Still Director (pluggable seed-still providers) is groundwork only. It runs in the `npm run eval:stills` harness and is not in the UI. Cloud providers there are scaffolds without live API calls.
 - This cut is for early testers. File issues on GitHub. Feedback from real Comfy setups is welcome.
 
 ## How it works
@@ -110,7 +111,7 @@ npm start
 
 Use `npm run dev` only when you are changing DiffuseCut source code. That mode is slower and shows the developer error overlay.
 
-Copy `.env.example` to `.env` only if you need a non-default port or data folder. Leave `DIFFUSECUT_DATA_DIR` empty to use `Documents/DiffuseCut` on that computer.
+Copy `.env.example` to `.env` only if you need a non-default port, a different data folder, or the GPU-sharing options below. Leave `DIFFUSECUT_DATA_DIR` empty to use `Documents/DiffuseCut` on that computer. `npm start` loads `.env` (and `.env.local`, which wins) for both the app and the worker, so restart after editing it.
 
 Create a new project on this machine. Do not copy another machine's `diffusecut.db` unless you also copy that machine's project folders.
 
@@ -135,6 +136,8 @@ python main.py --listen 0.0.0.0 --port 8188
 ```
 
 In DiffuseCut, set **Settings → ComfyUI endpoints** to `http://127.0.0.1:8188` for same-machine, or `http://your-comfy-host:8188` for a GPU box on your network. You can list more than one URL. The worker uses the first host that answers.
+
+**Sharing the GPU.** If the ComfyUI box also runs another model server (an LLM, for example), set `DIFFUSECUT_GPU_YIELD_COMMAND` in `.env` to a shell command that frees the GPU. DiffuseCut runs it before each ComfyUI job. `DIFFUSECUT_GPU_YIELD_HOSTS` limits it to a comma-separated list of hosts. ACE-Step and Woosh audio jobs take a lease on the ComfyUI host so they queue behind video renders instead of colliding. For slow LAN GPUs, raise `DIFFUSECUT_COMFYUI_TIMEOUT_MS` (default 15000).
 
 After models and custom nodes are in place, open **Setup** and click **Re-check**. Setup probes core app deps plus common optional stacks: SDXL, IP-Adapter, compositing nodes, Qwen Image Edit, face detail (Impact Pack), LTX 2.3, MiniMax H3, ACE-Step compute, and score audio sources. Missing optional stacks show as info. They do not block you from opening projects or from importing your own workflows.
 
@@ -166,7 +169,17 @@ Write the **logline** and **plot**. Both autosave.
 
 Pick a **visual style** preset or add your own look phrase. That phrase is mixed into later generation prompts so sheets and shots share a look. Some presets also change character-sheet layout (for example turnaround vs casting-style portrait).
 
-Set the **reference aspect ratio** for character and location sheets. Project **FPS** shows as a badge (change it later under Project Settings). Output size for the finished video is set on Export. Whatever size you pick there is the size you get. The project still ratio also drives default Render width and height.
+Set the **reference aspect ratio**. It drives two sizes. Stills (character sheets, location plates, storyboard stills) generate at the model's native canvas, for example 1344×768 for 16:9. Video renders and the export deliver at a standard size:
+
+| Ratio | Video size |
+|-------|------------|
+| 16:9 | 1920×1080 |
+| 9:16 | 1080×1920 |
+| 21:9 | 2560×1080 |
+| 2:1 | 2160×1080 |
+| 1:1 | 1080×1080 |
+
+You can type a custom video width and height on Render if you need something else. Project **FPS** shows as a badge (change it later under Project Settings).
 
 ### 4. Characters
 
@@ -202,13 +215,17 @@ Pick the still you want. That image is the driver for later video, not a throwaw
 
 Drag shots to reorder. Use the animatic preview to scrub the board.
 
+**Interview monologue planner:** for a long talking-head script, pick the spokesperson, studio location, seconds per take, and a camera A and camera B state. The planner splits the dialog into takes that alternate A and B (never same angle to same angle), one LTX lip sync render per take.
+
 **Hybrid path:** if you would rather generate a clip in another video tool, click **Export storyboard** (whole board) or **Export this shot**. You get a zip with one folder per shot (`still.png`, `shot.txt`) plus `storyboard.json`. Make the clip outside DiffuseCut, then use **Install clip** on Storyboard or Finishing. The installed file becomes that shot's render. Finishing and export treat it like a native take.
 
 ### 7. Render
 
 Open **Render**, pick a bundled shot-video template (**Local LTX 2.3** or **Local MiniMax H3**), or select any shot-video template you imported. Confirm the model picks and controls your bindings expose (checkpoint or UNET, VAE, audio VAE for MiniMax, text encoder, resolution, negative prompt, GPU device, and so on). Image engine (SDXL vs Krea) for stills is separate from the video template.
 
-Select the shots whose stills you like and queue them. The worker submits graphs to ComfyUI and streams progress. You can cancel in-flight jobs. When a job finishes, the MP4 is stored on the shot (`videoPath`) and plays on the Render page.
+Select the shots whose stills you like and queue them. The worker submits graphs to ComfyUI and streams progress. You can cancel in-flight jobs. When a job finishes, the MP4 is conformed to the project video size, stored on the shot (`videoPath`), and plays on the Render page.
+
+Re-render a shot as often as you like. **Video generations** under each shot lists every completed take. Pick the one Finishing and Export should use.
 
 You do not have to render every shot in DiffuseCut. Mix native Comfy takes with installed outside clips.
 
@@ -220,16 +237,18 @@ This is the desk after the footage exists.
 
 Four tabs sit on the desk:
 
-- **Text Overlays:** timed captions and credits. These preview in the UI. They are **not** burned into the export file yet.
+- **Text Overlays:** timed captions and credits. They preview in the UI and are burned into the export (one fixed style for now).
 - **Musical Score:** upload a track (for example from Epidemic Sound), or generate one with ACE-Step (local install or remote ACE-Step API). ElevenLabs sound generation is an optional cloud fallback when you set a key and choose Auto / ElevenLabs in Settings.
 - **Sound Effects:** per-shot SFX briefs, suggest / batch generate (ComfyUI-Woosh when installed, otherwise ElevenLabs if configured), volume and frame spans.
-- **Dialog:** voiceover / dialog tracks. Upload a VO file (or generate a tone bed when ElevenLabs is configured), span it to the frames where it belongs, and optionally **Render lip sync** (bundled LTX image + audio workflow) so the shot video follows that dialog take.
+- **Dialog:** voiceover / dialog tracks. Upload a VO file (or generate speech with **local Edge TTS** via `pip install edge-tts`, or **ElevenLabs** when a key is configured). ACE-Step is for musical score, not dialog. Span audio to the frames where it belongs, and optionally **Render lip sync** (bundled LTX image + audio workflow) so the shot video follows that dialog take.
 
 Volume is 0 to 1, with a live percent readout. Score, dialog, and SFX spans are in frames at project FPS.
 
 ### 9. Export
 
-Pick format (MP4 or WebM) and output size (for example 1920×1080). Export conforms every shot to that exact size (cover and crop), applies Finishing trims, and mixes score, dialog, and SFX with the shot audio.
+Pick format (MP4 or WebM) and whether to include audio. The output size is the project video size (see the Dashboard ratio table, or a custom size set on Render). Export conforms every shot to that exact size (cover and crop), applies Finishing trims, burns text overlays, and mixes score, dialog, and SFX with the shot audio.
+
+Video encodes at a constant 26 Mbps at 1920×1080 (never below 25 Mbps), scaled by frame area for other sizes. Per-shot trims are lossless scratch files, so the final encode is the only lossy pass. MP4 files are faststart for web playback. Audio is AAC at 48 kHz, loudness-normalized to -14 LUFS.
 
 Queue the encode. When it finishes you can open the file or reveal it in the folder. The MP4 lands under the project `exports/` directory.
 
@@ -269,7 +288,7 @@ Character-into-location shot modes (Integrate in scene, Dual, Composited) still 
 - **Projects:** `{appData}/projects/{slug}/` (stills, renders, audio, exports)
 - **Database:** `{appData}/diffusecut.db` unless you override it
 
-Override the app data folder with `.env` (`DIFFUSECUT_DATA_DIR`) or the settings API. The Settings page shows the active path. Per-project root override exists on the create-project API for advanced layouts.
+To keep media on a bigger drive (an external disk, RAID, or a second NVMe), set `DIFFUSECUT_DATA_DIR` in `.env` to that folder and restart `npm start`. The app and the worker both read it. To move an existing library, stop DiffuseCut, move the whole app data folder to the new location, set the variable, and start again. Project media paths are stored relative to the app data folder, so nothing inside the database needs rewriting. The settings API can also set the folder, and the Settings page shows the active path. Per-project root override exists on the create-project API for advanced layouts.
 
 Projects are local files plus a SQLite row. Back up the app data folder if you care about the work. A clone of this git repo is the application, not your films.
 
@@ -288,6 +307,8 @@ Projects are local files plus a SQLite row. Back up the app data folder if you c
 | `npm test` | Unit tests |
 | `npm run test:e2e` | Playwright e2e |
 | `npm run eval:journey` | Representative full-user E2E eval (see `doc/E2E-AGENT-PLAYBOOK.md`) |
+| `npm run eval:integrate` | Integrate in scene reliability eval against a live ComfyUI |
+| `npm run eval:stills` | Still Director provider eval (see `scripts/eval/still-director/README.md`) |
 
 ## Feedback and issues
 

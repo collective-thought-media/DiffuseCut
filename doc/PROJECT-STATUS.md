@@ -1,6 +1,6 @@
 # DiffuseCut — Project journal & QA status
 
-Last updated: 2026-09-03  
+Last updated: 2026-09-28  
 Primary dev port: **3004**  
 Reference test project: create a new local project for QA. Do not rely on another machine's database.
 
@@ -224,11 +224,11 @@ We have been working roughly in this order. Below: what exists, what we QA'd in 
 
 - Generate score via ACE-Step on workhorse end-to-end (full film span vs segment spans)
 - Upload Epidemic Sound track + trim + preview sync
-- Dialog tab ElevenLabs generate (sound-gen, not true TTS)
+- Dialog tab ElevenLabs generate (text-to-speech via `eleven_multilingual_v2`, not ACE-Step)
 - Text overlay timing vs preview at scrub points
 - Export handoff: trims + audio carried correctly (see Export)
 
-**Known gap:** Text overlays preview in Finishing but are **not burned into export** yet (see Export).
+Text overlays are burned into export with FFmpeg `drawtext` (one fixed style, bundled DejaVu Sans Bold). Dialog generates real speech with local Edge TTS or ElevenLabs text-to-speech.
 
 ---
 
@@ -237,19 +237,22 @@ We have been working roughly in this order. Below: what exists, what we QA'd in 
 **Built**
 
 - Final bake to MP4 (H.264) or WebM
+- Output size is the project video size: standard delivery sizes per aspect ratio (16:9 = 1920×1080), separate from the stills canvas (16:9 = 1344×768). Legacy projects saved at the stills canvas resolve to the delivery size.
+- Constant-bitrate video: 26 Mbps at 1080p (floor 25 Mbps), scaled by frame area (`buildExportVideoRateOptions` in `export-filters.ts`). x264 CBR uses `nal-hrd=cbr`; average-bitrate mode undershot to ~19 Mbps on short AI clips, and CRF 23 landed near 2 Mbps.
+- Per-shot trims are lossless scratch clips (`-qp 0`), so the final encode is the only lossy pass. MP4 is faststart.
 - Applies per-shot **trim in/out** from Finishing
-- Mixes **audio tracks** from Finishing (`amix`)
-- Async export job + progress polling
+- Mixes **audio tracks** from Finishing (`amix`), loudness-normalized to -14 LUFS
+- Burns **text overlays** (`drawtext`)
+- Async export job + progress polling; a second export is rejected while one is queued or running
 - Output under project `exports/`
 
-**QA confidence:** Low–medium. Pipeline exists; not fully re-validated after Finishing trim/playback changes.
+**QA confidence:** Medium. Sand Storm (7 shots, mixed LTX 1080p and MiniMax 1344×768 takes) exported at 1920×1080, 24 fps, 26.0 Mbps video with score mix on 2026-09-24.
 
 **Remaining QA**
 
-- Full Demon's Ascent export with trims + musical score
 - FFmpeg missing path / custom FFmpeg path from Settings
-- Long timeline export memory/time
-- **Text overlays in export** (not implemented in FFmpeg path — product gap)
+- Long timeline export memory/time (lossless scratch clips are large on disk)
+- WebM (VP9) constant-bitrate path
 
 ---
 
@@ -331,6 +334,11 @@ Chronological themes from building and hardening the app:
 9. **Finishing tabs** — Text Overlays | Musical Score | Dialog (reverted modal approach).
 10. **Setup dependencies expanded** — IP-Adapter, LTX, checkpoints, score sources.
 11. **Score audio** — Epidemic Sound upload path + ElevenLabs optional + **ACE-Step on ComfyUI** with Settings provider preference.
+12. **Dialog and interviews** — Edge TTS / ElevenLabs text-to-speech for Dialog; Interview monologue planner splits long lip-sync scripts into alternating A/B camera takes.
+13. **Render takes** — every completed generation per shot is kept; Video generations picker chooses the take Finishing and Export use.
+14. **GPU sharing** — optional GPU yield command before ComfyUI jobs, audio lease so ACE-Step / Woosh queue behind video on the same host, configurable ComfyUI HTTP timeout.
+15. **Delivery quality** — video size split from stills canvas (1920×1080 for 16:9), constant 26 Mbps export, lossless intermediates. `npm start` now loads `.env` for the worker too, so `DIFFUSECUT_DATA_DIR` applies to renders, not just the web app. Unit tests run against a throwaway `.vitest-data/` folder.
+16. **Still Director groundwork** — `StillProvider` contract, still briefs, technique guide, provider eval harness. Not wired into the UI; cloud providers are scaffolds.
 
 ---
 
@@ -356,12 +364,12 @@ Legend: **Done** = exercised and believed working · **Partial** = built but nee
 | Render + LTX | Yes | **Done** | Demon's Ascent 9/9 MP4s |
 | Finishing preview | Yes | **Done** | Playback fix verified |
 | Finishing trim | Yes | Partial | Unit tests + UI pass |
-| Finishing overlays | Yes | Partial | Preview only |
-| Finishing score (ACE-Step) | Yes | **Untested** | Wired this session |
+| Finishing overlays | Yes | Partial | Burned into export, fixed style |
+| Finishing score (ACE-Step) | Yes | Partial | Used on Sand Storm |
 | Finishing score (upload) | Yes | Partial | |
-| Finishing dialog | Yes | Untested | ElevenLabs sound-gen |
-| Export video+trim+audio | Yes | Untested | Post-finishing |
-| Export text overlays | **Gap** | N/A | Not in FFmpeg pipeline |
+| Finishing dialog | Yes | Untested | Edge TTS / ElevenLabs TTS |
+| Export video+trim+audio | Yes | **Done** | Sand Storm 1080p, 26 Mbps |
+| Export text overlays | Yes | Untested | `drawtext` |
 | Project settings / purge | Yes | Untested | |
 
 ---
@@ -378,7 +386,7 @@ Working left-to-right on **Demon's Ascent** (or a fresh clone project):
 6. **Finishing** — Sequential playback all 9 clips; trim in/out on 2–3 shots; debounce save; scrub while paused.
 7. **Finishing → Musical Score** — Generate short segment via ACE-Step; upload Epidemic track on second track; verify preview mix.
 8. **Finishing → Dialog** — Optional ElevenLabs generate if key present.
-9. **Finishing → Text Overlays** — Add timed overlay; confirm preview only (expect no burn-in on export yet).
+9. **Finishing → Text Overlays** — Add timed overlay; confirm it appears in the exported file at the same frames.
 10. **Export** — Full MP4 with trims + score; verify duration and audio sync.
 11. **Project Settings** — Purge orphans on a copy project only (destructive).
 
@@ -386,11 +394,11 @@ Working left-to-right on **Demon's Ascent** (or a fresh clone project):
 
 ## Known gaps & future work
 
-- **Burn text overlays into export** (FFmpeg drawtext or pre-render pass).
+- **Text overlay styling** (per-overlay font, size, position) in export.
+- **MiniMax at 1080p** — 16:9 projects now ask MiniMax for 1920×1080 latents. Watch VRAM / time on a 24 GB card; add a `latentVideoAreaBudget` to its bindings if needed and let the install conform upscale.
+- **Still Director in the UI** — live cloud provider calls and a picker on Storyboard.
 - **ProjectStepNav** skips Finishing in prev/next chain; full tab bar is correct — align or document.
-- **True dialog/TTS** vs ElevenLabs sound-generation bed for Dialog tab.
 - **Integration tests** for API routes and worker loops.
-- **README workflow step** still says "Export — Trim, captions" but trim lives on Finishing; update when polishing docs.
 - **Remove or hide deprecated** location img2img template when safe for in-flight users.
 - **Open-source release prep**: LICENSE, contribution guide, screenshot/GIF demo, example project bundle (optional).
 
